@@ -1,0 +1,5 @@
+Enterprise RAG sample document
+
+This project combines Milvus vector search with Elasticsearch BM25 for hybrid retrieval.
+LangGraph orchestrates rewrite, retrieve, rerank, and generate steps.
+Configure OPENAI_API_KEY in .env for answer generation.

@@ -1,0 +1,160 @@
+from __future__ import annotations
+
+from typing import Any, TypedDict
+
+from openai import OpenAI
+
+from config import settings
+from security.guard import scan_prompt_injection
+from security.permissions import filter_by_sources
+
+
+class AgentState(TypedDict, total=False):
+    question: str
+    user_id: str
+    user_department: str
+    allowed_sources: list[str] | None
+    chat_model: str | None
+    llm_api_base: str | None
+    llm_api_key: str | None
+    llm_extra_headers: dict[str, Any] | None
+    llm_temperature_answer: float | None
+    llm_temperature_verifier: float | None
+    llm_max_tokens_rewrite: int | None
+    llm_max_tokens_answer: int | None
+    llm_max_tokens_verifier: int | None
+    route_next: str
+    rewritten_query: str
+    contexts: list[str]
+    contexts_meta: list[dict[str, Any]]
+    answer: str
+    verified: bool
+    sources: list[str]
+    verifier_decision: str
+    retry_count: int
+
+
+def router_node(state: AgentState) -> dict[str, Any]:
+    ok, reason = scan_prompt_injection(state["question"])
+    if not ok:
+        return {"route_next": "reject", "answer": reason or "拒绝回答", "sources": [], "verified": False}
+    if len(state["question"].strip()) < 2:
+        return {"route_next": "reject", "answer": "问题过短", "sources": [], "verified": False}
+    return {"route_next": "retrieve"}
+
+
+def retrieve_node(state: AgentState) -> dict[str, Any]:
+    from retrieval.hybrid_searcher import hybrid_search
+
+    dept = state.get("user_department") or settings.default_department
+    rw, parents = hybrid_search(
+        state["question"],
+        dept,
+        top_k=settings.rerank_top_k,
+        chat_model=state.get("chat_model"),
+        llm_api_base=state.get("llm_api_base"),
+        llm_api_key=state.get("llm_api_key"),
+        llm_max_tokens_rewrite=state.get("llm_max_tokens_rewrite"),
+        llm_extra_headers=state.get("llm_extra_headers"),
+    )
+    parents = filter_by_sources(parents, state.get("allowed_sources"))
+    return {
+        "rewritten_query": rw,
+        "contexts": [p.get("text") or "" for p in parents],
+        "contexts_meta": parents,
+    }
+
+
+def answer_node(state: AgentState) -> dict[str, Any]:
+    ctx = state.get("contexts") or []
+    body = "\n".join(f"[{i + 1}] {t}" for i, t in enumerate(ctx))
+    api_key = (state.get("llm_api_key") or "").strip() or settings.openai_api_key
+    api_base = (state.get("llm_api_base") or "").strip() or settings.openai_api_base
+    if not api_key:
+        return {
+            "answer": "未配置 API Key（请在模型配置页保存，或配置 .env 的 OPENAI_API_KEY）。\n" + body[:4000],
+            "verifier_decision": "pass",
+            "verified": True,
+        }
+
+    headers = state.get("llm_extra_headers")
+    client_kw: dict[str, Any] = {"api_key": api_key, "base_url": api_base}
+    if isinstance(headers, dict) and headers:
+        client_kw["default_headers"] = headers
+    client = OpenAI(**client_kw)
+    retry_note = ""
+    if int(state.get("retry_count") or 0) > 0:
+        retry_note = "上一轮未通过一致性校验，请更严格依据资料重写。\n"
+    messages = [
+        {"role": "system", "content": "你是企业知识库助手。仅依据参考资料作答；资料不足请说明。"},
+        {
+            "role": "user",
+            "content": retry_note + f"参考资料：\n{body}\n\n用户问题：{state['question']}",
+        },
+    ]
+    model = state.get("chat_model") or settings.openai_chat_model
+    temp = float(state.get("llm_temperature_answer") if state.get("llm_temperature_answer") is not None else 0.2)
+    kw: dict[str, Any] = {"model": model, "messages": messages, "temperature": temp}
+    mt = state.get("llm_max_tokens_answer")
+    if mt is not None:
+        kw["max_tokens"] = int(mt)
+    resp = client.chat.completions.create(**kw)
+    ans = (resp.choices[0].message.content or "").strip()
+    return {"answer": ans}
+
+
+def verifier_node(state: AgentState) -> dict[str, Any]:
+    api_key = (state.get("llm_api_key") or "").strip() or settings.openai_api_key
+    api_base = (state.get("llm_api_base") or "").strip() or settings.openai_api_base
+    if not api_key:
+        return {"verifier_decision": "pass", "verified": True}
+    ctx = state.get("contexts") or []
+    body = "\n".join(f"[{i + 1}] {t}" for i, t in enumerate(ctx))
+    ans = state.get("answer") or ""
+    headers = state.get("llm_extra_headers")
+    client_kw: dict[str, Any] = {"api_key": api_key, "base_url": api_base}
+    if isinstance(headers, dict) and headers:
+        client_kw["default_headers"] = headers
+    client = OpenAI(**client_kw)
+    model = state.get("chat_model") or settings.openai_chat_model
+    temp = float(state.get("llm_temperature_verifier") if state.get("llm_temperature_verifier") is not None else 0.0)
+    kw: dict[str, Any] = {
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": "你是答案一致性审查员。只输出一个词：PASS / RETRY / REJECT。",
+            },
+            {
+                "role": "user",
+                "content": f"资料：\n{body}\n\n答案：\n{ans}\n\n若答案明显超出资料或自相矛盾，输出RETRY（可重试）或REJECT（拒答）。",
+            },
+        ],
+        "temperature": temp,
+    }
+    mt = state.get("llm_max_tokens_verifier")
+    kw["max_tokens"] = int(mt) if mt is not None else 8
+    resp = client.chat.completions.create(**kw)
+    tag = (resp.choices[0].message.content or "").strip().upper()
+    retries = int(state.get("retry_count") or 0)
+    if "RETRY" in tag and retries < 2:
+        return {"verifier_decision": "retry", "retry_count": retries + 1}
+    if "REJECT" in tag:
+        return {"verifier_decision": "reject", "answer": "无法根据资料确认，已拒答。", "verified": False}
+    return {"verifier_decision": "pass", "verified": True}
+
+
+def citer_node(state: AgentState) -> dict[str, Any]:
+    meta = state.get("contexts_meta") or []
+    sources = [f"{m.get('source', '')}#{m.get('parent_id', '')}" for m in meta if m.get("parent_id")]
+    ans = state.get("answer") or ""
+    foot = "\n\n引用: " + "; ".join(sources) if sources else ""
+    return {"sources": sources, "answer": ans + foot}
+
+
+def route_after_router(state: AgentState) -> str:
+    return str(state.get("route_next") or "retrieve")
+
+
+def route_after_verifier(state: AgentState) -> str:
+    return str(state.get("verifier_decision") or "pass")

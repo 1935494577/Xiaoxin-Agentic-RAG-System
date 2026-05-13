@@ -1,0 +1,3 @@
+# Extra GPU stack (Linux + NVIDIA). Pick torch CUDA build from pytorch.org
+-r requirements.txt
+vllm>=0.6.1

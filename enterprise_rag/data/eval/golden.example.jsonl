@@ -1,0 +1,1 @@
+{"question": "What orchestrates the RAG workflow?", "answer": "LangGraph orchestrates rewrite, retrieve, rerank, and generate steps.", "contexts": ["LangGraph orchestrates rewrite, retrieve, rerank, and generate steps."], "ground_truth": "LangGraph"}

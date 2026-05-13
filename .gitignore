@@ -1,0 +1,37 @@
+.env
+# 密钥只放在 .env（已被忽略）；勿在本文件写入 sk- 等明文，否则仍会进 Git 历史。
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# 内部笔记 / 规划稿（不推 GitHub，本地可保留）
+PROJECT_PLAN.md
+plan1.md
+project.txt
+
+# IDE / OS
+.cursor/
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+# Local eval / feedback artifacts
+enterprise_rag/data/eval/golden.jsonl
+enterprise_rag/data/feedback.jsonl
+enterprise_rag/data/milvus_lite/
+enterprise_rag/data/bm25_index.json
+enterprise_rag/data/numpy_vectors.json
+enterprise_rag/data/model_profiles.json
+# 嵌入与重排权重体积大，不提交；克隆后按 README 本地下载到 models/
+enterprise_rag/data/models/**
+!enterprise_rag/data/models/.gitkeep
+# 入库生成的块与清洗副本（保留各目录 .gitkeep）
+enterprise_rag/data/chunks/chunks_*.jsonl
+enterprise_rag/data/processed/**
+!enterprise_rag/data/processed/.gitkeep

@@ -1,0 +1,3 @@
+# Optional: disable anonymous usage stats (unrelated to the email onboarding prompt).
+[browser]
+gatherUsageStats = false

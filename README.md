@@ -1,0 +1,183 @@
+# Enterprise RAG
+
+面向企业制度与长文档的检索增强生成（RAG）服务：原始文档经清洗与父子两级分块后，子块量化为向量并写入向量库，父块参与 BM25 与上下文拼装；查询经改写、混合检索与重排后，由大模型生成回答，并通过 **LangGraph** 工作流完成校验与引文整理。可选 **Presidio** 脱敏、接口层访问控制与安全响应头。
+
+---
+
+## 已实现功能
+
+| 模块 | 说明 |
+|------|------|
+| **文档处理** | 解析与清洗（`document_loader`）、父子分块与持久化（`chunker`） |
+| **索引** | 向量写入 Milvus Lite（或 numpy 回退）、父文档 BM25（`indexing`）；可选 Elasticsearch 父索引 |
+| **嵌入与重排** | FlagEmbedding / sentence-transformers、CrossEncoder 重排；可选 **ModelScope** 下载到 `enterprise_rag/data/models` |
+| **检索** | 查询改写、向量 + BM25 混合检索、重排（`retrieval`） |
+| **对话智能体** | LangGraph：路由 → 检索 → 生成（`draft` 节点）→ 校验 → 引文（`agent`） |
+| **HTTP API** | FastAPI：健康检查、入库、对话、反馈、公开配置与多供应商「模型配置」档案（`api`） |
+| **安全** | 可选 `RAG_API_SECRET`、CORS、可信 Host、安全头；注入检测与按来源权限（`security`） |
+| **前端** | Streamlit 演示：预览、入库、对话（`frontend`） |
+| **评测与追踪** | 可选 LangSmith / RAGAS 相关配置（`evaluation`） |
+| **容器与脚本** | `Dockerfile`、`docker-compose.yml`、`Makefile`、`scripts/*` 安装与一键闭环 |
+
+---
+
+## 不纳入版本库的内容
+
+以下条目由 `.gitignore` 排除，请勿把密钥与纯本地产物推送到远程：
+
+- **`.env`**（从 `.env.example` 复制后本地填写密钥与模型服务地址）
+- **内部规划稿**：`PROJECT_PLAN.md`、`plan1.md`、`project.txt`
+- **虚拟环境与缓存**：`.venv/`、`__pycache__/`、`.pytest_cache/` 等
+- **运行期索引与数据产物**：`enterprise_rag/data/milvus_lite/`、`bm25_index.json`、`numpy_vectors.json`、`chunks_*.jsonl`、`processed/**`（除 `.gitkeep`）、`feedback.jsonl`、`golden.jsonl` 等
+
+**嵌入与重排模型**默认下载到 `enterprise_rag/data/models/`，**不纳入 Git**（由 `.gitignore` 排除）；克隆仓库后请在本地按上文「模型获取」方式自行下载权重。
+
+---
+
+## 项目目录结构
+
+```text
+xiaoxin_RAG/
+├── .env.example                 # 环境变量模板（复制为 .env）
+├── .gitignore
+├── README.md
+├── LICENSE
+├── Makefile
+├── docker-compose.yml
+├── Dockerfile
+├── pytest.ini
+├── requirements.txt             # 运行依赖（含可选 modelscope）
+├── requirements-gpu.txt
+├── docs/
+│   └── deploy_security.md       # 部署与安全建议
+├── deploy/
+│   └── nginx-api.conf.example
+├── enterprise_rag/
+│   ├── data/
+│   │   ├── raw/                 # 原始文档（含示例 sample.txt）
+│   │   ├── processed/         # 清洗输出（运行生成，默认不提交）
+│   │   ├── chunks/            # 分块 JSONL（运行生成，默认不提交）
+│   │   ├── models/            # 嵌入 / 重排权重（本地缓存，不提交）
+│   │   ├── eval/              # 评测示例与占位
+│   │   └── milvus_lite/       # Milvus Lite 数据目录（不提交）
+│   └── src/                   # 应用源码（PYTHONPATH / Uvicorn 工作目录）
+│       ├── api/               # FastAPI 路由、Schema、鉴权
+│       ├── agent/             # LangGraph 编排与节点
+│       ├── chunker/
+│       ├── document_loader/
+│       ├── indexing/          # Milvus、BM25、嵌入、modelscope_hub
+│       ├── retrieval/
+│       ├── security/
+│       ├── evaluation/
+│       ├── config.py
+│       └── runtime_device.py
+├── frontend/                    # Streamlit 应用与页面
+├── scripts/                     # 安装、启停 API/前端、闭环与预下载
+└── tests/                       # pytest 用例
+```
+
+---
+
+## 如何操作
+
+### 1. 安装依赖
+
+```powershell
+cd <仓库根目录>
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+copy .env.example .env
+```
+
+编辑 **`.env`**：至少配置 OpenAI 兼容的 **`OPENAI_API_BASE`**、**`OPENAI_API_KEY`**、**`OPENAI_CHAT_MODEL`**；按需设置 **`USE_MODELSCOPE_DOWNLOAD`**、`EMBEDDING_MODEL`、`RERANKER_MODEL`、`HF_HUB_CACHE`、`TORCH_DEVICE` 等。修改后需重启 API。
+
+### 2. 启动 HTTP API
+
+```powershell
+cd enterprise_rag\src
+python -m uvicorn api.main:app --reload --host 127.0.0.1 --port 8001
+```
+
+- 开发态文档：<http://127.0.0.1:8001/docs>（若未在 `.env` 中关闭）
+- 健康检查：`GET /health`
+
+### 3. 入库示例（`data/raw` 下文件）
+
+```powershell
+Invoke-RestMethod -Uri "http://127.0.0.1:8001/ingest/path?relative_path=sample.txt" -Method Post
+```
+
+亦支持：`POST /ingest/text`（JSON 正文）、`POST /ingest/upload`（multipart）、`POST /ingest/preview`（仅清洗预览）。
+
+### 4. 对话
+
+```powershell
+$b = @{ message = "你的问题"; user_id = "u1"; user_department = "general" } | ConvertTo-Json -Compress
+Invoke-RestMethod -Uri "http://127.0.0.1:8001/chat" -Method Post -Body $b -ContentType "application/json; charset=utf-8" -TimeoutSec 180
+```
+
+返回字段包含 **`answer`**、**`sources`**、**`rewritten_query`**。若配置了 **`RAG_API_SECRET`**，请求需携带约定鉴权头（见 `docs/deploy_security.md`）。
+
+### 5. 一键闭环（不启独立 HTTP）
+
+在仓库根目录：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_closed_loop.py
+```
+
+顺序：`Milvus Lite` 检查 → `TestClient` 调 `/health` → `/ingest/path` → `/chat` → `/feedback`。
+
+### 6. 测试
+
+```powershell
+cd <仓库根目录>
+pytest
+```
+
+### 7. Streamlit 前端（可选）
+
+```powershell
+cd <仓库根目录>
+.\scripts\run_frontend.ps1
+# 等价：python -m streamlit run frontend/streamlit_app.py --server.port 8501
+```
+
+### 8. Docker（可选）
+
+见根目录 **`docker-compose.yml`** 与 **`Dockerfile`**，结合 **`deploy/`** 下 Nginx 示例做反向代理与 TLS。
+
+---
+
+## 主要 HTTP 路径
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/health` | 存活探测 |
+| GET | `/config/public` | 公开运行配置（无密钥） |
+| GET/POST/PUT/DELETE | `/config/model-profiles`… | 多供应商模型档案（密钥仅存服务端） |
+| POST | `/chat` | RAG 对话 |
+| POST | `/feedback` | 反馈写入 JSONL |
+| POST | `/ingest/preview` | 清洗预览 |
+| POST | `/ingest/text` | 文本入库 |
+| POST | `/ingest/path` | 按 `data/raw` 相对路径入库 |
+| POST | `/ingest/upload` | 上传文件入库 |
+
+---
+
+## 模型与仓库
+
+- **默认缓存目录**：`enterprise_rag/data/models`（可通过 **`MODELSCOPE_CACHE_DIR`** 或 **`HF_HUB_CACHE`** 调整）。
+- 权重文件**不随仓库推送**；首次运行入库或对话时会按 `.env` 从魔搭或 Hugging Face 拉取（或提前运行 `scripts/download_rag_models.py` 等脚本）。
+- 若你希望团队共享同一套离线权重，可自建对象存储或网盘分发，**不要**把大文件硬塞进 Git；单文件超过 GitHub 约 **100MB** 会直接被拒。
+
+---
+
+## 更多文档
+
+- 安全与网关：**`docs/deploy_security.md`**
+
+## 许可证
+
+MIT，见仓库根目录 **`LICENSE`**。
