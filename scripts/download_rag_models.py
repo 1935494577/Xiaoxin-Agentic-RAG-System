@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "enterprise_rag" / "src"
 sys.path.insert(0, str(SRC))
 
-from huggingface_hub import snapshot_download  # noqa: E402
+from indexing.modelscope_hub import resolve_model_path  # noqa: E402
 
 from config import settings  # noqa: E402
 
@@ -45,11 +45,14 @@ def _hub_ids() -> list[str]:
 
 def main() -> None:
     if settings.use_modelscope_download:
-        print(
-            "已启用 USE_MODELSCOPE_DOWNLOAD：Flag 嵌入与重排走魔搭 ModelScope，无需运行本 HF 预下载脚本。\n"
-            "若仍需从 Hub 预拉，请将该变量设为 false 后重试。"
-        )
+        print("USE_MODELSCOPE_DOWNLOAD=true：经魔搭下载到 enterprise_rag/data/models\n")
+        for repo_id in _hub_ids():
+            print(f"Downloading {repo_id!r} ...")
+            path = resolve_model_path(repo_id, download_if_missing=True)
+            print(f"  done: {path}")
         return
+    from huggingface_hub import snapshot_download
+
     cache = _hf_cache_dir_str()
     for repo_id in _hub_ids():
         print(f"Downloading {repo_id!r} ...")

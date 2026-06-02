@@ -100,6 +100,7 @@ class BM25Index:
                         "text": self.corpus[idx] if idx < len(self.corpus) else "",
                         "department": meta.get("department"),
                         "source": meta.get("source"),
+                        "permission_label": meta.get("permission_label"),
                         "score": float(scores[idx]),
                     }
                 )
@@ -117,6 +118,7 @@ class BM25Index:
                         "text": text,
                         "department": meta.get("department"),
                         "source": meta.get("source"),
+                        "permission_label": meta.get("permission_label"),
                     }
         return out
 

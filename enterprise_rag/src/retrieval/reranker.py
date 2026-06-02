@@ -33,9 +33,9 @@ def _flag_reranker():
 
     model_path = settings.reranker_model
     if settings.use_modelscope_download:
-        from indexing.modelscope_hub import snapshot_model_to_local
+        from indexing.modelscope_hub import resolve_model_path
 
-        model_path = snapshot_model_to_local(settings.reranker_model)
+        model_path = resolve_model_path(settings.reranker_model, download_if_missing=False)
 
     kw: dict[str, Any] = {
         "model_name_or_path": model_path,

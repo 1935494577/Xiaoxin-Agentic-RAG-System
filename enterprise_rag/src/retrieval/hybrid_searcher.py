@@ -89,20 +89,27 @@ def hybrid_search(
         text = ""
         department = user_department
         source = ""
+        permission_label = ""
         if row:
             text = str(row.get("text") or "")
             department = str(row.get("department") or department or "")
             source = str(row.get("source") or "")
+            permission_label = str(row.get("permission_label") or "")
         if not text and pid in v_score:
             vrows = [h for h in vec_hits if str(h.get("parent_id")) == pid]
             if vrows:
                 text = "\n".join(str(h.get("text") or "") for h in vrows[:3])
+                if not department:
+                    department = str(vrows[0].get("department") or department or "")
+                if not source:
+                    source = str(vrows[0].get("source") or "")
         candidates.append(
             {
                 "parent_id": pid,
                 "text": text,
                 "department": department,
                 "source": source,
+                "permission_label": permission_label,
                 "hybrid_score": float(hy),
             }
         )

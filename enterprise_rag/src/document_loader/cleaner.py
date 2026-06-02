@@ -1,19 +1,35 @@
 import re
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from pathlib import Path
 
 from document_loader.parser import load_document_text
-from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
 from presidio_anonymizer.entities import OperatorConfig
 
-_ANALYZER: AnalyzerEngine | None = None
+_ANALYZER = None
 _ANONYMIZER: AnonymizerEngine | None = None
+_PRESIDIO_DISABLED = False
+_PRESIDIO_INIT_TIMEOUT_SEC = 8.0
 
 
-def _engines() -> tuple[AnalyzerEngine, AnonymizerEngine]:
-    global _ANALYZER, _ANONYMIZER
+def _init_analyzer():
+    from presidio_analyzer import AnalyzerEngine
+
+    return AnalyzerEngine()
+
+
+def _engines():
+    global _ANALYZER, _ANONYMIZER, _PRESIDIO_DISABLED
+    if _PRESIDIO_DISABLED:
+        raise RuntimeError("presidio unavailable")
     if _ANALYZER is None:
-        _ANALYZER = AnalyzerEngine()
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            fut = pool.submit(_init_analyzer)
+            try:
+                _ANALYZER = fut.result(timeout=_PRESIDIO_INIT_TIMEOUT_SEC)
+            except FuturesTimeoutError as e:
+                _PRESIDIO_DISABLED = True
+                raise RuntimeError("presidio init timed out") from e
     if _ANONYMIZER is None:
         _ANONYMIZER = AnonymizerEngine()
     return _ANALYZER, _ANONYMIZER

@@ -21,6 +21,7 @@ from api.llm_resolve import resolve_llm_runtime
 from api.model_profile_store import (
     delete_profile,
     get_default_profile_id,
+    get_profile_raw,
     load_store,
     set_default_profile,
     to_public_dict,
@@ -39,6 +40,10 @@ from api.schemas import (
     PreviewRequest,
     PreviewResponse,
     PublicConfigResponse,
+    RetrieveHit,
+    RetrieveRequest,
+    RetrieveResponse,
+    SourceRef,
 )
 from chunker.parent_child import persist_chunks_jsonl, split_parent_child
 from document_loader.cleaner import clean_file, clean_raw_text
@@ -137,6 +142,14 @@ def list_model_profiles():
     )
 
 
+@app.get("/config/model-profiles/{profile_id}", response_model=ModelProfilePublic)
+def get_model_profile(profile_id: str):
+    row = get_profile_raw(profile_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return ModelProfilePublic.model_validate(to_public_dict(row))
+
+
 @app.post("/config/model-profiles", response_model=ModelProfilePublic)
 def create_model_profile(body: ModelProfileCreate):
     row = upsert_profile(
@@ -193,6 +206,29 @@ def set_default_model_profile(profile_id: str):
     return {"ok": True, "default_profile_id": profile_id}
 
 
+@app.post("/retrieve", response_model=RetrieveResponse)
+def retrieve(req: RetrieveRequest):
+    """检索调试：混合检索 + Rerank，不调用大模型生成答案（无需 API Key）。"""
+    from retrieval.hybrid_searcher import hybrid_search
+    from security.permissions import filter_by_sources
+
+    rewritten, parents = hybrid_search(req.query, req.user_department, top_k=req.top_k)
+    parents = filter_by_sources(parents, req.allowed_sources)
+    hits = [
+        RetrieveHit(
+            parent_id=str(p.get("parent_id") or ""),
+            source=str(p.get("source") or ""),
+            department=str(p.get("department") or ""),
+            permission_label=str(p.get("permission_label") or ""),
+            hybrid_score=float(p["hybrid_score"]) if p.get("hybrid_score") is not None else None,
+            rerank_score=float(p["rerank_score"]) if p.get("rerank_score") is not None else None,
+            text=str(p.get("text") or ""),
+        )
+        for p in parents
+    ]
+    return RetrieveResponse(rewritten_query=rewritten, hits=hits)
+
+
 @app.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest):
     """步骤7：对话入口。"""
@@ -212,6 +248,7 @@ def chat(req: ChatRequest):
     return ChatResponse(
         answer=out.get("answer") or "",
         sources=out.get("sources") or [],
+        source_refs=[SourceRef(**r) for r in (out.get("source_refs") or [])],
         rewritten_query=out.get("rewritten_query"),
     )
 
@@ -260,20 +297,34 @@ def ingest_path(
     return _ingest_text(text, source=rel, department=department, permission_label=permission_label)
 
 
+def _safe_upload_filename(filename: str | None) -> str:
+    """Basename only; reject path traversal (.., separators)."""
+    raw = (filename or "upload.bin").strip()
+    name = Path(raw).name
+    if not name or name in {".", ".."} or ".." in raw.replace("\\", "/"):
+        raise HTTPException(status_code=400, detail="Invalid upload filename")
+    return name
+
+
 @app.post("/ingest/upload", response_model=IngestResponse)
 async def ingest_upload(
     file: UploadFile = File(...),
     department: str | None = Query(default=None, max_length=64),
     permission_label: str | None = Query(default=None, max_length=64),
 ):
+    safe_name = _safe_upload_filename(file.filename)
     settings.data_raw_dir.mkdir(parents=True, exist_ok=True)
-    dest = settings.data_raw_dir / (file.filename or "upload.bin")
+    dest = (settings.data_raw_dir / safe_name).resolve()
+    try:
+        dest.relative_to(settings.data_raw_dir.resolve())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid upload path") from None
     with dest.open("wb") as f:
         shutil.copyfileobj(file.file, f)
     text = clean_file(dest, use_presidio=settings.use_presidio)
     return _ingest_text(
         text,
-        source=file.filename or dest.name,
+        source=safe_name,
         department=department,
         permission_label=permission_label,
     )

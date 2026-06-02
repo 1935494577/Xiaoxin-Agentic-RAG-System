@@ -20,10 +20,40 @@ class ChatRequest(BaseModel):
     max_tokens_verifier: int | None = Field(default=None, ge=1, le=4096)
 
 
+class SourceRef(BaseModel):
+    source: str = ""
+    parent_id: str = ""
+    department: str = ""
+    permission_label: str = ""
+
+
 class ChatResponse(BaseModel):
     answer: str
     sources: list[str] = Field(default_factory=list)
+    source_refs: list[SourceRef] = Field(default_factory=list)
     rewritten_query: str | None = None
+
+
+class RetrieveRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=8000)
+    user_department: str = Field(default="general", max_length=64)
+    top_k: int = Field(default=5, ge=1, le=20)
+    allowed_sources: list[str] | None = None
+
+
+class RetrieveHit(BaseModel):
+    parent_id: str
+    source: str = ""
+    department: str = ""
+    permission_label: str = ""
+    hybrid_score: float | None = None
+    rerank_score: float | None = None
+    text: str
+
+
+class RetrieveResponse(BaseModel):
+    rewritten_query: str
+    hits: list[RetrieveHit] = Field(default_factory=list)
 
 
 class FeedbackRequest(BaseModel):

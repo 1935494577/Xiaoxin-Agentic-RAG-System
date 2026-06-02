@@ -5,6 +5,7 @@ from typing import Any, TypedDict
 from openai import OpenAI
 
 from config import settings
+from agent.context_format import format_context_with_meta, format_source_citation, source_ref_dict
 from security.guard import scan_prompt_injection
 from security.permissions import filter_by_sources
 
@@ -30,6 +31,7 @@ class AgentState(TypedDict, total=False):
     answer: str
     verified: bool
     sources: list[str]
+    source_refs: list[dict[str, Any]]
     verifier_decision: str
     retry_count: int
 
@@ -60,7 +62,7 @@ def retrieve_node(state: AgentState) -> dict[str, Any]:
     parents = filter_by_sources(parents, state.get("allowed_sources"))
     return {
         "rewritten_query": rw,
-        "contexts": [p.get("text") or "" for p in parents],
+        "contexts": [format_context_with_meta(p) for p in parents],
         "contexts_meta": parents,
     }
 
@@ -146,10 +148,12 @@ def verifier_node(state: AgentState) -> dict[str, Any]:
 
 def citer_node(state: AgentState) -> dict[str, Any]:
     meta = state.get("contexts_meta") or []
-    sources = [f"{m.get('source', '')}#{m.get('parent_id', '')}" for m in meta if m.get("parent_id")]
+    refs = [m for m in meta if m.get("parent_id")]
+    sources = [format_source_citation(m) for m in refs]
+    source_refs = [source_ref_dict(m) for m in refs]
     ans = state.get("answer") or ""
     foot = "\n\n引用: " + "; ".join(sources) if sources else ""
-    return {"sources": sources, "answer": ans + foot}
+    return {"sources": sources, "source_refs": source_refs, "answer": ans + foot}
 
 
 def route_after_router(state: AgentState) -> str:

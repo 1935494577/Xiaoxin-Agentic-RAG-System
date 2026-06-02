@@ -6,25 +6,89 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Any
 
+import httpx
 import streamlit as st
 
 _FRONT = Path(__file__).resolve().parent.parent
 if str(_FRONT) not in sys.path:
     sys.path.insert(0, str(_FRONT))
-import streamlit_common as scom  # noqa: E402
+from _bootstrap import load_streamlit_common  # noqa: E402
+
+scom = load_streamlit_common(_FRONT)
+
+VENDOR_OPTIONS = ["custom", "deepseek", "qwen", "openai", "moonshot", "zhipu"]
+VENDOR_LABELS = {
+    "custom": "自定义 / 其它",
+    "deepseek": "DeepSeek",
+    "qwen": "阿里云通义千问",
+    "openai": "OpenAI",
+    "moonshot": "Moonshot(Kimi)",
+    "zhipu": "智谱 GLM",
+}
+
+
+def _init_form_state() -> None:
+    defaults = {
+        "mc_editing_id": "",
+        "mc_name": "",
+        "mc_vendor": "custom",
+        "mc_api_base": "",
+        "mc_api_path": "",
+        "mc_default_model": "",
+        "mc_api_key": "",
+    }
+    for k, v in defaults.items():
+        st.session_state.setdefault(k, v)
+
+
+def _load_profile_into_form(profile: dict[str, Any]) -> None:
+    st.session_state["mc_editing_id"] = str(profile.get("id") or "")
+    st.session_state["mc_name"] = str(profile.get("name") or "")
+    vendor = str(profile.get("vendor") or "custom")
+    st.session_state["mc_vendor"] = vendor if vendor in VENDOR_OPTIONS else "custom"
+    st.session_state["mc_api_base"] = str(profile.get("api_base") or "")
+    st.session_state["mc_api_path"] = str(profile.get("api_path") or "")
+    st.session_state["mc_default_model"] = str(profile.get("default_model") or "")
+    st.session_state["mc_api_key"] = ""
+
+
+def _clear_form() -> None:
+    st.session_state["mc_editing_id"] = ""
+    st.session_state["mc_name"] = ""
+    st.session_state["mc_vendor"] = "custom"
+    st.session_state["mc_api_base"] = ""
+    st.session_state["mc_api_path"] = ""
+    st.session_state["mc_default_model"] = ""
+    st.session_state["mc_api_key"] = ""
+
+
+def _build_save_body() -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "name": st.session_state["mc_name"].strip(),
+        "vendor": st.session_state["mc_vendor"],
+        "api_base": st.session_state["mc_api_base"].strip(),
+        "api_path": st.session_state["mc_api_path"].strip() or None,
+        "default_model": st.session_state["mc_default_model"].strip(),
+    }
+    key = st.session_state["mc_api_key"].strip()
+    if key:
+        body["api_key"] = key
+    return body
 
 
 def main() -> None:
     st.set_page_config(page_title="模型与密钥配置", layout="wide", menu_items={"About": None})
     if "rag_api_base" not in st.session_state:
         st.session_state.rag_api_base = scom.DEFAULT_API
+    _init_form_state()
+
+    api_base = scom.get_api_base()
 
     st.title("模型与密钥配置")
     st.caption("把大模型服务的网址和密钥保存在本系统内，供「企业知识库助手」对话使用；密钥不会完整显示给其他人。")
     st.page_link("streamlit_app.py", label="返回知识库助手", icon="🏠")
-
-    api_base = st.text_input("服务地址（后端 API）", key="rag_api_base", help="与主控制台侧栏一致，例如 http://127.0.0.1:8001")
 
     with st.expander("各厂商地址怎么填？（点击展开）", expanded=False):
         st.markdown(
@@ -36,69 +100,73 @@ def main() -> None:
             """
         )
 
-    st.subheader("新建或更新一条配置")
+    editing_id = st.session_state["mc_editing_id"].strip()
+    if editing_id:
+        st.info(f"正在编辑配置 `{editing_id}`。留空「API Key」则保留原密钥；点「取消编辑」可新建。")
+    else:
+        st.subheader("新建配置")
+
     col1, col2 = st.columns(2)
     with col1:
-        name = st.text_input("显示名称", placeholder="例如：公司用的通义千问")
-        vendor_choice = st.selectbox(
+        st.text_input("显示名称", key="mc_name", placeholder="例如：公司用的通义千问")
+        st.selectbox(
             "厂商",
-            [
-                "custom",
-                "deepseek",
-                "qwen",
-                "openai",
-                "moonshot",
-                "zhipu",
-            ],
-            format_func=lambda x: {
-                "custom": "自定义 / 其它",
-                "deepseek": "DeepSeek",
-                "qwen": "阿里云通义千问",
-                "openai": "OpenAI",
-                "moonshot": "Moonshot(Kimi)",
-                "zhipu": "智谱 GLM",
-            }.get(x, x),
+            VENDOR_OPTIONS,
+            key="mc_vendor",
+            format_func=lambda x: VENDOR_LABELS.get(x, x),
         )
-        api_base_url = st.text_input("服务网址（Base）", placeholder="https://api.deepseek.com")
-        api_path = st.text_input("路径后缀（多数情况可留空）", placeholder="通义千问兼容模式填 /compatible-mode/v1")
+        st.text_input("服务网址（Base）", key="mc_api_base", placeholder="https://api.deepseek.com")
+        st.text_input("路径后缀（多数情况可留空）", key="mc_api_path", placeholder="通义千问兼容模式填 /compatible-mode/v1")
     with col2:
-        default_model = st.text_input("模型名称", placeholder="如 deepseek-chat、qwen-plus")
-        api_key = st.text_input("API Key（密钥）", type="password", help="保存后不会在列表里完整显示。")
-        edit_id = st.text_input(
-            "若要修改已有配置，填写其配置编号（新建请留空）",
-            value="",
-            help="在下方列表每条卡片里可看到「配置编号」；普通用户一般由管理员代为填写。",
+        st.text_input("模型名称", key="mc_default_model", placeholder="如 deepseek-chat、qwen-plus")
+        st.text_input(
+            "API Key（密钥）",
+            key="mc_api_key",
+            type="password",
+            help="编辑已有配置时留空表示不修改原密钥。",
         )
 
-    if st.button("保存到服务器", type="primary"):
-        if not name.strip() or not api_base_url.strip() or not default_model.strip():
-            st.error("请填写显示名称、服务网址和模型名称。")
+    btn_save, btn_cancel = st.columns([1, 1])
+    with btn_save:
+        save_clicked = st.button("保存到服务器", type="primary")
+    with btn_cancel:
+        if editing_id and st.button("取消编辑"):
+            _clear_form()
+            st.rerun()
+
+    if save_clicked:
+        if not st.session_state["mc_name"].strip() or not st.session_state["mc_api_base"].strip():
+            st.error("请填写显示名称和服务网址。")
+        elif not st.session_state["mc_default_model"].strip():
+            st.error("请填写模型名称。")
+        elif not editing_id and not st.session_state["mc_api_key"].strip():
+            st.error("新建配置时请填写 API Key。")
         else:
-            body = {
-                "name": name.strip(),
-                "vendor": vendor_choice,
-                "api_base": api_base_url.strip(),
-                "api_path": api_path.strip() or None,
-                "default_model": default_model.strip(),
-                "api_key": api_key,
-            }
+            body = _build_save_body()
             try:
                 with scom.http_client(api_base) as c:
-                    if edit_id.strip():
-                        r = c.put(f"/config/model-profiles/{edit_id.strip()}", json=body)
+                    if editing_id:
+                        r = c.put(f"/config/model-profiles/{editing_id}", json=body)
                     else:
                         r = c.post("/config/model-profiles", json=body)
                 if r.status_code == 200:
-                    st.success("已保存。请回到「企业知识库助手」，在侧栏选择刚保存的接入方式。")
-                    with st.expander("技术详情（可选）"):
-                        st.json(r.json())
+                    saved = r.json()
+                    st.success(
+                        f"已{'更新' if editing_id else '保存'}「{saved.get('name', '')}」。"
+                        "请回到「企业知识库助手」，在侧栏选择该接入方式。"
+                    )
+                    _clear_form()
+                    st.rerun()
                 else:
                     st.error(f"{r.status_code}: {r.text}")
+            except (httpx.ConnectError, httpx.TimeoutException):
+                st.error(scom.SERVICE_UNAVAILABLE)
             except Exception as e:
-                st.exception(e)
+                st.error(f"保存失败：{e}")
 
     st.divider()
     st.subheader("已保存的配置")
+
     try:
         with scom.http_client(api_base, timeout=20.0) as c:
             r = c.get("/config/model-profiles")
@@ -111,34 +179,48 @@ def main() -> None:
         if not profiles:
             st.info("暂无配置，请在上方新建。")
         for p in profiles:
-            pid = p.get("id", "")
+            pid = str(p.get("id", ""))
+            is_editing = pid == editing_id
             with st.container(border=True):
-                st.write(f"**{p.get('name')}** · `{p.get('vendor')}` · 模型 `{p.get('default_model')}`")
-                st.caption(f"配置编号（更新时需要）：`{pid}`")
+                title = f"**{p.get('name')}** · `{p.get('vendor')}` · 模型 `{p.get('default_model')}`"
+                if is_editing:
+                    title += " · **（编辑中）**"
+                st.write(title)
+                st.caption(f"配置编号：`{pid}`")
                 st.text(f"Base: {p.get('combined_base') or p.get('api_base')}")
                 st.caption(f"密钥: {'已配置 ' + p.get('api_key_hint', '') if p.get('has_api_key') else '未配置'}")
-                c1, c2, c3 = st.columns(3)
+                c1, c2, c3, c4 = st.columns(4)
                 with c1:
+                    if st.button("编辑", key=f"edit_{pid}", disabled=is_editing):
+                        _load_profile_into_form(p)
+                        st.rerun()
+                with c2:
                     if st.button("设为默认", key=f"def_{pid}"):
                         with scom.http_client(api_base) as c:
                             rr = c.post(f"/config/model-profiles/{pid}/default")
                         if rr.status_code == 200:
                             st.success("已设为默认")
+                            st.rerun()
                         else:
                             st.error(rr.text)
-                with c2:
+                with c3:
                     if st.button("删除", key=f"del_{pid}"):
                         with scom.http_client(api_base) as c:
                             rr = c.delete(f"/config/model-profiles/{pid}")
                         if rr.status_code == 200:
+                            if editing_id == pid:
+                                _clear_form()
                             st.success("已删除")
+                            st.rerun()
                         else:
                             st.error(rr.text)
-                with c3:
+                with c4:
                     if str(pid) == str(default_id or ""):
-                        st.caption("当前为默认")
+                        st.caption("★ 当前默认")
+    except (httpx.ConnectError, httpx.TimeoutException):
+        st.error(scom.SERVICE_UNAVAILABLE)
     except Exception as e:
-        st.exception(e)
+        st.error(f"加载失败：{e}")
 
 
 if __name__ == "__main__":

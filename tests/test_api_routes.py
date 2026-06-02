@@ -31,3 +31,17 @@ def test_public_config_and_preview():
         r5 = client.get("/config/model-profiles")
         assert r5.status_code == 200
         assert "profiles" in r5.json()
+
+
+def test_ingest_upload_rejects_path_traversal():
+    try:
+        from api.main import app  # noqa: PLC0415
+    except ModuleNotFoundError as e:
+        pytest.skip(f"API 依赖未就绪: {e}")
+
+    with TestClient(app) as client:
+        r = client.post(
+            "/ingest/upload",
+            files={"file": ("../../evil.txt", b"hello", "text/plain")},
+        )
+        assert r.status_code == 400
