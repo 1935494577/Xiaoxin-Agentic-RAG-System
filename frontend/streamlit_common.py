@@ -9,7 +9,7 @@ from typing import Any
 
 import httpx
 
-DEFAULT_API = os.environ.get("RAG_API_BASE", "http://127.0.0.1:8001")
+DEFAULT_API = os.environ.get("RAG_API_BASE", "http://127.0.0.1:8010")
 INGEST_TIMEOUT = 300.0
 HEALTH_TIMEOUT = httpx.Timeout(3.0, connect=2.0)
 
@@ -24,16 +24,46 @@ def _api_src_on_path() -> None:
         sys.path.insert(0, src)
 
 
+def _env_api_base() -> str:
+    root = Path(__file__).resolve().parents[1]
+    env_path = root / ".env"
+    if env_path.is_file():
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("RAG_API_BASE="):
+                val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                if val:
+                    return val
+    return os.environ.get("RAG_API_BASE", "").strip() or DEFAULT_API
+
+
+def sync_api_base_session() -> str:
+    """Prefer .env RAG_API_BASE so port changes (e.g. 8001→8010) take effect."""
+    target = _env_api_base()
+    try:
+        import streamlit as st
+
+        cur = (st.session_state.get("rag_api_base") or "").strip()
+        if not cur or cur.rstrip("/") != target.rstrip("/"):
+            st.session_state.rag_api_base = target
+    except Exception:
+        pass
+    return target
+
+
 def get_api_base() -> str:
     try:
         import streamlit as st
 
+        sync_api_base_session()
         v = (st.session_state.get("rag_api_base") or "").strip()
         if v:
             return v
     except Exception:
         pass
-    return DEFAULT_API
+    return _env_api_base()
 
 
 def get_api_auth_headers() -> dict[str, str]:
@@ -85,7 +115,7 @@ def _ensure_backend_silent(api_base: str) -> bool:
 def fetch_model_profiles(api_base: str | None = None) -> dict[str, Any] | None:
     base = api_base or get_api_base()
     try:
-        with http_client(base, timeout=HEALTH_TIMEOUT) as c:
+        with http_client(base, timeout=httpx.Timeout(5.0, connect=2.0)) as c:
             r = c.get("/config/model-profiles")
             if r.status_code == 200:
                 return r.json()
@@ -94,6 +124,15 @@ def fetch_model_profiles(api_base: str | None = None) -> dict[str, Any] | None:
     except Exception:
         return None
     return None
+
+
+def ping_health_fast(api_base: str | None = None) -> bool:
+    base = api_base or get_api_base()
+    try:
+        with http_client(base, timeout=HEALTH_TIMEOUT) as c:
+            return c.get("/health").status_code == 200
+    except Exception:
+        return False
 
 
 def profile_labels(data: dict[str, Any] | None) -> list[tuple[str, str]]:

@@ -18,6 +18,14 @@ class ChatRequest(BaseModel):
     max_tokens_rewrite: int | None = Field(default=None, ge=1, le=4096)
     max_tokens_answer: int | None = Field(default=None, ge=1, le=128000)
     max_tokens_verifier: int | None = Field(default=None, ge=1, le=4096)
+    skip_query_rewrite: bool | None = Field(
+        default=None,
+        description="为 true 时跳过 LLM 查询改写；None 时使用服务端 query_rewrite_enabled 配置",
+    )
+    stream_fast_mode: bool | None = Field(
+        default=None,
+        description="true=快速流式（跳过重排等）；false=标准流式；None 使用 UI 配置 stream_fast_mode",
+    )
 
 
 class SourceRef(BaseModel):
@@ -66,6 +74,11 @@ class FeedbackRequest(BaseModel):
 class IngestResponse(BaseModel):
     chunks_indexed: int
     source: str
+    ingest_mode: str | None = None
+    tools_used: list[str] = Field(default_factory=list)
+    router: str | None = None
+    file_type: str | None = None
+    message: str | None = None
 
 
 class PreviewRequest(BaseModel):
@@ -130,3 +143,124 @@ class ModelProfilePublic(BaseModel):
 class ModelProfileListResponse(BaseModel):
     profiles: list[ModelProfilePublic]
     default_profile_id: str | None = None
+
+
+class ModelProfileTestRequest(BaseModel):
+    api_base: str = Field(..., min_length=1, max_length=512)
+    api_path: str | None = Field(default=None, max_length=256)
+    default_model: str = Field(..., min_length=1, max_length=128)
+    api_key: str = Field(..., min_length=1, max_length=2048)
+    extra_headers: dict[str, str] | None = None
+
+
+class ModelConnectionStatus(BaseModel):
+    connected: bool
+    message: str = ""
+
+
+class UiConfigPublic(BaseModel):
+    logo_en: str = "JNAO"
+    logo_cn: str = "劲脑"
+    logo_image_path: str = ""
+    has_logo_image: bool = False
+    app_title: str = "企业知识库助手"
+    app_tagline: str = ""
+    suggested_questions: list[str] = Field(default_factory=list)
+    supported_upload_extensions: list[str] = Field(default_factory=list)
+    supported_upload_label: str = ""
+    stream_fast_mode: bool = False
+
+
+class UiConfigUpdate(BaseModel):
+    logo_en: str | None = Field(default=None, max_length=64)
+    logo_cn: str | None = Field(default=None, max_length=64)
+    app_title: str | None = Field(default=None, max_length=128)
+    app_tagline: str | None = Field(default=None, max_length=512)
+    suggested_questions: list[str] | None = None
+    clear_logo_image: bool = False
+    stream_fast_mode: bool | None = None
+
+
+class ProcessingToolPublic(BaseModel):
+    id: str
+    label: str
+    enabled: bool = True
+
+
+class ProcessingToolsPublic(BaseModel):
+    use_llm_router: bool = True
+    tools: list[ProcessingToolPublic] = Field(default_factory=list)
+    extension_map: dict[str, str] = Field(default_factory=dict)
+
+
+class ProcessingToolsUpdate(BaseModel):
+    use_llm_router: bool | None = None
+    tools: dict[str, dict[str, Any]] | None = None
+
+
+class ChatSessionPublic(BaseModel):
+    id: str
+    user_id: str
+    title: str
+    created_at: str
+    updated_at: str
+
+
+class ChatSessionCreate(BaseModel):
+    user_id: str = Field(..., min_length=1, max_length=128)
+    title: str = Field(default="新对话", max_length=128)
+
+
+class ChatSessionUpdate(BaseModel):
+    user_id: str = Field(..., min_length=1, max_length=128)
+    title: str = Field(..., min_length=1, max_length=128)
+
+
+class ChatMessagePublic(BaseModel):
+    role: str
+    content: str
+    meta: dict[str, Any] | None = None
+
+
+class ChatMessagesAppend(BaseModel):
+    user_id: str = Field(..., min_length=1, max_length=128)
+    messages: list[ChatMessagePublic] = Field(..., min_length=1, max_length=50)
+    auto_title_from: str | None = Field(default=None, max_length=80)
+
+
+class VectorStorePublic(BaseModel):
+    id: str
+    name: str
+    backend: str
+    backend_label: str = ""
+    embedding_model: str = ""
+    embedding_dim: int | None = None
+    numpy_path: str = ""
+    bm25_path: str = ""
+    milvus_collection: str = ""
+    vector_count: int = 0
+    bm25_docs: int = 0
+    compatible: bool = True
+    current_embedding_model: str = ""
+    current_embedding_dim: int | None = None
+    active: bool = False
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class VectorStoreBackendOption(BaseModel):
+    id: str
+    label: str
+    available: bool = True
+
+
+class VectorStoreListResponse(BaseModel):
+    stores: list[VectorStorePublic] = Field(default_factory=list)
+    active_store_id: str | None = None
+    active: VectorStorePublic | None = None
+    available_backends: list[VectorStoreBackendOption] = Field(default_factory=list)
+
+
+class VectorStoreCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=64)
+    backend: str = Field(default="numpy", max_length=32)

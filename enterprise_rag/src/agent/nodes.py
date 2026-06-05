@@ -49,17 +49,32 @@ def retrieve_node(state: AgentState) -> dict[str, Any]:
     from retrieval.hybrid_searcher import hybrid_search
 
     dept = state.get("user_department") or settings.default_department
+    skip_rw = state.get("skip_query_rewrite")
+    rk = state.get("retrieve_top_k")
+    rerank_k = state.get("rerank_top_k")
     rw, parents = hybrid_search(
         state["question"],
         dept,
-        top_k=settings.rerank_top_k,
+        top_k=int(rerank_k) if rerank_k is not None else settings.rerank_top_k,
         chat_model=state.get("chat_model"),
         llm_api_base=state.get("llm_api_base"),
         llm_api_key=state.get("llm_api_key"),
         llm_max_tokens_rewrite=state.get("llm_max_tokens_rewrite"),
         llm_extra_headers=state.get("llm_extra_headers"),
+        skip_query_rewrite=skip_rw,
+        retrieve_top_k=int(rk) if rk is not None else None,
+        skip_rerank=bool(state.get("skip_rerank")),
+        rerank_top_k=int(rerank_k) if rerank_k is not None else None,
+        pre_rerank_k=state.get("pre_rerank_k"),
     )
     parents = filter_by_sources(parents, state.get("allowed_sources"))
+    max_chars = state.get("context_max_chars")
+    if max_chars and int(max_chars) > 0:
+        limit = int(max_chars)
+        for p in parents:
+            text = str(p.get("text") or "")
+            if len(text) > limit:
+                p["text"] = text[:limit] + "…"
     return {
         "rewritten_query": rw,
         "contexts": [format_context_with_meta(p) for p in parents],

@@ -20,10 +20,35 @@ _atexit_registered = False
 
 
 def _get_backend() -> str:
-    """remote | lite | numpy（无 Docker：lite 优先；Windows 无 milvus-lite 轮子时用 numpy）。"""
+    """remote | lite | numpy（由活动向量库配置决定）。"""
     global _backend
     if _backend is not None:
         return _backend
+    try:
+        from api.vector_store_registry import (
+            BACKEND_MILVUS_LITE,
+            BACKEND_MILVUS_REMOTE,
+            BACKEND_NUMPY,
+            get_active_backend,
+        )
+
+        chosen = get_active_backend()
+        if chosen == BACKEND_NUMPY:
+            _backend = "numpy"
+            return _backend
+        if chosen == BACKEND_MILVUS_REMOTE:
+            _backend = "remote"
+            return _backend
+        if chosen == BACKEND_MILVUS_LITE:
+            try:
+                import milvus  # noqa: F401
+
+                _backend = "lite"
+            except ImportError:
+                _backend = "numpy"
+            return _backend
+    except Exception:
+        pass
     if not settings.use_milvus_lite:
         _backend = "remote"
         return _backend
@@ -34,6 +59,41 @@ def _get_backend() -> str:
     except ImportError:
         _backend = "numpy"
     return _backend
+
+
+def reload_vector_backend() -> None:
+    global _backend
+    _backend = None
+
+
+def count_vectors_for_collection(collection: str, *, backend: str | None = None) -> tuple[int, int | None]:
+    """Return (count, dim) for status display."""
+    if backend == "numpy" or _get_backend() == "numpy":
+        from indexing.numpy_vector_index import vector_count_and_dim
+
+        return vector_count_and_dim()
+    _connect()
+    name = collection or _active_collection_name()
+    if not utility.has_collection(name):
+        return 0, None
+    col = Collection(name)
+    col.load()
+    count = col.num_entities
+    dim = None
+    for f in col.schema.fields:
+        if f.name == "vector":
+            dim = int(f.params.get("dim") or 0) or None
+            break
+    return int(count), dim
+
+
+def _active_collection_name() -> str:
+    try:
+        from api.vector_store_registry import get_active_milvus_collection
+
+        return get_active_milvus_collection()
+    except Exception:
+        return settings.milvus_collection
 
 
 def get_vector_backend() -> str:
@@ -108,11 +168,21 @@ def ensure_collection() -> Collection:
     if _get_backend() == "numpy":
         raise RuntimeError("ensure_collection() not used in numpy vector mode")
     _connect()
-    name = settings.milvus_collection
+    name = _active_collection_name()
     dim = embedding_dim()
     if utility.has_collection(name):
         col = Collection(name)
         col.load()
+        existing_dim = None
+        for f in col.schema.fields:
+            if f.name == "vector":
+                existing_dim = int(f.params.get("dim") or 0) or None
+                break
+        if existing_dim and existing_dim != dim:
+            raise ValueError(
+                f"Milvus 集合 {name} 为 {existing_dim} 维，当前嵌入模型为 {dim} 维。"
+                "请新建并切换到匹配的向量库。"
+            )
         return col
 
     fields = [
@@ -138,7 +208,7 @@ def delete_by_source(source: str) -> None:
         np_del(source)
         return
     _connect()
-    name = settings.milvus_collection
+    name = _active_collection_name()
     if not utility.has_collection(name):
         return
     col = Collection(name)
@@ -160,6 +230,12 @@ def insert_child_vectors(
 
         np_ins(ids, vectors, texts, parent_ids, departments, sources)
         return
+    try:
+        from api.vector_store_registry import validate_insert_vectors
+
+        validate_insert_vectors(vectors)
+    except ImportError:
+        pass
     col = ensure_collection()
     texts_t = [t[:1990] for t in texts]
     entities = [ids, vectors, texts_t, parent_ids, departments, sources]
@@ -177,6 +253,12 @@ def vector_search(
         from indexing.numpy_vector_index import vector_search as np_search
 
         return np_search(query_vector, top_k, user_department=user_department)
+    try:
+        from api.vector_store_registry import assert_search_compatible
+
+        assert_search_compatible(len(query_vector))
+    except ImportError:
+        pass
     col = ensure_collection()
     col.load()
     search_params = {"metric_type": "IP", "params": {"nprobe": 10}}

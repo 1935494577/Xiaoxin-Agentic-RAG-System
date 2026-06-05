@@ -44,6 +44,28 @@ def snapshot_model_to_local(model_id: str) -> str:
     return resolve_model_path(model_id, download_if_missing=True)
 
 
+def inference_model_path(model_id: str, *, allow_download: bool | None = None) -> str:
+    """加载推理用本地目录：魔搭模式下缺失则下载，已有则直接返回路径。"""
+    from config import settings
+
+    mid = model_id.strip()
+    if not mid:
+        raise ValueError("model_id is empty")
+
+    existing = local_model_dir(mid)
+    if existing is not None:
+        return str(existing)
+
+    if settings.use_modelscope_download:
+        do_dl = allow_download if allow_download is not None else True
+        return resolve_model_path(mid, download_if_missing=do_dl)
+
+    p = Path(mid)
+    if p.is_dir():
+        return str(p.resolve())
+    return mid
+
+
 def resolve_model_path(model_id: str, *, download_if_missing: bool = True) -> str:
     """Resolve model_id to a local directory; download only when files are missing."""
     mid = model_id.strip()

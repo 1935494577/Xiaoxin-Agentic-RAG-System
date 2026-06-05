@@ -96,16 +96,16 @@ copy .env.example .env
 
 ```powershell
 cd enterprise_rag\src
-python -m uvicorn api.main:app --reload --host 127.0.0.1 --port 8001
+python -m uvicorn api.main:app --reload --host 127.0.0.1 --port 8010
 ```
 
-- 开发态文档：<http://127.0.0.1:8001/docs>（若未在 `.env` 中关闭）
+- 开发态文档：<http://127.0.0.1:8010/docs>（若未在 `.env` 中关闭）
 - 健康检查：`GET /health`
 
 ### 3. 入库示例（`data/raw` 下文件）
 
 ```powershell
-Invoke-RestMethod -Uri "http://127.0.0.1:8001/ingest/path?relative_path=sample.txt" -Method Post
+Invoke-RestMethod -Uri "http://127.0.0.1:8010/ingest/path?relative_path=sample.txt" -Method Post
 ```
 
 亦支持：`POST /ingest/text`（JSON 正文）、`POST /ingest/upload`（multipart）、`POST /ingest/preview`（仅清洗预览）。
@@ -114,7 +114,7 @@ Invoke-RestMethod -Uri "http://127.0.0.1:8001/ingest/path?relative_path=sample.t
 
 ```powershell
 $b = @{ message = "你的问题"; user_id = "u1"; user_department = "general" } | ConvertTo-Json -Compress
-Invoke-RestMethod -Uri "http://127.0.0.1:8001/chat" -Method Post -Body $b -ContentType "application/json; charset=utf-8" -TimeoutSec 180
+Invoke-RestMethod -Uri "http://127.0.0.1:8010/chat" -Method Post -Body $b -ContentType "application/json; charset=utf-8" -TimeoutSec 180
 ```
 
 返回字段包含 **`answer`**、**`sources`**、**`rewritten_query`**。若配置了 **`RAG_API_SECRET`**，请求需携带约定鉴权头（见 `docs/deploy_security.md`）。

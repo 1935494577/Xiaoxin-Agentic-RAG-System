@@ -9,7 +9,7 @@ from pathlib import Path
 import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_API = "http://127.0.0.1:8001"
+DEFAULT_API = "http://127.0.0.1:8010"
 
 QUERIES = [
     "1-3年级一阶段超脑阅读要求是多少字？",

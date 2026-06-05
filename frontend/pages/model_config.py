@@ -15,6 +15,7 @@ _FRONT = Path(__file__).resolve().parent.parent
 if str(_FRONT) not in sys.path:
     sys.path.insert(0, str(_FRONT))
 from _bootstrap import load_streamlit_common  # noqa: E402
+from page_init import init_app_page, invalidate_page_cache  # noqa: E402
 
 scom = load_streamlit_common(_FRONT)
 
@@ -79,16 +80,17 @@ def _build_save_body() -> dict[str, Any]:
 
 
 def main() -> None:
-    st.set_page_config(page_title="模型与密钥配置", layout="wide", menu_items={"About": None})
     if "rag_api_base" not in st.session_state:
         st.session_state.rag_api_base = scom.DEFAULT_API
     _init_form_state()
 
     api_base = scom.get_api_base()
+    auth = scom.get_api_auth_headers()
+    prof_data = scom.fetch_model_profiles(api_base)
+    ui, _, _ = init_app_page(api_base, auth, prof_data, check_model_status=True)
 
-    st.title("模型与密钥配置")
-    st.caption("把大模型服务的网址和密钥保存在本系统内，供「企业知识库助手」对话使用；密钥不会完整显示给其他人。")
-    st.page_link("streamlit_app.py", label="返回知识库助手", icon="🏠")
+    st.title("模型设置")
+    st.caption("配置大模型接入；保存前可用「测试连接」验证，右上角状态灯绿/红表示当前默认模型是否连通。")
 
     with st.expander("各厂商地址怎么填？（点击展开）", expanded=False):
         st.markdown(
@@ -126,13 +128,54 @@ def main() -> None:
             help="编辑已有配置时留空表示不修改原密钥。",
         )
 
-    btn_save, btn_cancel = st.columns([1, 1])
+    btn_save, btn_cancel, btn_test = st.columns([1, 1, 1])
     with btn_save:
         save_clicked = st.button("保存到服务器", type="primary")
     with btn_cancel:
         if editing_id and st.button("取消编辑"):
             _clear_form()
             st.rerun()
+    with btn_test:
+        test_clicked = st.button("测试连接")
+
+    if test_clicked:
+        if not st.session_state["mc_api_base"].strip() or not st.session_state["mc_default_model"].strip():
+            st.error("请填写服务网址和模型名称后再测试。")
+        elif not editing_id and not st.session_state["mc_api_key"].strip():
+            st.error("新建配置时请填写 API Key 后再测试。")
+        else:
+            body = _build_save_body()
+            if not body.get("api_key") and editing_id:
+                try:
+                    with scom.http_client(api_base) as c:
+                        r = c.post(f"/config/model-profiles/{editing_id.strip()}/test")
+                    if r.status_code == 200:
+                        data = r.json()
+                        if data.get("connected"):
+                            st.success(f"连接成功：{data.get('message', '')}")
+                        else:
+                            st.error(f"连接失败：{data.get('message', '')}")
+                    else:
+                        st.error(r.text[:500])
+                except (httpx.ConnectError, httpx.TimeoutException):
+                    st.error(scom.SERVICE_UNAVAILABLE)
+            else:
+                if not body.get("api_key"):
+                    st.error("请填写 API Key 后再测试。")
+                else:
+                    try:
+                        with scom.http_client(api_base) as c:
+                            r = c.post("/config/model-profiles/test", json=body)
+                        if r.status_code == 200:
+                            data = r.json()
+                            if data.get("connected"):
+                                st.success(f"连接成功：{data.get('message', '')}")
+                            else:
+                                st.error(f"连接失败：{data.get('message', '')}")
+                        else:
+                            st.error(r.text[:500])
+                    except (httpx.ConnectError, httpx.TimeoutException):
+                        st.error(scom.SERVICE_UNAVAILABLE)
 
     if save_clicked:
         if not st.session_state["mc_name"].strip() or not st.session_state["mc_api_base"].strip():
@@ -151,6 +194,7 @@ def main() -> None:
                         r = c.post("/config/model-profiles", json=body)
                 if r.status_code == 200:
                     saved = r.json()
+                    invalidate_page_cache()
                     st.success(
                         f"已{'更新' if editing_id else '保存'}「{saved.get('name', '')}」。"
                         "请回到「企业知识库助手」，在侧栏选择该接入方式。"
@@ -189,12 +233,24 @@ def main() -> None:
                 st.caption(f"配置编号：`{pid}`")
                 st.text(f"Base: {p.get('combined_base') or p.get('api_base')}")
                 st.caption(f"密钥: {'已配置 ' + p.get('api_key_hint', '') if p.get('has_api_key') else '未配置'}")
-                c1, c2, c3, c4 = st.columns(4)
+                c1, c2, c3, c4, c5 = st.columns(5)
                 with c1:
                     if st.button("编辑", key=f"edit_{pid}", disabled=is_editing):
                         _load_profile_into_form(p)
                         st.rerun()
                 with c2:
+                    if st.button("测试", key=f"test_{pid}"):
+                        with scom.http_client(api_base) as c:
+                            rr = c.post(f"/config/model-profiles/{pid}/test")
+                        if rr.status_code == 200:
+                            data = rr.json()
+                            if data.get("connected"):
+                                st.success("连接成功")
+                            else:
+                                st.error(data.get("message", "连接失败"))
+                        else:
+                            st.error(rr.text[:200])
+                with c3:
                     if st.button("设为默认", key=f"def_{pid}"):
                         with scom.http_client(api_base) as c:
                             rr = c.post(f"/config/model-profiles/{pid}/default")
@@ -203,7 +259,7 @@ def main() -> None:
                             st.rerun()
                         else:
                             st.error(rr.text)
-                with c3:
+                with c4:
                     if st.button("删除", key=f"del_{pid}"):
                         with scom.http_client(api_base) as c:
                             rr = c.delete(f"/config/model-profiles/{pid}")
@@ -214,7 +270,7 @@ def main() -> None:
                             st.rerun()
                         else:
                             st.error(rr.text)
-                with c4:
+                with c5:
                     if str(pid) == str(default_id or ""):
                         st.caption("★ 当前默认")
     except (httpx.ConnectError, httpx.TimeoutException):

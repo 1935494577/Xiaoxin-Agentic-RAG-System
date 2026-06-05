@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     milvus_lite_data_dir: Path = _REPO_ROOT / "enterprise_rag" / "data" / "milvus_lite"
     bm25_index_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "bm25_index.json"
     numpy_vector_store_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "numpy_vectors.json"
+    vector_stores_registry_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "vector_stores.json"
+    vector_stores_data_dir: Path = _REPO_ROOT / "enterprise_rag" / "data" / "vector_stores"
 
     elasticsearch_url: str = "http://localhost:9200"
 
@@ -40,7 +42,11 @@ class Settings(BaseSettings):
     data_processed_dir: Path = _REPO_ROOT / "enterprise_rag" / "data" / "processed"
     data_chunks_dir: Path = _REPO_ROOT / "enterprise_rag" / "data" / "chunks"
     data_feedback_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "feedback.jsonl"
+    chat_sessions_db_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "chat_sessions.db"
     model_profiles_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "model_profiles.json"
+    ui_config_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "ui_config.json"
+    processing_tools_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "processing_tools.json"
+    ui_branding_dir: Path = _REPO_ROOT / "enterprise_rag" / "data" / "branding"
 
     parent_chunk_size: int = 1000
     parent_chunk_overlap: int = 200
@@ -51,6 +57,15 @@ class Settings(BaseSettings):
     hybrid_bm25_weight: float = 0.4
     retrieve_top_k: int = 20
     rerank_top_k: int = 5
+    # 流式对话 — 快速模式参数（stream_fast_mode=true 时启用）
+    stream_standard_retrieve_top_k: int = 10
+    stream_retrieve_top_k: int = 6
+    stream_rerank_top_k: int = 3
+    stream_skip_rerank: bool = True
+    stream_pre_rerank_k: int = 6
+    stream_context_max_chars: int = 700
+    # 为 false 时跳过 LLM 查询改写，显著降低首 token 延迟
+    query_rewrite_enabled: bool = False
 
     use_presidio: bool = True
     default_department: str = "general"

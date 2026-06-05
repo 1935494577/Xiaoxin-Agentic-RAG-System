@@ -16,6 +16,9 @@ def _model_ids() -> list[str]:
         s = str(raw).strip()
         if s and "/" in s:
             out.append(s)
+    fb = (settings.embedding_st_fallback or "").strip()
+    if fb and "/" in fb and fb not in out:
+        out.append(fb)
     return out
 
 

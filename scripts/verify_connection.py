@@ -3,7 +3,7 @@
 
 用法（仓库根目录）:
   python scripts/verify_connection.py
-  python scripts/verify_connection.py --api http://127.0.0.1:8001
+  python scripts/verify_connection.py --api http://127.0.0.1:8010
 """
 
 from __future__ import annotations

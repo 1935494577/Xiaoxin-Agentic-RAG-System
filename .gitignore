@@ -28,6 +28,14 @@ enterprise_rag/data/milvus_lite/
 enterprise_rag/data/bm25_index.json
 enterprise_rag/data/numpy_vectors.json
 enterprise_rag/data/model_profiles.json
+enterprise_rag/data/ui_config.json
+enterprise_rag/data/processing_tools.json
+enterprise_rag/data/chat_sessions.db
+enterprise_rag/data/vector_stores.json
+enterprise_rag/data/vector_stores/**
+!enterprise_rag/data/vector_stores/.gitkeep
+enterprise_rag/data/branding/**
+!enterprise_rag/data/branding/.gitkeep
 # 嵌入与重排权重体积大，不提交；克隆后按 README 本地下载到 models/
 enterprise_rag/data/models/**
 !enterprise_rag/data/models/.gitkeep

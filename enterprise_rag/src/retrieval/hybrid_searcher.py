@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from config import settings
@@ -37,23 +38,37 @@ def hybrid_search(
     llm_api_key: str | None = None,
     llm_max_tokens_rewrite: int | None = None,
     llm_extra_headers: dict[str, Any] | None = None,
+    skip_query_rewrite: bool | None = None,
+    retrieve_top_k: int | None = None,
+    skip_rerank: bool = False,
+    rerank_top_k: int | None = None,
+    pre_rerank_k: int | None = None,
 ) -> tuple[str, list[dict[str, Any]]]:
     """
     步骤4：改写 → Milvus(部门过滤) + 本地 rank-bm25 父块 → 按 parent_id 融合 → Rerank → Top 父块。
     返回 (rewritten_query, parents)。
     """
-    rewritten = rewrite_query(
-        query,
-        chat_model=chat_model,
-        api_base=llm_api_base,
-        api_key=llm_api_key,
-        max_tokens=llm_max_tokens_rewrite,
-        default_headers=llm_extra_headers,
-    )
+    do_rewrite = settings.query_rewrite_enabled if skip_query_rewrite is None else not skip_query_rewrite
+    if do_rewrite:
+        rewritten = rewrite_query(
+            query,
+            chat_model=chat_model,
+            api_base=llm_api_base,
+            api_key=llm_api_key,
+            max_tokens=llm_max_tokens_rewrite,
+            default_headers=llm_extra_headers,
+        )
+    else:
+        rewritten = query
+    rk = retrieve_top_k if retrieve_top_k is not None else settings.retrieve_top_k
     q_emb = embed_texts([rewritten])[0].tolist()
 
-    vec_hits = vector_search(q_emb, settings.retrieve_top_k, user_department=user_department or None)
-    es_hits = bm25_parent_search(rewritten, settings.retrieve_top_k)
+    dept = user_department or None
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        f_vec = pool.submit(vector_search, q_emb, rk, user_department=dept)
+        f_bm25 = pool.submit(bm25_parent_search, rewritten, rk)
+        vec_hits = f_vec.result()
+        es_hits = f_bm25.result()
 
     v_score: dict[str, float] = defaultdict(float)
     for h in vec_hits:
@@ -114,5 +129,11 @@ def hybrid_search(
             }
         )
 
-    ranked = rerank_parents(query, candidates, top_k=top_k)
-    return rewritten, ranked[:top_k]
+    final_k = rerank_top_k if rerank_top_k is not None else settings.rerank_top_k
+    if skip_rerank:
+        return rewritten, candidates[:final_k]
+
+    cap = pre_rerank_k if pre_rerank_k is not None else min(len(candidates), final_k * 2)
+    pool = candidates[: max(final_k, cap)]
+    ranked = rerank_parents(query, pool, top_k=final_k)
+    return rewritten, ranked[:final_k]
