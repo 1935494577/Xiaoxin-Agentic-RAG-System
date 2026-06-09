@@ -10,8 +10,8 @@ from urllib.parse import urlparse
 
 import httpx
 
-DEFAULT_API = os.environ.get("RAG_API_BASE", "http://127.0.0.1:8001")
-DOCUMENTED_API_PORT = 8001
+DEFAULT_API = os.environ.get("RAG_API_BASE", "http://127.0.0.1:8010")
+DOCUMENTED_API_PORT = 8010
 FRONTEND_PORT = 8501
 
 HEALTH_TIMEOUT = httpx.Timeout(3.0, connect=2.0)

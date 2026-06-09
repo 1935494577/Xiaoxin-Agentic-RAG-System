@@ -1,3 +1,22 @@
-# Optional: disable anonymous usage stats (unrelated to the email onboarding prompt).
+[theme]
+primaryColor = "#e53935"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f3f3f3"
+textColor = "#111111"
+font = "sans serif"
+
 [browser]
 gatherUsageStats = false
+
+[server]
+# 保存代码后自动刷新页面（开发热更新）
+runOnSave = true
+# Windows 下 auto 不稳定时可改为 poll
+fileWatcherType = "auto"
+
+[runner]
+fastReruns = true
+
+[client]
+showErrorDetails = false
+toolbarMode = "minimal"

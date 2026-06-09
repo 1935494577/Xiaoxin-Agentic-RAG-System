@@ -124,12 +124,31 @@ class BM25Index:
 
 
 _index: BM25Index | None = None
+_loaded_path: str | None = None
+
+
+def _active_bm25_path() -> Path:
+    try:
+        from api.vector_store_registry import get_active_bm25_path
+
+        return get_active_bm25_path()
+    except Exception:
+        return Path(settings.bm25_index_path)
+
+
+def reload_bm25_index() -> None:
+    global _index, _loaded_path
+    _index = None
+    _loaded_path = None
 
 
 def get_bm25_index() -> BM25Index:
-    global _index
-    if _index is None:
-        _index = BM25Index()
+    global _index, _loaded_path
+    path = _active_bm25_path()
+    key = str(path.resolve())
+    if _index is None or _loaded_path != key:
+        _index = BM25Index(path)
+        _loaded_path = key
     return _index
 
 

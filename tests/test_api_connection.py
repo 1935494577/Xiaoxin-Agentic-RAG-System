@@ -54,7 +54,7 @@ def test_ping_health_success(monkeypatch):
             return FakeResp()
 
     monkeypatch.setattr(httpx, "Client", FakeClient)
-    ok, msg = ping_health("http://127.0.0.1:8001")
+    ok, msg = ping_health("http://127.0.0.1:8010")
     assert ok is True
     assert msg == ""
 
@@ -74,7 +74,7 @@ def test_ping_health_connect_error(monkeypatch):
             raise httpx.ConnectError("refused", request=httpx.Request("GET", "http://x/health"))
 
     monkeypatch.setattr(httpx, "Client", FakeClient)
-    ok, msg = ping_health("http://127.0.0.1:8001")
+    ok, msg = ping_health("http://127.0.0.1:8010")
     assert ok is False
     assert "connection refused" in msg
 
@@ -144,7 +144,7 @@ def test_ping_api_ready_rejects_unauthorized(monkeypatch):
     monkeypatch.setattr(httpx, "Client", FakeClient)
     from api.connectivity import ping_api_ready
 
-    ok, msg = ping_api_ready("http://127.0.0.1:8001")
+    ok, msg = ping_api_ready("http://127.0.0.1:8010")
     assert ok is False
     assert "unauthorized" in msg
 

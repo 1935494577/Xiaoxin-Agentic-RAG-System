@@ -2,7 +2,7 @@
 
 $ErrorActionPreference = "SilentlyContinue"
 
-$script:DevApiPort = 8001
+$script:DevApiPort = 8010
 $script:DevFrontendPort = 8501
 
 function Stop-ProcessTree {
@@ -74,4 +74,18 @@ function Get-DevPython {
     $venvPy = Join-Path $root ".venv\Scripts\python.exe"
     if (Test-Path $venvPy) { return $venvPy }
     return "python"
+}
+
+function Get-UvicornReloadArgs {
+    param([string]$SrcDir)
+    # 仅监视 Python 源码；排除 data/models 等大目录，避免误触发
+    return @(
+        "--reload"
+        "--reload-dir", $SrcDir
+        "--reload-delay", "0.4"
+        "--reload-exclude", "data"
+        "--reload-exclude", "*/data/*"
+        "--reload-exclude", "*__pycache__*"
+        "--reload-exclude", "*.pyc"
+    )
 }

@@ -13,15 +13,32 @@ from config import settings
 
 _lock = threading.Lock()
 _rows: list[dict[str, Any]] = []
+_loaded_path: str | None = None
 
 
 def _path() -> Path:
-    return Path(settings.numpy_vector_store_path)
+    try:
+        from api.vector_store_registry import get_active_numpy_path
+
+        return get_active_numpy_path()
+    except Exception:
+        return Path(settings.numpy_vector_store_path)
+
+
+def reload_store() -> None:
+    global _loaded_path
+    with _lock:
+        _loaded_path = None
+        _load_unlocked()
 
 
 def _load_unlocked() -> None:
-    global _rows
+    global _rows, _loaded_path
     p = _path()
+    key = str(p.resolve())
+    if _loaded_path == key and _rows is not None:
+        return
+    _loaded_path = key
     if not p.is_file():
         _rows = []
         return
@@ -34,6 +51,15 @@ def _save_unlocked() -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
     with p.open("w", encoding="utf-8") as f:
         json.dump(_rows, f, ensure_ascii=False)
+
+
+def vector_count_and_dim() -> tuple[int, int | None]:
+    with _lock:
+        _load_unlocked()
+        if not _rows:
+            return 0, None
+        dim = len(_rows[0].get("vector") or [])
+        return len(_rows), dim or None
 
 
 def init_store() -> None:
@@ -57,6 +83,12 @@ def insert_child_vectors(
     departments: list[str],
     sources: list[str],
 ) -> None:
+    try:
+        from api.vector_store_registry import validate_insert_vectors
+
+        validate_insert_vectors(vectors)
+    except ImportError:
+        pass
     with _lock:
         _load_unlocked()
         for i in range(len(ids)):
@@ -79,10 +111,24 @@ def vector_search(
     user_department: str | None = None,
 ) -> list[dict[str, Any]]:
     q = np.asarray(query_vector, dtype=np.float32)
+    try:
+        from api.vector_store_registry import assert_search_compatible
+
+        assert_search_compatible(int(q.shape[0]))
+    except ImportError:
+        pass
     qn = np.linalg.norm(q) + 1e-12
     q = q / qn
     with _lock:
         _load_unlocked()
+        if _rows:
+            stored_dim = len(_rows[0].get("vector") or [])
+            if stored_dim and stored_dim != q.shape[0]:
+                raise ValueError(
+                    f"向量维度不一致：当前查询模型输出 {q.shape[0]} 维，"
+                    f"索引中为 {stored_dim} 维。"
+                    "请用同一嵌入模型重新入库（数据入库页重新上传），或清空向量库后重建索引。"
+                )
         scored: list[tuple[float, dict[str, Any]]] = []
         for r in _rows:
             if user_department and str(r.get("department", "")) != user_department:

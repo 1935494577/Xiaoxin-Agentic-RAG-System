@@ -17,26 +17,30 @@ def _hf_cache_dir() -> str | None:
     return str(p)
 
 
-def _ce_local_kw() -> dict[str, Any]:
+def _ce_local_kw(*, local_only: bool = False) -> dict[str, Any]:
     kw: dict[str, Any] = {"trust_remote_code": True}
     cd = _hf_cache_dir()
     if cd:
         kw["cache_folder"] = cd
-    if settings.hf_local_files_only:
+    if local_only or settings.hf_local_files_only:
         kw["local_files_only"] = True
     return kw
+
+
+def _resolve_load_path(model_id: str) -> tuple[str, bool]:
+    if settings.use_modelscope_download:
+        from indexing.modelscope_hub import inference_model_path
+
+        path = inference_model_path(model_id, allow_download=True)
+        return path, Path(path).is_dir()
+    return model_id.strip(), Path(model_id.strip()).is_dir()
 
 
 @lru_cache
 def _flag_reranker():
     from FlagEmbedding import FlagAutoReranker
 
-    model_path = settings.reranker_model
-    if settings.use_modelscope_download:
-        from indexing.modelscope_hub import resolve_model_path
-
-        model_path = resolve_model_path(settings.reranker_model, download_if_missing=False)
-
+    model_path, is_local = _resolve_load_path(settings.reranker_model)
     kw: dict[str, Any] = {
         "model_name_or_path": model_path,
         "use_fp16": use_fp16_safe(),
@@ -45,6 +49,8 @@ def _flag_reranker():
     cd = _hf_cache_dir()
     if cd:
         kw["cache_dir"] = cd
+    if is_local and settings.use_modelscope_download:
+        kw["local_files_only"] = True
     return FlagAutoReranker.from_finetuned(**kw)
 
 
@@ -52,10 +58,11 @@ def _flag_reranker():
 def _cross_encoder():
     from sentence_transformers import CrossEncoder
 
+    path, is_local = _resolve_load_path(settings.reranker_model)
     return CrossEncoder(
-        settings.reranker_model,
+        path,
         device=torch_device_string(),
-        **_ce_local_kw(),
+        **_ce_local_kw(local_only=is_local and settings.use_modelscope_download),
     )
 
 
