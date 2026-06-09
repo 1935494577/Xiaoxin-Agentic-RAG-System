@@ -4,6 +4,7 @@ $ErrorActionPreference = "SilentlyContinue"
 
 $script:DevApiPort = 8010
 $script:DevFrontendPort = 8501
+$script:DevChatSpaPort = 8502
 
 function Stop-ProcessTree {
     param([Parameter(Mandatory)][int]$ProcessId)
@@ -39,7 +40,8 @@ function Stop-PortListeners {
 
 function Stop-DevPorts {
     Stop-PortListeners -Port $script:DevApiPort -Label "API"
-    Stop-PortListeners -Port $script:DevFrontendPort -Label "Streamlit frontend"
+    Stop-PortListeners -Port $script:DevFrontendPort -Label "Streamlit admin"
+    Stop-PortListeners -Port $script:DevChatSpaPort -Label "Chat SPA"
 }
 
 function Register-DevPortCleanup {

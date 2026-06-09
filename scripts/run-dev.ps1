@@ -1,6 +1,8 @@
-# Start API + Streamlit with hot reload; Ctrl+C stops both and releases ports.
+# Start API + Chat SPA + Streamlit admin
 param(
-    [switch]$NoReload
+    [switch]$NoReload,
+    [switch]$NoChatSpa,
+    [switch]$NoAdmin
 )
 
 $ErrorActionPreference = "Stop"
@@ -9,8 +11,10 @@ $Root = Split-Path -Parent $PSScriptRoot
 
 $Py = Get-DevPython
 $ApiPort = $script:DevApiPort
-$FePort = $script:DevFrontendPort
+$AdminPort = $script:DevFrontendPort
+$ChatPort = $script:DevChatSpaPort
 $Src = Join-Path $Root "enterprise_rag\src"
+$ChatDir = Join-Path $Root "web\chat"
 
 Stop-DevPorts
 
@@ -22,28 +26,43 @@ if (-not $NoReload) {
     $apiArgs += Get-UvicornReloadArgs -SrcDir $Src
 }
 
-Write-Host "Starting API on port $ApiPort $(if (-not $NoReload) { '(hot reload)' } else { '' })..."
+Write-Host "Starting API on port $ApiPort..."
 $apiProc = Start-Process -FilePath $Py -ArgumentList $apiArgs -WorkingDirectory $Src -PassThru -WindowStyle Normal
 
 Start-Sleep -Seconds 2
 
-Write-Host "Starting Streamlit on port $FePort (run on save) ..."
-$feProc = Start-Process -FilePath $Py -ArgumentList @(
-    "-m", "streamlit", "run", "frontend/streamlit_app.py",
-    "--server.port", "$FePort",
-    "--server.runOnSave", "true"
-) -WorkingDirectory $Root -PassThru -WindowStyle Normal
+$chatProc = $null
+if (-not $NoChatSpa) {
+    if (Get-Command npm -ErrorAction SilentlyContinue) {
+        if (-not (Test-Path (Join-Path $ChatDir "node_modules"))) {
+            Write-Host "Installing Chat SPA dependencies..."
+            Push-Location $ChatDir
+            npm install
+            Pop-Location
+        }
+        Write-Host "Starting Chat SPA on port $ChatPort..."
+        $chatProc = Start-Process -FilePath "npm" -ArgumentList @("run", "dev") -WorkingDirectory $ChatDir -PassThru -WindowStyle Normal
+    } else {
+        Write-Host "WARN: npm not found — skip Chat SPA. Install Node.js or run .\scripts\run-chat-spa.ps1 later."
+    }
+}
+
+$adminProc = $null
+if (-not $NoAdmin) {
+    Write-Host "Starting Streamlit admin on port $AdminPort..."
+    $adminProc = Start-Process -FilePath $Py -ArgumentList @(
+        "-m", "streamlit", "run", "frontend/streamlit_app.py",
+        "--server.port", "$AdminPort",
+        "--server.runOnSave", "true"
+    ) -WorkingDirectory $Root -PassThru -WindowStyle Normal
+}
 
 Write-Host ""
-Write-Host "  API:      http://127.0.0.1:$ApiPort"
-Write-Host "  Frontend: http://127.0.0.1:$FePort"
+Write-Host "  >>> 主入口（对话）: http://127.0.0.1:$ChatPort"
+Write-Host "  API:              http://127.0.0.1:$ApiPort"
+if ($adminProc) { Write-Host "  管理后台:         http://127.0.0.1:$AdminPort" }
 Write-Host ""
-if (-not $NoReload) {
-    Write-Host "  Hot reload: API watches enterprise_rag/src; frontend refreshes on save."
-    Write-Host "  Disable:    .\scripts\run-dev.ps1 -NoReload"
-    Write-Host ""
-}
-Write-Host "Press Ctrl+C here to stop both services and release ports."
+Write-Host "Press Ctrl+C here to stop all services."
 
 $utilsPath = Join-Path $PSScriptRoot "_port_utils.ps1"
 Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action {
@@ -53,11 +72,12 @@ Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action {
 
 try {
     while ($true) {
-        if ($apiProc.HasExited -and $feProc.HasExited) { break }
+        $alive = @($apiProc, $chatProc, $adminProc) | Where-Object { $_ -and -not $_.HasExited }
+        if (-not $alive) { break }
         Start-Sleep -Seconds 1
     }
 } finally {
-    foreach ($p in @($apiProc, $feProc)) {
+    foreach ($p in @($apiProc, $chatProc, $adminProc)) {
         if ($p -and -not $p.HasExited) {
             Stop-ProcessTree -ProcessId $p.Id
         }

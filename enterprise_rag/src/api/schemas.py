@@ -3,11 +3,21 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class ChatHistoryTurn(BaseModel):
+    role: str = Field(..., pattern="^(user|assistant)$")
+    content: str = Field(..., min_length=1, max_length=16000)
+
+
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=8000)
     user_id: str = Field(..., min_length=1, max_length=128)
     user_department: str = Field(default="general", max_length=64)
     allowed_sources: list[str] | None = None
+    session_id: str | None = Field(default=None, max_length=64, description="用于加载长期会话记忆")
+    history: list[ChatHistoryTurn] | None = Field(
+        default=None,
+        description="可选：客户端提供的短期历史；未提供时从 session_id 加载",
+    )
     # 已保存的模型配置 id；与 force_env_llm 互斥优先级：force_env_llm 为真时仅用 .env
     model_profile_id: str | None = Field(default=None, max_length=64)
     force_env_llm: bool = False
@@ -40,6 +50,8 @@ class ChatResponse(BaseModel):
     sources: list[str] = Field(default_factory=list)
     source_refs: list[SourceRef] = Field(default_factory=list)
     rewritten_query: str | None = None
+    answer_mode: str | None = None
+    verified: bool | None = None
 
 
 class RetrieveRequest(BaseModel):
@@ -169,6 +181,14 @@ class UiConfigPublic(BaseModel):
     supported_upload_extensions: list[str] = Field(default_factory=list)
     supported_upload_label: str = ""
     stream_fast_mode: bool = False
+    max_history_turns: int = 6
+    max_history_chars: int = 6000
+    kb_min_score: float = 0.55
+    kb_min_rerank_score: float = 0.0
+    kb_llm_judge: bool = True
+    general_fallback_enabled: bool = True
+    stream_verifier_enabled: bool = True
+    long_term_memory_enabled: bool = True
 
 
 class UiConfigUpdate(BaseModel):
@@ -179,6 +199,14 @@ class UiConfigUpdate(BaseModel):
     suggested_questions: list[str] | None = None
     clear_logo_image: bool = False
     stream_fast_mode: bool | None = None
+    max_history_turns: int | None = Field(default=None, ge=1, le=50)
+    max_history_chars: int | None = Field(default=None, ge=500, le=100000)
+    kb_min_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    kb_min_rerank_score: float | None = None
+    kb_llm_judge: bool | None = None
+    general_fallback_enabled: bool | None = None
+    stream_verifier_enabled: bool | None = None
+    long_term_memory_enabled: bool | None = None
 
 
 class ProcessingToolPublic(BaseModel):

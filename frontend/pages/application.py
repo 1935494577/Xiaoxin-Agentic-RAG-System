@@ -486,6 +486,18 @@ def main() -> None:
 
         "stream_fast_mode": stream_fast,
 
+        "session_id": session_id,
+
+        "history": [
+
+            {"role": m["role"], "content": m["content"]}
+
+            for m in st.session_state.messages[:-1]
+
+            if m.get("role") in ("user", "assistant") and m.get("content")
+
+        ],
+
     }
 
 
@@ -526,6 +538,10 @@ def main() -> None:
 
                 phase = str(evt.get("phase") or "generating")
 
+                if phase == "fallback":
+
+                    full = ""
+
                 render_streaming_assistant(placeholder, full, phase=phase)
 
             elif evt.get("type") == "token":
@@ -543,6 +559,10 @@ def main() -> None:
                     "sources": evt.get("sources"),
 
                     "source_refs": evt.get("source_refs"),
+
+                    "answer_mode": evt.get("answer_mode"),
+
+                    "verified": evt.get("verified"),
 
                 }
 

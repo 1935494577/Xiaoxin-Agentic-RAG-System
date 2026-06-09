@@ -182,7 +182,7 @@ def main() -> None:
 
     prof_data = scom.fetch_model_profiles(api_base)
 
-    ui, _, _ = init_app_page(api_base, auth, prof_data, check_model_status=False)
+    ui, _, _ = init_app_page(api_base, auth, prof_data, check_model_status=False, nav_id="ingest")
 
     render_page_header(ui, compact=True)
 

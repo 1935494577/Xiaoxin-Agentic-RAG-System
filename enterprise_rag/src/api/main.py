@@ -18,6 +18,8 @@ from config import settings
 
 from agent.graph import run_agent
 from agent.stream_chat import stream_rag_chat
+from agent.conversation_context import resolve_chat_history
+from api.chat_memory import chat_memory_settings
 from api.stream_retrieval import build_stream_retrieval_state, resolve_stream_fast_mode
 from api.auth_middleware import APIAuthMiddleware, SecurityHeadersMiddleware
 from api.chat_session_store import (
@@ -97,7 +99,8 @@ from document_loader.processing.modes import UNCLEANED, normalize_ingest_mode
 from document_loader.processing.registry import load_config as load_processing_config
 from document_loader.processing.registry import public_config as public_processing_config
 from document_loader.processing.registry import save_config as save_processing_config
-from evaluation.langsmith_trace import configure_tracing
+from api.nav_config import build_nav_config
+from evaluation.langsmith_trace import configure_tracing, get_trace_status
 from indexing.embeddings import embed_texts
 from indexing.es_indexer import delete_parents_by_source, index_parent_documents
 from indexing.milvus_indexer import delete_by_source as milvus_delete_by_source
@@ -184,6 +187,18 @@ def _safe_raw_file(relative_path: str) -> Path:
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/config/nav")
+def get_nav_config():
+    """Unified nav links for Chat SPA and Streamlit admin."""
+    return build_nav_config()
+
+
+@app.get("/debug/trace-status")
+def trace_status():
+    """Return LangSmith trace configuration (no secrets)."""
+    return get_trace_status()
 
 
 @app.get("/config/public", response_model=PublicConfigResponse)
@@ -477,6 +492,19 @@ def retrieve(req: RetrieveRequest):
     return RetrieveResponse(rewritten_query=rewritten, hits=hits)
 
 
+def _resolve_request_history(req: ChatRequest, mem: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    mem = mem or chat_memory_settings()
+    req_hist = [h.model_dump() for h in req.history] if req.history else None
+    return resolve_chat_history(
+        request_history=req_hist,
+        user_id=req.user_id,
+        session_id=req.session_id,
+        max_turns=int(mem.get("max_history_turns", 6)),
+        max_chars=int(mem.get("max_history_chars", 6000)),
+        long_term_enabled=bool(mem.get("long_term_memory_enabled", True)),
+    )
+
+
 @app.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest):
     """步骤7：对话入口。"""
@@ -486,18 +514,23 @@ def chat(req: ChatRequest):
             status_code=400,
             detail="未配置 API Key：请在「模型配置」中保存密钥，或在 .env 中设置 OPENAI_API_KEY。",
         )
+    mem = chat_memory_settings()
     out = run_agent(
         question=req.message,
         user_id=req.user_id,
         user_department=req.user_department,
         allowed_sources=req.allowed_sources,
         llm_runtime=runtime,
+        history=_resolve_request_history(req, mem),
+        memory_config=mem,
     )
     return ChatResponse(
         answer=out.get("answer") or "",
         sources=out.get("sources") or [],
         source_refs=[SourceRef(**r) for r in (out.get("source_refs") or [])],
         rewritten_query=out.get("rewritten_query"),
+        answer_mode=out.get("answer_mode"),
+        verified=out.get("verified"),
     )
 
 
@@ -512,14 +545,20 @@ def chat_stream(req: ChatRequest):
         )
 
     fast = resolve_stream_fast_mode(req.stream_fast_mode)
+    mem = chat_memory_settings()
+    history = _resolve_request_history(req, mem)
     state: dict[str, Any] = {
         "question": req.message,
         "user_id": req.user_id,
         "user_department": req.user_department,
         "allowed_sources": req.allowed_sources,
+        "history": history,
+        "memory_config": mem,
         "llm_temperature_answer": req.temperature if req.temperature is not None else 0.2,
         "llm_max_tokens_rewrite": req.max_tokens_rewrite if req.max_tokens_rewrite is not None else 128,
         "llm_max_tokens_answer": req.max_tokens_answer,
+        "llm_temperature_verifier": req.verifier_temperature,
+        "llm_max_tokens_verifier": req.max_tokens_verifier,
     }
     state.update(
         build_stream_retrieval_state(

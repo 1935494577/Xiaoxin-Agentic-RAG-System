@@ -23,7 +23,7 @@ def main() -> None:
     api_base = scom.get_api_base()
     auth = scom.get_api_auth_headers()
     prof_data = scom.fetch_model_profiles(api_base)
-    ui, _, _ = init_app_page(api_base, auth, prof_data, check_model_status=False)
+    ui, _, _ = init_app_page(api_base, auth, prof_data, check_model_status=False, nav_id="tutorial")
 
     st.title("使用操作教程")
     fmt = ui.get("supported_upload_label") or "TXT · MD · PDF · DOCX · HTML"

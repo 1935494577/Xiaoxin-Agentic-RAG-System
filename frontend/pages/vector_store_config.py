@@ -75,7 +75,7 @@ def main() -> None:
     api_base = scom.get_api_base()
     auth = scom.get_api_auth_headers()
     prof_data = scom.fetch_model_profiles(api_base)
-    init_app_page(api_base, auth, prof_data, check_model_status=False)
+    init_app_page(api_base, auth, prof_data, check_model_status=False, nav_id="vector_store")
 
     st.title("向量库设置")
     st.caption(

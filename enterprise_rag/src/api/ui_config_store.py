@@ -20,6 +20,14 @@ DEFAULT_UI_CONFIG: dict[str, Any] = {
         "扫描速记有哪些注意事项？",
     ],
     "stream_fast_mode": False,
+    "max_history_turns": 6,
+    "max_history_chars": 6000,
+    "kb_min_score": 0.55,
+    "kb_min_rerank_score": 0.0,
+    "kb_llm_judge": True,
+    "general_fallback_enabled": True,
+    "stream_verifier_enabled": True,
+    "long_term_memory_enabled": True,
 }
 
 SUPPORTED_UPLOAD_EXTENSIONS = ("txt", "md", "pdf", "docx", "html")

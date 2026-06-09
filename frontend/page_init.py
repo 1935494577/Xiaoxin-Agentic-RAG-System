@@ -1,4 +1,4 @@
-"""Shared page bootstrap: sidebar logo, nav chrome, model status light."""
+"""Shared page bootstrap: unified top nav, sidebar logo, model status light."""
 
 from __future__ import annotations
 
@@ -31,8 +31,14 @@ def _cached(key: str, ttl: float, loader):
 
 
 def invalidate_page_cache() -> None:
-    for key in ("_ui_cfg", "_model_profiles", "_model_status"):
+    for key in ("_ui_cfg", "_model_profiles", "_model_status", "_nav_links"):
         st.session_state.pop(key, None)
+
+
+def _load_nav(api_base: str, auth: dict[str, str]) -> dict[str, Any]:
+    from nav_links import fetch_nav_links
+
+    return fetch_nav_links(api_base, auth)
 
 
 def init_app_page(
@@ -41,8 +47,16 @@ def init_app_page(
     prof_data: dict[str, Any] | None,
     *,
     check_model_status: bool = True,
+    nav_id: str = "",
 ) -> tuple[dict[str, Any], str | None, bool]:
     ui = _cached("_ui_cfg", _UI_TTL, lambda: fetch_ui_config(api_base, auth))
+    nav = _cached("_nav_links", _UI_TTL, lambda: _load_nav(api_base, auth))
+    if nav_id:
+        from nav_links import render_unified_nav
+        from ui_theme import resolve_app_logo_data_url
+
+        logo = resolve_app_logo_data_url(api_base, auth)
+        render_unified_nav(nav_id, nav, logo_src=logo)
     render_minimal_sidebar(ui, api_base, auth)
 
     if prof_data is None:
