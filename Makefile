@@ -1,4 +1,4 @@
-.PHONY: install install-official install-torch-gpu install-torch-gpu-cn infra-up infra-down run-api run-frontend test verify-env eval e2e demo build-rag up down
+.PHONY: install install-official install-torch-gpu install-torch-gpu-cn infra-up infra-down run-api run-dev run-frontend stop-dev test verify-env eval e2e demo build-rag up down
 
 PY ?= python
 PIP_MIRROR := https://pypi.tuna.tsinghua.edu.cn/simple
@@ -28,7 +28,13 @@ infra-down:
 	docker compose -f docker-compose.yml down --remove-orphans
 
 run-api:
-	cd $(SRC) && $(PY) -m uvicorn api.main:app --reload --port 8000
+	cd $(SRC) && $(PY) -m uvicorn api.main:app --reload --host 127.0.0.1 --port 8010
+
+run-dev:
+	bash scripts/run-dev.sh
+
+stop-dev:
+	bash scripts/stop-dev.sh
 
 run-frontend:
 	$(PY) -m streamlit run frontend/streamlit_app.py --server.port 8501
@@ -56,7 +62,8 @@ down: infra-down
 
 demo:
 	@echo "plan1 (no Docker): make install && python scripts/run_closed_loop.py"
-	@echo "API: make run-api   Frontend: make run-frontend"
+	@echo "Dev (all):  Windows: scripts/run-dev.ps1   macOS: ./scripts/run-dev.sh"
+	@echo "API only:   make run-api   Frontend: make run-frontend"
 	@echo "Deploy/security: docs/deploy_security.md"
 	@echo "Windows venv: powershell -File scripts/bootstrap_venv.ps1 && powershell -File scripts/verify_env.ps1"
 	@echo "Legacy stack: make infra-up  (docker compose --profile legacy)"

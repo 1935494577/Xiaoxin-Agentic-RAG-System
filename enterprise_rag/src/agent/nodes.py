@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 from openai import OpenAI
 
 from config import settings
-from agent.context_format import format_context_with_meta, format_source_citation, source_ref_dict
+from agent.context_format import build_source_citations, format_context_with_meta
 from agent.answer_router import resolve_answer_mode
 from agent.answer_prompts import (
     general_system_prompt,
@@ -210,9 +210,7 @@ def citer_node(state: AgentState) -> dict[str, Any]:
         return {"sources": [], "source_refs": [], "answer": ans}
 
     meta = state.get("contexts_meta") or []
-    refs = [m for m in meta if m.get("parent_id")]
-    sources = [format_source_citation(m) for m in refs]
-    source_refs = [source_ref_dict(m) for m in refs]
+    sources, source_refs = build_source_citations(meta)
     ans = state.get("answer") or ""
     from agent.kb_judge import should_attach_citations
 

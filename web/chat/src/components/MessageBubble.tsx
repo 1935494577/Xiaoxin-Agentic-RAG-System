@@ -18,15 +18,29 @@ function stripFootnotes(text: string): string {
     .trim();
 }
 
+function uniqueLabels(labels: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of labels) {
+    const label = raw.trim();
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    out.push(label);
+  }
+  return out;
+}
+
 function sourceLabels(message: ChatMessage): string[] {
   const refs = message.meta?.source_refs;
   if (refs?.length) {
-    return refs.map((r) => {
-      const src = r.source || "";
-      return src.split(/[/\\]/).pop() || src || r.parent_id || "";
-    });
+    return uniqueLabels(
+      refs.map((r) => {
+        const src = r.source || "";
+        return src.split(/[/\\]/).pop() || src || r.parent_id || "";
+      }),
+    );
   }
-  return (message.meta?.sources || []).map((s) => s.split(/[/\\]/).pop() || s);
+  return uniqueLabels((message.meta?.sources || []).map((s) => s.split(/[/\\]/).pop() || s));
 }
 
 function resolveAnswerMode(
