@@ -341,24 +341,6 @@ def resolve_app_logo_data_url(api_base: str | None = None, headers: dict[str, st
     return _file_data_url(Path(path_or_url))
 
 
-def render_sidebar_brand(cfg: dict[str, Any], api_base: str, headers: dict[str, str] | None = None) -> None:
-    """Legacy inline brand (prefer mount_app_logo in streamlit_app.py)."""
-    img = _logo_image_data_url(api_base, headers) if cfg.get("has_logo_image") else None
-    if not img:
-        img = _file_data_url(COMPANY_LOGO_PATH)
-    if img:
-        st.sidebar.markdown(
-            f'<div class="jnao-brand"><img class="logo-img" src="{img}" alt="JNAO"/></div>',
-            unsafe_allow_html=True,
-        )
-    else:
-        logo_en = str(cfg.get("logo_en") or "JNAO")
-        st.sidebar.markdown(
-            f'<div class="jnao-brand"><span class="logo-en">{logo_en}</span></div>',
-            unsafe_allow_html=True,
-        )
-
-
 def mount_app_logo(api_base: str | None = None, headers: dict[str, str] | None = None) -> None:
     """Place logo above sidebar navigation (Streamlit st.logo). Runs once per session."""
     if st.session_state.get("_app_logo_mounted"):
@@ -376,22 +358,6 @@ def mount_app_logo(api_base: str | None = None, headers: dict[str, str] | None =
             except Exception:
                 pass
     st.session_state["_app_logo_mounted"] = True
-
-
-def render_sidebar_user(display_name: str, department: str) -> None:
-    name = (display_name or "你的名字").strip()
-    dept = (department or "部门").strip()
-    avatar = _file_data_url(DEPT_AVATAR_PATH)
-    if avatar:
-        avatar_html = f'<img class="avatar-img" src="{avatar}" alt="部门"/>'
-    else:
-        initial = name[0].upper() if name else "U"
-        avatar_html = f'<div class="avatar">{initial}</div>'
-    st.sidebar.markdown(
-        f'<div class="sidebar-user">{avatar_html}'
-        f'<div class="label">{name} · {dept}</div></div>',
-        unsafe_allow_html=True,
-    )
 
 
 def fetch_model_connection_status(

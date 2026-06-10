@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,8 +13,6 @@ from typing import Any
 from config import settings
 
 _lock = Lock()
-_msg_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
-_MSG_CACHE_TTL = 30.0
 
 
 def _utc_now() -> str:
@@ -66,10 +63,6 @@ def _connect() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
-
-
-def _invalidate_cache(session_id: str) -> None:
-    _msg_cache.pop(session_id, None)
 
 
 def list_sessions(user_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
@@ -177,19 +170,12 @@ def delete_session(session_id: str, user_id: str) -> bool:
             deleted = cur.rowcount > 0
         finally:
             conn.close()
-    if deleted:
-        _invalidate_cache(sid)
     return deleted
 
 
 def list_messages(session_id: str, user_id: str) -> list[dict[str, Any]]:
     if not get_session(session_id, user_id):
         return []
-
-    now = time.monotonic()
-    cached = _msg_cache.get(session_id)
-    if cached and now - cached[0] <= _MSG_CACHE_TTL:
-        return list(cached[1])
 
     with _lock:
         conn = _connect()
@@ -217,8 +203,6 @@ def list_messages(session_id: str, user_id: str) -> list[dict[str, Any]]:
                 out.append(item)
         finally:
             conn.close()
-
-    _msg_cache[session_id] = (now, out)
     return out
 
 
@@ -268,5 +252,4 @@ def append_messages(
         finally:
             conn.close()
 
-    _invalidate_cache(session_id)
     return list_messages(session_id, user_id)

@@ -31,8 +31,9 @@ def _cached(key: str, ttl: float, loader):
 
 
 def invalidate_page_cache() -> None:
-    for key in ("_ui_cfg", "_model_profiles", "_model_status", "_nav_links"):
-        st.session_state.pop(key, None)
+    for key in list(st.session_state.keys()):
+        if key in ("_ui_cfg", "_model_profiles", "_nav_links") or str(key).startswith("_model_status"):
+            st.session_state.pop(key, None)
 
 
 def _load_nav(api_base: str, auth: dict[str, str]) -> dict[str, Any]:
