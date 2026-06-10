@@ -11,13 +11,14 @@
 | **文档处理** | 解析与清洗（`document_loader`）、父子分块与持久化（`chunker`） |
 | **索引** | 向量写入 Milvus Lite（或 numpy 回退）、父文档 BM25（`indexing`）；可选 Elasticsearch 父索引 |
 | **嵌入与重排** | FlagEmbedding / sentence-transformers、CrossEncoder 重排；可选 **ModelScope** 下载到 `enterprise_rag/data/models` |
-| **检索** | 查询改写、向量 + BM25 混合检索、重排（`retrieval`） |
-| **对话智能体** | LangGraph：路由 → 检索 → 生成（`draft` 节点）→ 校验 → 引文（`agent`） |
-| **HTTP API** | FastAPI：健康检查、入库、对话、反馈、公开配置与多供应商「模型配置」档案（`api`） |
+| **检索** | 查询改写、向量 + BM25 混合检索、重排；**L3 检索去重**（文本相似度 + MMR） |
+| **入库去重** | **L1** 文档 content_hash 别名跳过重复嵌入；**L2** 父块 simhash 近似去重（`indexing/ingest_dedup`） |
+| **对话智能体** | LangGraph 与非流式 `/chat`；**SSE 流式** `/chat/stream`；**混合专家模式**（KB 优先、未命中静默通用兜底）；引文按文件去重 |
+| **HTTP API** | FastAPI：健康检查、入库（含 dedup 统计）、检索调试、流式对话、会话记忆、可插拔提示词、模型/向量库/UI 配置（`api`） |
 | **安全** | 可选 `RAG_API_SECRET`、CORS、可信 Host、安全头；注入检测与按来源权限（`security`） |
-| **前端** | Streamlit 演示：预览、入库、对话（`frontend`） |
-| **评测与追踪** | 可选 LangSmith / RAGAS 相关配置（`evaluation`） |
-| **容器与脚本** | `Dockerfile`、`docker-compose.yml`、`Makefile`、`scripts/*` 安装与一键闭环 |
+| **前端** | **Jnao Chat** React SPA（`web/chat`，8502）；**Streamlit 管理后台**（8501）：入库、工具、提示词、模型、记忆、Trace 等（`frontend`） |
+| **评测与追踪** | 可选 LangSmith / 本地 JSONL trace；`scripts/eval_ingest_dedup.py` 检索去重 A/B 评估 |
+| **容器与脚本** | `Dockerfile`、`docker-compose.yml`、`Makefile`；Windows `.ps1` 与 **macOS/Linux `.sh`** 一键启停 |
 
 ---
 
@@ -71,8 +72,9 @@ xiaoxin_RAG/
 │       ├── evaluation/
 │       ├── config.py
 │       └── runtime_device.py
-├── frontend/                    # Streamlit 应用与页面
-├── scripts/                     # 安装、启停 API/前端、闭环与预下载
+├── frontend/                    # Streamlit 管理后台（pages/）
+├── web/chat/                    # Jnao Chat React SPA（Vite，端口 8502）
+├── scripts/                     # 安装、启停 API/前端/Chat、评测与预下载
 └── tests/                       # pytest 用例
 ```
 
@@ -80,7 +82,30 @@ xiaoxin_RAG/
 
 ## 如何操作
 
-### 1. 安装依赖
+### 平台说明
+
+| 平台 | 一键开发 | 仅 API | 管理后台 | 停止服务 |
+|------|----------|--------|----------|----------|
+| **Windows** | `.\scripts\run-dev.ps1` | `.\scripts\run-api.ps1` | `.\scripts\run_frontend.ps1` | `.\scripts\stop-dev.ps1` |
+| **macOS / Linux** | `./scripts/run-dev.sh` | `./scripts/run-api.sh` | `./scripts/run_frontend.sh` | `./scripts/stop-dev.sh` |
+
+> macOS 不能直接运行 `.ps1`（除非单独安装 PowerShell）。克隆后先赋予执行权限：  
+> `chmod +x scripts/*.sh`
+
+**macOS 首次安装：**
+
+```bash
+cd <仓库根目录>
+./scripts/bootstrap_venv.sh    # 创建 .venv 并安装依赖
+cp .env.example .env           # 编辑 API Key 等
+./scripts/run-dev.sh           # API 8010 + Chat 8502 + 管理后台 8501
+```
+
+依赖：**Python 3.10+**、**Node.js LTS**（Chat SPA）、可选 **Homebrew** 安装 `python3` / `node`。
+
+---
+
+### 1. 安装依赖（Windows 示例）
 
 ```powershell
 cd <仓库根目录>
@@ -88,6 +113,14 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 copy .env.example .env
+```
+
+**macOS / Linux：**
+
+```bash
+./scripts/bootstrap_venv.sh
+cp .env.example .env
+source .venv/bin/activate
 ```
 
 编辑 **`.env`**：至少配置 OpenAI 兼容的 **`OPENAI_API_BASE`**、**`OPENAI_API_KEY`**、**`OPENAI_CHAT_MODEL`**；按需设置 **`USE_MODELSCOPE_DOWNLOAD`**、`EMBEDDING_MODEL`、`RERANKER_MODEL`、`HF_HUB_CACHE`、`TORCH_DEVICE` 等。修改后需重启 API。
@@ -138,11 +171,28 @@ pytest
 
 ### 7. Streamlit 前端（可选）
 
+**Windows：**
+
 ```powershell
 cd <仓库根目录>
 .\scripts\run_frontend.ps1
-# 等价：python -m streamlit run frontend/streamlit_app.py --server.port 8501
 ```
+
+**macOS / Linux：**
+
+```bash
+./scripts/run_frontend.sh
+```
+
+一键启动三端（API + Chat + 管理后台）：Windows 用 `run-dev.ps1`，macOS 用 `./scripts/run-dev.sh`。
+
+**本地开发端口：**
+
+| 服务 | 端口 | 说明 |
+|------|------|------|
+| API | 8010 | FastAPI / Uvicorn |
+| 管理后台 | 8501 | Streamlit |
+| Jnao Chat | 8502 | React SPA（`web/chat`） |
 
 ### 8. Docker（可选）
 
@@ -156,11 +206,15 @@ cd <仓库根目录>
 |------|------|------|
 | GET | `/health` | 存活探测 |
 | GET | `/config/public` | 公开运行配置（无密钥） |
+| GET/POST/PUT | `/config/ui` `/config/prompts` `/config/processing-tools` … | UI、提示词、入库工具等配置 |
 | GET/POST/PUT/DELETE | `/config/model-profiles`… | 多供应商模型档案（密钥仅存服务端） |
-| POST | `/chat` | RAG 对话 |
+| POST | `/chat` | RAG 对话（LangGraph） |
+| POST | `/chat/stream` | SSE 流式对话（Chat SPA 使用） |
+| POST | `/retrieve` | 混合检索 + 重排调试（不调用 LLM 生成） |
+| GET/POST | `/chat/sessions`… | 会话与历史消息 |
 | POST | `/feedback` | 反馈写入 JSONL |
 | POST | `/ingest/preview` | 清洗预览 |
-| POST | `/ingest/text` | 文本入库 |
+| POST | `/ingest/text` | 文本入库（响应含 `dedup` 去重统计） |
 | POST | `/ingest/path` | 按 `data/raw` 相对路径入库 |
 | POST | `/ingest/upload` | 上传文件入库 |
 

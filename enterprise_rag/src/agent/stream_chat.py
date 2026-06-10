@@ -13,7 +13,7 @@ from agent.answer_prompts import (
 )
 from agent.kb_judge import answer_indicates_kb_miss, should_attach_citations
 from agent.answer_router import resolve_answer_mode
-from agent.context_format import format_source_citation, source_ref_dict
+from agent.context_format import build_source_citations
 from agent.conversation_context import build_llm_messages
 from agent.nodes import retrieve_node
 from agent.stream_verifier import run_stream_verifier
@@ -212,9 +212,7 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
         answer=answer,
         contexts_meta=meta,
     )
-    refs = [m for m in meta if m.get("parent_id")] if attach else []
-    sources = [format_source_citation(m) for m in refs]
-    source_refs = [source_ref_dict(m) for m in refs]
+    sources, source_refs = build_source_citations(meta) if attach else ([], [])
     full_answer = answer
 
     done_payload = {
