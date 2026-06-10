@@ -17,7 +17,7 @@ DEFAULT_UI: dict[str, Any] = {
     "logo_en": "JNAO",
     "logo_cn": "劲脑",
     "has_logo_image": False,
-    "app_title": "企业知识库助手",
+    "app_title": "入库小帮手",
     "app_tagline": "把文档放进知识库，用自然语言提问；无需编写代码。",
     "suggested_questions": [
         "1-3年级超脑阅读要求是什么？",
@@ -240,6 +240,41 @@ div[data-testid="stFileUploader"] section {
   box-shadow: var(--shadow-sm);
 }
 .model-status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+/* Unified top nav (admin pages) */
+.unified-nav {
+  display: flex; align-items: center; gap: 12px;
+  padding: 0 20px; height: 48px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  margin: -1rem -1rem 1rem -1rem;
+}
+.unified-nav-brand {
+  display: flex; align-items: center; gap: 6px;
+  font-weight: 600; font-size: 15px; color: var(--brand-primary); margin-right: 4px;
+}
+.unified-nav-links { display: flex; flex-wrap: wrap; gap: 2px; flex: 1; }
+.unified-nav-link {
+  padding: 6px 12px; border-radius: 8px; font-size: 13px;
+  color: var(--text-muted); text-decoration: none;
+  transition: background .15s, color .15s;
+}
+.unified-nav-link:hover { background: var(--surface-muted); color: var(--text); }
+.unified-nav-link.active { background: #e3f2fd; color: var(--brand-primary); font-weight: 600; }
+.unified-nav-cta {
+  padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  background: var(--brand-primary); color: #fff !important; text-decoration: none;
+}
+.unified-nav-cta:hover { opacity: 0.92; }
+.unified-nav-logo {
+  height: 28px; width: auto; object-fit: contain; margin-right: 6px;
+}
+section[data-testid="stSidebar"] {
+  min-width: 240px !important;
+  background: var(--surface) !important;
+  border-right: 1px solid var(--border) !important;
+}
+.main .block-container { max-width: 960px; padding-top: 0.75rem; }
 </style>
         """,
         unsafe_allow_html=True,
@@ -296,22 +331,14 @@ def resolve_app_logo_path(api_base: str | None = None, headers: dict[str, str] |
     return None
 
 
-def render_sidebar_brand(cfg: dict[str, Any], api_base: str, headers: dict[str, str] | None = None) -> None:
-    """Legacy inline brand (prefer mount_app_logo in streamlit_app.py)."""
-    img = _logo_image_data_url(api_base, headers) if cfg.get("has_logo_image") else None
-    if not img:
-        img = _file_data_url(COMPANY_LOGO_PATH)
-    if img:
-        st.sidebar.markdown(
-            f'<div class="jnao-brand"><img class="logo-img" src="{img}" alt="JNAO"/></div>',
-            unsafe_allow_html=True,
-        )
-    else:
-        logo_en = str(cfg.get("logo_en") or "JNAO")
-        st.sidebar.markdown(
-            f'<div class="jnao-brand"><span class="logo-en">{logo_en}</span></div>',
-            unsafe_allow_html=True,
-        )
+def resolve_app_logo_data_url(api_base: str | None = None, headers: dict[str, str] | None = None) -> str | None:
+    """Logo as data URL for inline HTML (nav bar)."""
+    path_or_url = resolve_app_logo_path(api_base, headers)
+    if not path_or_url:
+        return None
+    if path_or_url.startswith("data:"):
+        return path_or_url
+    return _file_data_url(Path(path_or_url))
 
 
 def mount_app_logo(api_base: str | None = None, headers: dict[str, str] | None = None) -> None:
@@ -331,22 +358,6 @@ def mount_app_logo(api_base: str | None = None, headers: dict[str, str] | None =
             except Exception:
                 pass
     st.session_state["_app_logo_mounted"] = True
-
-
-def render_sidebar_user(display_name: str, department: str) -> None:
-    name = (display_name or "你的名字").strip()
-    dept = (department or "部门").strip()
-    avatar = _file_data_url(DEPT_AVATAR_PATH)
-    if avatar:
-        avatar_html = f'<img class="avatar-img" src="{avatar}" alt="部门"/>'
-    else:
-        initial = name[0].upper() if name else "U"
-        avatar_html = f'<div class="avatar">{initial}</div>'
-    st.sidebar.markdown(
-        f'<div class="sidebar-user">{avatar_html}'
-        f'<div class="label">{name} · {dept}</div></div>',
-        unsafe_allow_html=True,
-    )
 
 
 def fetch_model_connection_status(
@@ -392,7 +403,7 @@ def render_minimal_sidebar(cfg: dict[str, Any], api_base: str, headers: dict[str
 
 
 def render_page_header(cfg: dict[str, Any], *, compact: bool = False) -> None:
-    title = str(cfg.get("app_title") or "企业知识库助手")
+    title = str(cfg.get("app_title") or "入库小帮手")
     tagline = str(cfg.get("app_tagline") or "")
     if compact:
         tagline_html = f"<p>{tagline}</p>" if tagline else ""

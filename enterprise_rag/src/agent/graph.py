@@ -63,6 +63,8 @@ def run_agent(
     user_department: str,
     allowed_sources: list[str] | None = None,
     llm_runtime: dict[str, Any] | None = None,
+    history: list[dict[str, Any]] | None = None,
+    memory_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     app = get_agent_app()
     init: AgentState = {
@@ -71,6 +73,8 @@ def run_agent(
         "user_department": user_department,
         "allowed_sources": allowed_sources,
         "retry_count": 0,
+        "history": history or [],
+        "memory_config": memory_config or {},
     }
     if llm_runtime:
         init.update(llm_runtime)

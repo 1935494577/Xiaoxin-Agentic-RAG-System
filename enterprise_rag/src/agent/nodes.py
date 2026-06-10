@@ -6,6 +6,14 @@ from openai import OpenAI
 
 from config import settings
 from agent.context_format import format_context_with_meta, format_source_citation, source_ref_dict
+from agent.answer_router import resolve_answer_mode
+from agent.answer_prompts import (
+    general_system_prompt,
+    general_user_content,
+    kb_system_prompt,
+    kb_user_content,
+)
+from agent.conversation_context import build_llm_messages
 from security.guard import scan_prompt_injection
 from security.permissions import filter_by_sources
 
@@ -29,11 +37,14 @@ class AgentState(TypedDict, total=False):
     contexts: list[str]
     contexts_meta: list[dict[str, Any]]
     answer: str
+    answer_mode: str
     verified: bool
     sources: list[str]
     source_refs: list[dict[str, Any]]
     verifier_decision: str
     retry_count: int
+    history: list[dict[str, Any]]
+    memory_config: dict[str, Any]
 
 
 def router_node(state: AgentState) -> dict[str, Any]:
@@ -84,14 +95,34 @@ def retrieve_node(state: AgentState) -> dict[str, Any]:
 
 def answer_node(state: AgentState) -> dict[str, Any]:
     ctx = state.get("contexts") or []
-    body = "\n".join(f"[{i + 1}] {t}" for i, t in enumerate(ctx))
+    meta = state.get("contexts_meta") or []
+    mem = state.get("memory_config") or {}
+    history = list(state.get("history") or [])
+
+    answer_mode = resolve_answer_mode(
+        ctx,
+        meta,
+        question=state["question"],
+        kb_min_score=float(mem.get("kb_min_score", 0.55)),
+        kb_min_rerank_score=float(mem.get("kb_min_rerank_score", 0.0)),
+        kb_llm_judge=bool(mem.get("kb_llm_judge", True)),
+        general_fallback_enabled=bool(mem.get("general_fallback_enabled", True)),
+        llm_runtime={
+            "llm_api_key": state.get("llm_api_key"),
+            "llm_api_base": state.get("llm_api_base"),
+            "chat_model": state.get("chat_model"),
+            "llm_extra_headers": state.get("llm_extra_headers"),
+        },
+    )
+
     api_key = (state.get("llm_api_key") or "").strip() or settings.openai_api_key
     api_base = (state.get("llm_api_base") or "").strip() or settings.openai_api_base
     if not api_key:
         return {
-            "answer": "未配置 API Key（请在模型配置页保存，或配置 .env 的 OPENAI_API_KEY）。\n" + body[:4000],
+            "answer": "未配置 API Key（请在模型配置页保存，或配置 .env 的 OPENAI_API_KEY）。",
             "verifier_decision": "pass",
             "verified": True,
+            "answer_mode": answer_mode,
         }
 
     headers = state.get("llm_extra_headers")
@@ -102,13 +133,18 @@ def answer_node(state: AgentState) -> dict[str, Any]:
     retry_note = ""
     if int(state.get("retry_count") or 0) > 0:
         retry_note = "上一轮未通过一致性校验，请更严格依据资料重写。\n"
-    messages = [
-        {"role": "system", "content": "你是企业知识库助手。仅依据参考资料作答；资料不足请说明。"},
-        {
-            "role": "user",
-            "content": retry_note + f"参考资料：\n{body}\n\n用户问题：{state['question']}",
-        },
-    ]
+
+    mem = state.get("memory_config") or {}
+    prompt_slots = mem.get("prompt_slots")
+
+    if answer_mode == "kb":
+        system = kb_system_prompt(fast=bool(state.get("stream_fast_mode")), slots=prompt_slots)
+        user_content = retry_note + kb_user_content(ctx, state["question"])
+    else:
+        system = general_system_prompt(slots=prompt_slots)
+        user_content = retry_note + general_user_content(state["question"])
+
+    messages = build_llm_messages(system=system, history=history, user_content=user_content)
     model = state.get("chat_model") or settings.openai_chat_model
     temp = float(state.get("llm_temperature_answer") if state.get("llm_temperature_answer") is not None else 0.2)
     kw: dict[str, Any] = {"model": model, "messages": messages, "temperature": temp}
@@ -117,10 +153,17 @@ def answer_node(state: AgentState) -> dict[str, Any]:
         kw["max_tokens"] = int(mt)
     resp = client.chat.completions.create(**kw)
     ans = (resp.choices[0].message.content or "").strip()
-    return {"answer": ans}
+    return {"answer": ans, "answer_mode": answer_mode}
 
 
 def verifier_node(state: AgentState) -> dict[str, Any]:
+    if state.get("answer_mode") == "general":
+        return {"verifier_decision": "pass", "verified": True}
+
+    mem = state.get("memory_config") or {}
+    if not bool(mem.get("graph_verifier_enabled", False)):
+        return {"verifier_decision": "pass", "verified": True}
+
     api_key = (state.get("llm_api_key") or "").strip() or settings.openai_api_key
     api_base = (state.get("llm_api_base") or "").strip() or settings.openai_api_base
     if not api_key:
@@ -162,13 +205,25 @@ def verifier_node(state: AgentState) -> dict[str, Any]:
 
 
 def citer_node(state: AgentState) -> dict[str, Any]:
+    if state.get("answer_mode") == "general" or not state.get("verified", True):
+        ans = state.get("answer") or ""
+        return {"sources": [], "source_refs": [], "answer": ans}
+
     meta = state.get("contexts_meta") or []
     refs = [m for m in meta if m.get("parent_id")]
     sources = [format_source_citation(m) for m in refs]
     source_refs = [source_ref_dict(m) for m in refs]
     ans = state.get("answer") or ""
-    foot = "\n\n引用: " + "; ".join(sources) if sources else ""
-    return {"sources": sources, "source_refs": source_refs, "answer": ans + foot}
+    from agent.kb_judge import should_attach_citations
+
+    if not should_attach_citations(
+        answer_mode="kb",
+        answer=ans,
+        contexts_meta=meta,
+    ):
+        sources = []
+        source_refs = []
+    return {"sources": sources, "source_refs": source_refs, "answer": ans}
 
 
 def route_after_router(state: AgentState) -> str:

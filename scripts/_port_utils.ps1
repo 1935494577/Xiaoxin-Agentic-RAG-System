@@ -4,6 +4,7 @@ $ErrorActionPreference = "SilentlyContinue"
 
 $script:DevApiPort = 8010
 $script:DevFrontendPort = 8501
+$script:DevChatSpaPort = 8502
 
 function Stop-ProcessTree {
     param([Parameter(Mandatory)][int]$ProcessId)
@@ -39,7 +40,8 @@ function Stop-PortListeners {
 
 function Stop-DevPorts {
     Stop-PortListeners -Port $script:DevApiPort -Label "API"
-    Stop-PortListeners -Port $script:DevFrontendPort -Label "Streamlit frontend"
+    Stop-PortListeners -Port $script:DevFrontendPort -Label "Streamlit admin"
+    Stop-PortListeners -Port $script:DevChatSpaPort -Label "Jnao Chat"
 }
 
 function Register-DevPortCleanup {
@@ -74,6 +76,51 @@ function Get-DevPython {
     $venvPy = Join-Path $root ".venv\Scripts\python.exe"
     if (Test-Path $venvPy) { return $venvPy }
     return "python"
+}
+
+function Get-DevNpmCmd {
+    # Windows: Start-Process "npm" 可能关联 npm.ps1 并用记事本打开，必须用 npm.cmd
+    $cmd = Get-Command npm.cmd -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+    foreach ($p in @(
+        "$env:ProgramFiles\nodejs\npm.cmd",
+        ${env:ProgramFiles(x86)} + "\nodejs\npm.cmd"
+    )) {
+        if ($p -and (Test-Path $p)) { return $p }
+    }
+    return $null
+}
+
+function Start-DevChatSpa {
+    param(
+        [Parameter(Mandatory)][string]$ChatDir,
+        [int]$Port = $script:DevChatSpaPort
+    )
+    $npm = Get-DevNpmCmd
+    if (-not $npm) {
+        Write-Host "WARN: npm.cmd not found — skip Jnao Chat. Install Node.js LTS."
+        return $null
+    }
+    $nodeModules = Join-Path $ChatDir "node_modules"
+    if (-not (Test-Path $nodeModules)) {
+        Write-Host "Installing Jnao Chat dependencies..."
+        Push-Location $ChatDir
+        & $npm install
+        $installOk = ($LASTEXITCODE -eq 0)
+        Pop-Location
+        if (-not $installOk) {
+            Write-Host "WARN: npm install failed."
+            return $null
+        }
+    }
+    Write-Host "Starting Jnao Chat on port $Port..."
+    $proc = Start-Process -FilePath $npm -ArgumentList @("run", "dev") -WorkingDirectory $ChatDir -PassThru -WindowStyle Normal
+    Start-Sleep -Seconds 3
+    $listening = Get-PortListenerPids -Port $Port
+    if (-not $listening) {
+        Write-Host "WARN: Jnao Chat port $Port not listening yet. If needed: .\scripts\run-chat-spa.ps1"
+    }
+    return $proc
 }
 
 function Get-UvicornReloadArgs {

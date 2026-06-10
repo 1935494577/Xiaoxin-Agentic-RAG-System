@@ -82,6 +82,7 @@ def insert_child_vectors(
     parent_ids: list[str],
     departments: list[str],
     sources: list[str],
+    tags: list[str] | None = None,
 ) -> None:
     try:
         from api.vector_store_registry import validate_insert_vectors
@@ -89,6 +90,9 @@ def insert_child_vectors(
         validate_insert_vectors(vectors)
     except ImportError:
         pass
+    from chunker.utils import tags_to_store_value
+
+    tag_str = tags_to_store_value(tags)
     with _lock:
         _load_unlocked()
         for i in range(len(ids)):
@@ -100,6 +104,7 @@ def insert_child_vectors(
                     "parent_id": parent_ids[i],
                     "department": departments[i],
                     "source": sources[i],
+                    "tags": tag_str,
                 }
             )
         _save_unlocked()
@@ -148,6 +153,7 @@ def vector_search(
                     "department": r.get("department"),
                     "source": r.get("source"),
                     "text": r.get("text"),
+                    "tags": r.get("tags") or "",
                     "score": sim,
                 }
             )

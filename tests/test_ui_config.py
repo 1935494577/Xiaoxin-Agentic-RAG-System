@@ -40,11 +40,13 @@ def test_ui_config_update(client: TestClient):
             "logo_cn": "测试",
             "app_title": "测试助手",
             "suggested_questions": ["问题一", "问题二"],
+            "ingest_tag_presets": ["制度", "培训"],
         },
     )
     assert r.status_code == 200
     assert r.json()["logo_en"] == "ACME"
     assert len(r.json()["suggested_questions"]) == 2
+    assert r.json()["ingest_tag_presets"] == ["制度", "培训"]
 
     r2 = client.get("/config/ui")
     assert r2.json()["app_title"] == "测试助手"

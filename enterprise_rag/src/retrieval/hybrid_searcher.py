@@ -10,6 +10,8 @@ from indexing.es_indexer import bm25_parent_search, fetch_parents_by_ids
 from indexing.milvus_indexer import vector_search
 from retrieval.query_rewriter import rewrite_query
 from retrieval.reranker import rerank_parents
+from retrieval.result_dedup import deduplicate_retrieval_results
+from chunker.utils import tags_from_store_value
 
 
 def _norm_map(scores: dict[str, float], higher_is_better: bool) -> dict[str, float]:
@@ -43,6 +45,7 @@ def hybrid_search(
     skip_rerank: bool = False,
     rerank_top_k: int | None = None,
     pre_rerank_k: int | None = None,
+    retrieval_dedup: bool | None = None,
 ) -> tuple[str, list[dict[str, Any]]]:
     """
     步骤4：改写 → Milvus(部门过滤) + 本地 rank-bm25 父块 → 按 parent_id 融合 → Rerank → Top 父块。
@@ -105,11 +108,17 @@ def hybrid_search(
         department = user_department
         source = ""
         permission_label = ""
+        tags: list[str] = []
         if row:
             text = str(row.get("text") or "")
             department = str(row.get("department") or department or "")
             source = str(row.get("source") or "")
             permission_label = str(row.get("permission_label") or "")
+            raw_tags = row.get("tags")
+            if isinstance(raw_tags, list):
+                tags = [str(t) for t in raw_tags if str(t).strip()]
+            elif raw_tags:
+                tags = tags_from_store_value(str(raw_tags))
         if not text and pid in v_score:
             vrows = [h for h in vec_hits if str(h.get("parent_id")) == pid]
             if vrows:
@@ -118,6 +127,8 @@ def hybrid_search(
                     department = str(vrows[0].get("department") or department or "")
                 if not source:
                     source = str(vrows[0].get("source") or "")
+                if not tags:
+                    tags = tags_from_store_value(str(vrows[0].get("tags") or ""))
         candidates.append(
             {
                 "parent_id": pid,
@@ -125,15 +136,24 @@ def hybrid_search(
                 "department": department,
                 "source": source,
                 "permission_label": permission_label,
+                "tags": tags,
                 "hybrid_score": float(hy),
             }
         )
 
     final_k = rerank_top_k if rerank_top_k is not None else settings.rerank_top_k
-    if skip_rerank:
-        return rewritten, candidates[:final_k]
+    dedup_pool = final_k * 3 if (retrieval_dedup if retrieval_dedup is not None else settings.retrieval_dedup_enabled) else final_k
 
-    cap = pre_rerank_k if pre_rerank_k is not None else min(len(candidates), final_k * 2)
+    if skip_rerank:
+        ranked, _ = deduplicate_retrieval_results(
+            candidates[:dedup_pool],
+            top_k=final_k,
+            enabled=retrieval_dedup,
+        )
+        return rewritten, ranked
+
+    cap = pre_rerank_k if pre_rerank_k is not None else min(len(candidates), max(final_k * 2, dedup_pool))
     pool = candidates[: max(final_k, cap)]
-    ranked = rerank_parents(query, pool, top_k=final_k)
-    return rewritten, ranked[:final_k]
+    ranked = rerank_parents(query, pool, top_k=min(len(pool), dedup_pool))
+    deduped, _ = deduplicate_retrieval_results(ranked, top_k=final_k, enabled=retrieval_dedup)
+    return rewritten, deduped

@@ -18,6 +18,10 @@ from config import settings
 
 from agent.graph import run_agent
 from agent.stream_chat import stream_rag_chat
+from agent.conversation_context import resolve_chat_history
+from api.chat_memory import chat_memory_settings
+from api.prompt_config_store import public_prompt_config, save_prompt_config
+from api.routing_mode import apply_hybrid_expert_memory, resolve_hybrid_expert_mode
 from api.stream_retrieval import build_stream_retrieval_state, resolve_stream_fast_mode
 from api.auth_middleware import APIAuthMiddleware, SecurityHeadersMiddleware
 from api.chat_session_store import (
@@ -52,6 +56,7 @@ from api.schemas import (
     ChatSessionPublic,
     ChatSessionUpdate,
     FeedbackRequest,
+    IngestDedupStatsResponse,
     IngestResponse,
     IngestTextRequest,
     ModelProfileCreate,
@@ -64,6 +69,8 @@ from api.schemas import (
     PreviewResponse,
     ProcessingToolsPublic,
     ProcessingToolsUpdate,
+    PromptConfigPublic,
+    PromptConfigUpdate,
     PublicConfigResponse,
     RetrieveHit,
     RetrieveRequest,
@@ -91,15 +98,24 @@ from api.ui_config_store import (
     save_ui_config,
 )
 from chunker.parent_child import persist_chunks_jsonl, split_parent_child
+from chunker.utils import normalize_ingest_tags
 from document_loader.cleaner import clean_file, clean_raw_text
 from document_loader.processing.pipeline import process_upload_file
 from document_loader.processing.modes import UNCLEANED, normalize_ingest_mode
 from document_loader.processing.registry import load_config as load_processing_config
 from document_loader.processing.registry import public_config as public_processing_config
 from document_loader.processing.registry import save_config as save_processing_config
-from evaluation.langsmith_trace import configure_tracing
+from api.nav_config import build_nav_config
+from evaluation.langsmith_trace import configure_tracing, get_trace_status
+from indexing.dedup_text import content_hash
 from indexing.embeddings import embed_texts
 from indexing.es_indexer import delete_parents_by_source, index_parent_documents
+from indexing.ingest_dedup import (
+    check_document_duplicate,
+    filter_parent_child_duplicates,
+    finalize_document_registry,
+    prepare_source_reingest,
+)
 from indexing.milvus_indexer import delete_by_source as milvus_delete_by_source
 from indexing.milvus_indexer import init_vector_db, insert_child_vectors
 
@@ -186,6 +202,18 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/config/nav")
+def get_nav_config():
+    """Unified nav links for Chat SPA and Streamlit admin."""
+    return build_nav_config()
+
+
+@app.get("/debug/trace-status")
+def trace_status():
+    """Return LangSmith trace configuration (no secrets)."""
+    return get_trace_status()
+
+
 @app.get("/config/public", response_model=PublicConfigResponse)
 def public_config():
     """供前端展示当前服务端向量 / 重排 / 默认对话模型（不含密钥）。"""
@@ -227,6 +255,27 @@ def update_processing_tools_config(body: ProcessingToolsUpdate):
     patch = body.model_dump(exclude_unset=True)
     save_processing_config(patch)
     return ProcessingToolsPublic.model_validate(public_processing_config())
+
+
+@app.get("/config/prompts", response_model=PromptConfigPublic)
+def get_prompt_config(
+    mode: str = Query(default="kb", pattern="^(kb|general)$"),
+    fast: bool = Query(default=False),
+):
+    return PromptConfigPublic.model_validate(public_prompt_config(mode=mode, fast=fast))
+
+
+@app.put("/config/prompts", response_model=PromptConfigPublic)
+def update_prompt_config(
+    body: PromptConfigUpdate,
+    mode: str = Query(default="kb", pattern="^(kb|general)$"),
+    fast: bool = Query(default=False),
+):
+    raw_slots = None
+    if body.slots is not None:
+        raw_slots = [s.model_dump(exclude_unset=True) for s in body.slots]
+    save_prompt_config(slots=raw_slots, reset_defaults=bool(body.reset_defaults))
+    return PromptConfigPublic.model_validate(public_prompt_config(mode=mode, fast=fast))
 
 
 @app.get("/config/vector-stores", response_model=VectorStoreListResponse)
@@ -460,7 +509,12 @@ def retrieve(req: RetrieveRequest):
     from retrieval.hybrid_searcher import hybrid_search
     from security.permissions import filter_by_sources
 
-    rewritten, parents = hybrid_search(req.query, req.user_department, top_k=req.top_k)
+    rewritten, parents = hybrid_search(
+        req.query,
+        req.user_department,
+        top_k=req.top_k,
+        retrieval_dedup=req.retrieval_dedup,
+    )
     parents = filter_by_sources(parents, req.allowed_sources)
     hits = [
         RetrieveHit(
@@ -477,6 +531,19 @@ def retrieve(req: RetrieveRequest):
     return RetrieveResponse(rewritten_query=rewritten, hits=hits)
 
 
+def _resolve_request_history(req: ChatRequest, mem: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    mem = mem or chat_memory_settings()
+    req_hist = [h.model_dump() for h in req.history] if req.history else None
+    return resolve_chat_history(
+        request_history=req_hist,
+        user_id=req.user_id,
+        session_id=req.session_id,
+        max_turns=int(mem.get("max_history_turns", 6)),
+        max_chars=int(mem.get("max_history_chars", 6000)),
+        long_term_enabled=bool(mem.get("long_term_memory_enabled", True)),
+    )
+
+
 @app.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest):
     """步骤7：对话入口。"""
@@ -486,18 +553,23 @@ def chat(req: ChatRequest):
             status_code=400,
             detail="未配置 API Key：请在「模型配置」中保存密钥，或在 .env 中设置 OPENAI_API_KEY。",
         )
+    mem = chat_memory_settings()
     out = run_agent(
         question=req.message,
         user_id=req.user_id,
         user_department=req.user_department,
         allowed_sources=req.allowed_sources,
         llm_runtime=runtime,
+        history=_resolve_request_history(req, mem),
+        memory_config=mem,
     )
     return ChatResponse(
         answer=out.get("answer") or "",
         sources=out.get("sources") or [],
         source_refs=[SourceRef(**r) for r in (out.get("source_refs") or [])],
         rewritten_query=out.get("rewritten_query"),
+        answer_mode=out.get("answer_mode"),
+        verified=out.get("verified"),
     )
 
 
@@ -512,14 +584,23 @@ def chat_stream(req: ChatRequest):
         )
 
     fast = resolve_stream_fast_mode(req.stream_fast_mode)
+    hybrid = resolve_hybrid_expert_mode(req.hybrid_expert_mode)
+    mem = apply_hybrid_expert_memory(chat_memory_settings(), hybrid)
+    history = _resolve_request_history(req, mem)
     state: dict[str, Any] = {
         "question": req.message,
         "user_id": req.user_id,
         "user_department": req.user_department,
         "allowed_sources": req.allowed_sources,
+        "history": history,
+        "memory_config": mem,
+        "quiet_routing": True,
+        "hybrid_expert_mode": hybrid,
         "llm_temperature_answer": req.temperature if req.temperature is not None else 0.2,
         "llm_max_tokens_rewrite": req.max_tokens_rewrite if req.max_tokens_rewrite is not None else 128,
         "llm_max_tokens_answer": req.max_tokens_answer,
+        "llm_temperature_verifier": req.verifier_temperature,
+        "llm_max_tokens_verifier": req.max_tokens_verifier,
     }
     state.update(
         build_stream_retrieval_state(
@@ -617,6 +698,7 @@ def ingest_text(req: IngestTextRequest):
         source=req.source,
         department=req.department,
         permission_label=req.permission_label,
+        tags=req.tags,
     )
 
 
@@ -625,6 +707,7 @@ def ingest_path(
     relative_path: str = Query(..., description="Path under enterprise_rag/data/raw"),
     department: str | None = Query(default=None, max_length=64),
     permission_label: str | None = Query(default=None, max_length=64),
+    tags: str | None = Query(default=None, max_length=512, description="逗号分隔的入库标签"),
 ):
     """开发入库（步骤4 小批量调试）；步骤7 未列此端点。"""
     src = _safe_raw_file(relative_path)
@@ -632,7 +715,13 @@ def ingest_path(
         raise HTTPException(status_code=404, detail="File not found")
     text = clean_file(src, use_presidio=settings.use_presidio)
     rel = str(Path(relative_path).as_posix())
-    return _ingest_text(text, source=rel, department=department, permission_label=permission_label)
+    return _ingest_text(
+        text,
+        source=rel,
+        department=department,
+        permission_label=permission_label,
+        tags=normalize_ingest_tags(tags),
+    )
 
 
 def _safe_upload_filename(filename: str | None) -> str:
@@ -655,6 +744,7 @@ async def ingest_upload(
         pattern="^(pre_cleaned|uncleaned|cleaned|raw)$",
         description="pre_cleaned=已清洗仅入库；uncleaned=未清洗走工具链（cleaned/raw 为兼容别名）",
     ),
+    tags: str | None = Query(default=None, max_length=512, description="逗号分隔的入库标签"),
     use_llm_router: bool | None = Query(default=None),
 ):
     safe_name = _safe_upload_filename(file.filename)
@@ -698,6 +788,7 @@ async def ingest_upload(
         source=safe_name,
         department=department,
         permission_label=permission_label,
+        tags=normalize_ingest_tags(tags),
     )
     result.ingest_mode = mode
     result.tools_used = proc.tools_used
@@ -713,18 +804,62 @@ def _ingest_text(
     source: str,
     department: str | None = None,
     permission_label: str | None = None,
+    tags: list[str] | None = None,
 ) -> IngestResponse:
+    doc_tags = normalize_ingest_tags(tags)
     settings.data_processed_dir.mkdir(parents=True, exist_ok=True)
     processed = settings.data_processed_dir / Path(source).name
     processed.write_text(text, encoding="utf-8")
 
+    l1 = check_document_duplicate(text, source)
+    if l1 and l1.early_exit:
+        st = l1.stats
+        return IngestResponse(
+            chunks_indexed=0,
+            source=source,
+            tags=doc_tags,
+            message=st.message,
+            dedup=IngestDedupStatsResponse(
+                content_hash=st.content_hash,
+                doc_duplicate=True,
+                canonical_source=st.canonical_source,
+                alias_sources=st.alias_sources,
+            ),
+        )
+
+    prepare_source_reingest(source)
     milvus_delete_by_source(source)
     delete_parents_by_source(source)
 
-    parents, children = split_parent_child(text, source, department, permission_label)
+    parents, children = split_parent_child(
+        text, source, department, permission_label, tags=doc_tags
+    )
+    digest = content_hash(text)
+    plan = filter_parent_child_duplicates(
+        parents, children, source, doc_content_hash=digest
+    )
+    parents = plan.parents
+    children = plan.children
+    dedup_stats = plan.stats
+
     persist_chunks_jsonl(parents, children)
     if not children:
-        return IngestResponse(chunks_indexed=0, source=source)
+        finalize_document_registry(
+            source, text, parent_count=len(parents), child_count=0
+        )
+        return IngestResponse(
+            chunks_indexed=0,
+            source=source,
+            tags=doc_tags,
+            message=dedup_stats.message,
+            dedup=IngestDedupStatsResponse(
+                content_hash=dedup_stats.content_hash or None,
+                skipped_parents=dedup_stats.skipped_parents,
+                skipped_children=dedup_stats.skipped_children,
+                indexed_parents=dedup_stats.indexed_parents,
+                indexed_children=0,
+            ),
+        )
 
     mat = embed_texts([c.text for c in children])
     vectors = mat.tolist()
@@ -735,6 +870,7 @@ def _ingest_text(
         parent_ids=[c.parent_id for c in children],
         departments=[c.department for c in children],
         sources=[c.source for c in children],
+        tags=doc_tags,
     )
     parent_docs = [
         {
@@ -743,8 +879,26 @@ def _ingest_text(
             "department": p.department,
             "source": p.source,
             "permission_label": p.permission_label,
+            "tags": p.tags,
         }
         for p in parents
     ]
     index_parent_documents(parent_docs)
-    return IngestResponse(chunks_indexed=len(children), source=source)
+    doc_rec = finalize_document_registry(
+        source, text, parent_count=len(parents), child_count=len(children)
+    )
+    alias_sources = list(doc_rec.alias_sources) if doc_rec else dedup_stats.alias_sources
+    return IngestResponse(
+        chunks_indexed=len(children),
+        source=source,
+        tags=doc_tags,
+        message=dedup_stats.message,
+        dedup=IngestDedupStatsResponse(
+            content_hash=dedup_stats.content_hash or None,
+            skipped_parents=dedup_stats.skipped_parents,
+            skipped_children=dedup_stats.skipped_children,
+            indexed_parents=dedup_stats.indexed_parents,
+            indexed_children=dedup_stats.indexed_children,
+            alias_sources=alias_sources,
+        ),
+    )

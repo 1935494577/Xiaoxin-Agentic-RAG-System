@@ -2,6 +2,7 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Repo root (contains docker-compose, Makefile)
@@ -43,10 +44,24 @@ class Settings(BaseSettings):
     data_chunks_dir: Path = _REPO_ROOT / "enterprise_rag" / "data" / "chunks"
     data_feedback_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "feedback.jsonl"
     chat_sessions_db_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "chat_sessions.db"
+    chat_trace_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "chat_trace.jsonl"
     model_profiles_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "model_profiles.json"
     ui_config_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "ui_config.json"
+    prompt_config_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "prompt_config.json"
     processing_tools_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "processing_tools.json"
+    doc_registry_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "doc_registry.json"
+    chunk_dedup_index_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "chunk_dedup_index.json"
     ui_branding_dir: Path = _REPO_ROOT / "enterprise_rag" / "data" / "branding"
+
+    # L1/L2 ingest dedup
+    ingest_content_hash_enabled: bool = True
+    ingest_chunk_dedup_enabled: bool = True
+    ingest_chunk_simhash_max_hamming: int = 3
+
+    # L3 retrieval dedup
+    retrieval_dedup_enabled: bool = True
+    retrieval_dedup_similarity: float = 0.88
+    retrieval_mmr_lambda: float = 0.72
 
     parent_chunk_size: int = 1000
     parent_chunk_overlap: int = 200
@@ -101,9 +116,16 @@ class Settings(BaseSettings):
     enable_hsts: bool = False
 
     # LangSmith / LangChain：写入进程环境，供 `configure_tracing` 与 LangChain 库读取（与 .env 中 LANGCHAIN_* 对应）
-    langchain_tracing_v2: bool = False
-    langchain_api_key: str = ""
-    langchain_project: str = ""
+    langchain_tracing_v2: bool = Field(default=False, validation_alias="LANGCHAIN_TRACING_V2")
+    langchain_api_key: str = Field(default="", validation_alias="LANGCHAIN_API_KEY")
+    langchain_project: str = Field(default="", validation_alias="LANGCHAIN_PROJECT")
+    # 本地 JSONL 链路 trace（第三步写入；此处仅控制状态展示与后续开关）
+    local_trace_enabled: bool = Field(default=False, validation_alias="LOCAL_TRACE_ENABLED")
+
+
+# `.env` 优先：避免 shell 中残留的 LANGCHAIN_* 覆盖项目配置
+for _lang_key in ("LANGCHAIN_TRACING_V2", "LANGCHAIN_API_KEY", "LANGCHAIN_PROJECT", "LOCAL_TRACE_ENABLED"):
+    os.environ.pop(_lang_key, None)
 
 
 @lru_cache
@@ -150,6 +172,16 @@ def _apply_hf_hub_cache() -> None:
 
 
 _apply_hf_hub_cache()
+
+
+def _apply_modelscope_env() -> None:
+    if os.name == "nt":
+        os.environ.setdefault("MODELSCOPE_SYMLINK_FILES_IN_ROOT_ENABLED", "false")
+        os.environ.setdefault("MODELSCOPE_SYMLINK", "0")
+    os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+
+
+_apply_modelscope_env()
 
 
 def _apply_hf_local_files_only() -> None:

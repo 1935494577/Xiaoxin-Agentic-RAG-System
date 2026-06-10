@@ -40,14 +40,6 @@ def get_user_id() -> str:
     return derived
 
 
-def on_user_identity_changed() -> None:
-    """Call when name/dept/user_id changes — chat session binding must reset."""
-    st.session_state.pop("chat_session_id", None)
-    st.session_state.pop("messages", None)
-    st.session_state.pop("_derived_user_id", None)
-    st.session_state.pop("_sessions_cache_key", None)
-
-
 def get_dept_display_label() -> str:
     return DEPT_LABELS.get(get_dept_code(), get_dept_code())
 

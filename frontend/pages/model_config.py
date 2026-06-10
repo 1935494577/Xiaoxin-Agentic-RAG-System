@@ -87,7 +87,7 @@ def main() -> None:
     api_base = scom.get_api_base()
     auth = scom.get_api_auth_headers()
     prof_data = scom.fetch_model_profiles(api_base)
-    ui, _, _ = init_app_page(api_base, auth, prof_data, check_model_status=True)
+    ui, _, _ = init_app_page(api_base, auth, prof_data, check_model_status=True, nav_id="models")
 
     st.title("模型设置")
     st.caption("配置大模型接入；保存前可用「测试连接」验证，右上角状态灯绿/红表示当前默认模型是否连通。")
@@ -197,7 +197,7 @@ def main() -> None:
                     invalidate_page_cache()
                     st.success(
                         f"已{'更新' if editing_id else '保存'}「{saved.get('name', '')}」。"
-                        "请回到「企业知识库助手」，在侧栏选择该接入方式。"
+                        "请回到 Jnao Chat，在侧栏选择该接入方式。"
                     )
                     _clear_form()
                     st.rerun()

@@ -11,7 +11,7 @@ from config import settings
 def resolve_stream_fast_mode(request_value: bool | None) -> bool:
     if request_value is not None:
         return bool(request_value)
-    return bool(load_ui_config().get("stream_fast_mode", False))
+    return bool(load_ui_config().get("stream_fast_mode", True))
 
 
 def build_stream_retrieval_state(
