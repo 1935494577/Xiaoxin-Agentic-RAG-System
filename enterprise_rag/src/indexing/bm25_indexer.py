@@ -68,16 +68,20 @@ class BM25Index:
             self.save()
 
     def index_parent_documents(self, docs: list[dict[str, Any]]) -> int:
-        """docs: parent_id, content, department, source, permission_label"""
+        """docs: parent_id, content, department, source, permission_label, tags"""
         with _lock:
             for d in docs:
                 self.corpus.append(str(d.get("content") or ""))
+                tags = d.get("tags") or []
+                if isinstance(tags, str):
+                    tags = [t.strip() for t in tags.split(",") if t.strip()]
                 self.metadata_list.append(
                     {
                         "parent_id": str(d.get("parent_id", "")),
                         "department": str(d.get("department", "")),
                         "source": str(d.get("source", "")),
                         "permission_label": str(d.get("permission_label", "public")),
+                        "tags": list(tags),
                     }
                 )
             self._rebuild_bm25()
@@ -101,6 +105,7 @@ class BM25Index:
                         "department": meta.get("department"),
                         "source": meta.get("source"),
                         "permission_label": meta.get("permission_label"),
+                        "tags": meta.get("tags") or [],
                         "score": float(scores[idx]),
                     }
                 )
@@ -119,6 +124,7 @@ class BM25Index:
                         "department": meta.get("department"),
                         "source": meta.get("source"),
                         "permission_label": meta.get("permission_label"),
+                        "tags": meta.get("tags") or [],
                     }
         return out
 

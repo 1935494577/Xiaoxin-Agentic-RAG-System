@@ -26,7 +26,10 @@ def main() -> None:
     ui, _, _ = init_app_page(api_base, auth, prof_data, check_model_status=False, nav_id="memory")
 
     st.title("对话记忆")
-    st.caption("短期记忆注入多轮上下文；长期记忆由 SQLite 会话持久化；检索不足时可回退通用回答。")
+    st.caption(
+        "性能默认：8502 快速流式 + 路由 LLM 判断；同步 Verifier / 流式 fallback 默认关闭。"
+        " 修改后需保存；8502 刷新生效，API 配置即时读取。"
+    )
 
     c1, c2 = st.columns(2)
     with c1:
@@ -45,12 +48,12 @@ def main() -> None:
             step=500,
         )
         kb_score = st.slider(
-            "混合检索阈值（kb_min_score，无重排时）",
+            "混合检索阈值（kb_min_score，无 LLM 判断时）",
             min_value=0.0,
             max_value=1.0,
             value=float(ui.get("kb_min_score") or 0.55),
             step=0.05,
-            help="快速流式跳过重排时使用；低于此值且 LLM 判断为 NO 则走通用回答。",
+            help="快速流式无重排时默认走 LLM 判断；关闭 LLM 判断后此项生效。",
         )
         rerank_score = st.number_input(
             "重排分阈值（kb_min_rerank_score）",
@@ -62,8 +65,9 @@ def main() -> None:
         )
     with c2:
         fast = st.toggle(
-            "快速流式（stream_fast_mode）",
-            value=bool(ui.get("stream_fast_mode")),
+            "快速流式（stream_fast_mode，8502 默认）",
+            value=bool(ui.get("stream_fast_mode", True)),
+            help="跳过重排、减小 top_k，retrieve 通常更快。",
         )
         long_term = st.toggle(
             "长期记忆（long_term_memory_enabled）",
@@ -71,17 +75,28 @@ def main() -> None:
             help="开启后，请求带 session_id 时自动从 SQLite 加载历史。",
         )
         general_fb = st.toggle(
-            "检索不足时通用回答（general_fallback_enabled）",
+            "检索不足时走通用（general_fallback_enabled）",
             value=bool(ui.get("general_fallback_enabled", True)),
+            help="路由阶段：判断资料不足则直接用通用回答。",
         )
         llm_judge = st.toggle(
             "LLM 相关性判断（kb_llm_judge）",
             value=bool(ui.get("kb_llm_judge", True)),
-            help="无重排或分数模糊时，用模型判断资料是否足以回答问题。",
+            help="无重排时必用；避免弱相关片段误走知识库。",
         )
-        verifier = st.toggle(
-            "流式 KB 答案校验（stream_verifier_enabled）",
-            value=bool(ui.get("stream_verifier_enabled", True)),
+        post_fb = st.toggle(
+            "流式 KB 后再 fallback（kb_post_stream_fallback）",
+            value=bool(ui.get("kb_post_stream_fallback", False)),
+            help="默认关：避免 draft 后再打一次通用 LLM。",
+        )
+        stream_ver = st.toggle(
+            "流式 Verifier（stream_verifier_enabled）",
+            value=bool(ui.get("stream_verifier_enabled", False)),
+        )
+        graph_ver = st.toggle(
+            "同步 /chat Verifier（graph_verifier_enabled）",
+            value=bool(ui.get("graph_verifier_enabled", False)),
+            help="LangGraph 校验节点，约 +1s；评测时可开。",
         )
 
     if st.button("保存", type="primary"):
@@ -94,7 +109,9 @@ def main() -> None:
             "kb_llm_judge": llm_judge,
             "long_term_memory_enabled": long_term,
             "general_fallback_enabled": general_fb,
-            "stream_verifier_enabled": verifier,
+            "kb_post_stream_fallback": post_fb,
+            "stream_verifier_enabled": stream_ver,
+            "graph_verifier_enabled": graph_ver,
         }
         try:
             with scom.http_client(api_base, timeout=15.0) as c:

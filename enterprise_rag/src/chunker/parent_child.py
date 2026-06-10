@@ -11,7 +11,7 @@ try:
 except ImportError:  # 旧环境：仅 community 暴露该符号
     from langchain_community.text_splitters import RecursiveCharacterTextSplitter  # type: ignore[no-redef]
 
-from chunker.utils import new_chunk_id
+from chunker.utils import new_chunk_id, normalize_ingest_tags
 from config import settings
 
 
@@ -24,6 +24,7 @@ class ChildChunk:
     department: str
     permission_label: str
     child_index: int
+    tags: list[str]
 
 
 @dataclass
@@ -34,6 +35,7 @@ class ParentChunk:
     department: str
     permission_label: str
     order: int
+    tags: list[str]
 
 
 def split_parent_child(
@@ -41,10 +43,12 @@ def split_parent_child(
     source: str,
     department: str | None = None,
     permission_label: str | None = None,
+    tags: list[str] | None = None,
 ) -> tuple[list[ParentChunk], list[ChildChunk]]:
-    """步骤2：父子块 + 元数据（部门、权限标签）。"""
+    """步骤2：父子块 + 元数据（部门、权限标签、自定义标签）。"""
     dept = department or settings.default_department
     perm = permission_label or settings.default_permission_label
+    doc_tags = normalize_ingest_tags(tags)
 
     parent_splitter = RecursiveCharacterTextSplitter(
         chunk_size=settings.parent_chunk_size,
@@ -71,6 +75,7 @@ def split_parent_child(
                 department=dept,
                 permission_label=perm,
                 order=p_order,
+                tags=list(doc_tags),
             )
         )
         for c_order, c_text in enumerate(child_splitter.split_text(p_text)):
@@ -84,6 +89,7 @@ def split_parent_child(
                     department=dept,
                     permission_label=perm,
                     child_index=c_order,
+                    tags=list(doc_tags),
                 )
             )
     return parents, children
@@ -111,6 +117,7 @@ def iter_child_chunks_for_indexing(
     source: str,
     department: str | None = None,
     permission_label: str | None = None,
+    tags: list[str] | None = None,
 ) -> Iterator[ChildChunk]:
-    _, children = split_parent_child(text, source, department, permission_label)
+    _, children = split_parent_child(text, source, department, permission_label, tags=tags)
     yield from children

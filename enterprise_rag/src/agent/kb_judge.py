@@ -131,13 +131,10 @@ def should_use_knowledge_base(
         return False
 
     hybrid = best_hybrid_score(contexts_meta)
-    if hybrid >= float(kb_min_score):
-        return True
-
+    # 无重排时混合分易误判弱相关片段，优先 LLM 判断（快速流式主路径）
     if kb_llm_judge and llm_runtime:
         return _llm_kb_relevant(question, contexts, llm_runtime)
-
-    return False
+    return hybrid >= float(kb_min_score)
 
 
 def resolve_answer_mode(

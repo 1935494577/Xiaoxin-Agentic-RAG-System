@@ -33,18 +33,7 @@ Start-Sleep -Seconds 2
 
 $chatProc = $null
 if (-not $NoChatSpa) {
-    if (Get-Command npm -ErrorAction SilentlyContinue) {
-        if (-not (Test-Path (Join-Path $ChatDir "node_modules"))) {
-            Write-Host "Installing Chat SPA dependencies..."
-            Push-Location $ChatDir
-            npm install
-            Pop-Location
-        }
-        Write-Host "Starting Chat SPA on port $ChatPort..."
-        $chatProc = Start-Process -FilePath "npm" -ArgumentList @("run", "dev") -WorkingDirectory $ChatDir -PassThru -WindowStyle Normal
-    } else {
-        Write-Host "WARN: npm not found — skip Chat SPA. Install Node.js or run .\scripts\run-chat-spa.ps1 later."
-    }
+    $chatProc = Start-DevChatSpa -ChatDir $ChatDir -Port $ChatPort
 }
 
 $adminProc = $null

@@ -158,7 +158,7 @@ def verifier_node(state: AgentState) -> dict[str, Any]:
         return {"verifier_decision": "pass", "verified": True}
 
     mem = state.get("memory_config") or {}
-    if not bool(mem.get("stream_verifier_enabled", True)):
+    if not bool(mem.get("graph_verifier_enabled", False)):
         return {"verifier_decision": "pass", "verified": True}
 
     api_key = (state.get("llm_api_key") or "").strip() or settings.openai_api_key

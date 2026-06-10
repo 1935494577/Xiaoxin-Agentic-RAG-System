@@ -18,6 +18,7 @@ from agent.conversation_context import build_llm_messages
 from agent.nodes import retrieve_node
 from agent.stream_verifier import run_stream_verifier
 from config import settings
+from evaluation.stream_langsmith import new_stream_tracer
 from openai import OpenAI
 
 
@@ -41,36 +42,69 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
         "llm_extra_headers": state.get("llm_extra_headers"),
     }
 
-    yield _evt({"type": "status", "phase": "retrieving"})
+    trace = new_stream_tracer(state)
+    trace_err: str | None = None
+
+    yield _evt({"type": "status", "phase": "retrieving", "trace_id": trace.trace_id})
 
     try:
-        retrieved = retrieve_node(init_state)  # type: ignore[arg-type]
+        with trace.span(
+            "retrieve",
+            "retriever",
+            inputs={"question": state["question"], "stream_fast_mode": fast},
+        ) as span_out:
+            try:
+                retrieved = retrieve_node(init_state)  # type: ignore[arg-type]
+            except Exception as e:
+                trace_err = str(e)
+                raise
+            ctx = retrieved.get("contexts") or []
+            meta = retrieved.get("contexts_meta") or []
+            rewritten = retrieved.get("rewritten_query") or state["question"]
+            span_out.update(
+                {
+                    "rewritten_query": rewritten,
+                    "context_count": len(ctx),
+                    "contexts_meta": meta[:5],
+                }
+            )
     except Exception as e:
-        yield _evt({"type": "error", "message": str(e)})
+        trace.finish({}, error=str(e))
+        yield _evt({"type": "error", "message": str(e), "trace_id": trace.trace_id})
         return
 
-    ctx = retrieved.get("contexts") or []
-    meta = retrieved.get("contexts_meta") or []
-    rewritten = retrieved.get("rewritten_query") or state["question"]
-
-    answer_mode = resolve_answer_mode(
-        ctx,
-        meta,
-        question=state["question"],
-        kb_min_score=float(mem.get("kb_min_score", 0.55)),
-        kb_min_rerank_score=float(mem.get("kb_min_rerank_score", 0.0)),
-        kb_llm_judge=bool(mem.get("kb_llm_judge", True)),
-        general_fallback_enabled=bool(mem.get("general_fallback_enabled", True)),
-        llm_runtime=llm_runtime,
-    )
+    with trace.span(
+        "route",
+        "chain",
+        inputs={"question": state["question"], "context_count": len(ctx)},
+    ) as route_out:
+        answer_mode = resolve_answer_mode(
+            ctx,
+            meta,
+            question=state["question"],
+            kb_min_score=float(mem.get("kb_min_score", 0.55)),
+            kb_min_rerank_score=float(mem.get("kb_min_rerank_score", 0.0)),
+            kb_llm_judge=bool(mem.get("kb_llm_judge", True)),
+            general_fallback_enabled=bool(mem.get("general_fallback_enabled", True)),
+            llm_runtime=llm_runtime,
+        )
+        route_out["answer_mode"] = answer_mode
 
     api_key = (state.get("llm_api_key") or "").strip() or settings.openai_api_key
     api_base = (state.get("llm_api_base") or "").strip() or settings.openai_api_base
     if not api_key:
-        yield _evt({"type": "error", "message": "未配置 API Key"})
+        trace.finish({}, error="未配置 API Key")
+        yield _evt({"type": "error", "message": "未配置 API Key", "trace_id": trace.trace_id})
         return
 
-    yield _evt({"type": "status", "phase": "generating", "answer_mode": answer_mode})
+    yield _evt(
+        {
+            "type": "status",
+            "phase": "generating",
+            "answer_mode": answer_mode,
+            "trace_id": trace.trace_id,
+        }
+    )
 
     if answer_mode == "kb":
         system = kb_system_prompt(fast=fast)
@@ -95,22 +129,47 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
 
     parts: list[str] = []
     try:
-        for evt in _stream_tokens(client, kw, parts):
-            yield evt
+        with trace.span(
+            "draft",
+            "llm",
+            inputs={
+                "model": model,
+                "answer_mode": answer_mode,
+                "message_count": len(messages),
+                "stream": True,
+            },
+        ) as draft_out:
+            try:
+                for evt in _stream_tokens(client, kw, parts):
+                    yield evt
+            except Exception as e:
+                trace_err = str(e)
+                raise
+            answer = "".join(parts).strip()
+            draft_out.update({"answer_preview": answer[:400], "answer_len": len(answer)})
     except Exception as e:
-        yield _evt({"type": "error", "message": str(e)[:400]})
+        trace.finish({"answer_mode": answer_mode}, error=str(e))
+        yield _evt({"type": "error", "message": str(e)[:400], "trace_id": trace.trace_id})
         return
 
     answer = "".join(parts).strip()
     verified = True
 
-    # 兜底：KB 仍声明资料不足 → 通知前端清空，再流式输出通用回答
+    # 兜底：仅当显式开启 kb_post_stream_fallback 时才二次 LLM（默认关，避免 draft+fallback）
     if (
         answer_mode == "kb"
+        and bool(mem.get("kb_post_stream_fallback", False))
         and bool(mem.get("general_fallback_enabled", True))
         and answer_indicates_kb_miss(answer)
     ):
-        yield _evt({"type": "status", "phase": "fallback", "answer_mode": "general"})
+        yield _evt(
+            {
+                "type": "status",
+                "phase": "fallback",
+                "answer_mode": "general",
+                "trace_id": trace.trace_id,
+            }
+        )
         answer_mode = "general"
         meta = []
         ctx = []
@@ -126,14 +185,16 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
         }
         if mt is not None:
             gen_kw["max_tokens"] = int(mt)
-        try:
-            for evt in _stream_tokens(client, gen_kw, parts):
-                yield evt
-            answer = "".join(parts).strip()
-        except Exception:
-            pass
+        with trace.span("fallback", "llm", inputs={"model": model, "stream": True}) as fb_out:
+            try:
+                for evt in _stream_tokens(client, gen_kw, parts):
+                    yield evt
+                answer = "".join(parts).strip()
+                fb_out.update({"answer_len": len(answer)})
+            except Exception:
+                pass
 
-    if answer_mode == "kb" and bool(mem.get("stream_verifier_enabled", True)):
+    if answer_mode == "kb" and bool(mem.get("stream_verifier_enabled", False)):
         runtime = {
             "llm_api_key": api_key,
             "llm_api_base": api_base,
@@ -142,15 +203,21 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
             "llm_max_tokens_verifier": state.get("llm_max_tokens_verifier"),
             "llm_extra_headers": headers,
         }
-        vout = run_stream_verifier(
-            answer=answer,
-            contexts=ctx,
-            answer_mode=answer_mode,
-            enabled=True,
-            llm_runtime=runtime,
-        )
-        answer = str(vout.get("answer") or answer)
-        verified = bool(vout.get("verified", True))
+        with trace.span(
+            "verifier",
+            "llm",
+            inputs={"answer_mode": answer_mode, "answer_len": len(answer)},
+        ) as ver_out:
+            vout = run_stream_verifier(
+                answer=answer,
+                contexts=ctx,
+                answer_mode=answer_mode,
+                enabled=True,
+                llm_runtime=runtime,
+            )
+            answer = str(vout.get("answer") or answer)
+            verified = bool(vout.get("verified", True))
+            ver_out.update({"verified": verified})
 
     refs = [m for m in meta if m.get("parent_id")] if answer_mode == "kb" else []
     sources = [format_source_citation(m) for m in refs]
@@ -158,17 +225,26 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
     foot = "\n\n引用: " + "; ".join(sources) if sources and verified else ""
     full_answer = answer + foot
 
-    yield _evt(
+    done_payload = {
+        "type": "done",
+        "answer": full_answer,
+        "rewritten_query": rewritten,
+        "sources": sources if verified else [],
+        "source_refs": source_refs if verified else [],
+        "answer_mode": answer_mode,
+        "verified": verified,
+        "trace_id": trace.trace_id,
+    }
+    trace.finish(
         {
-            "type": "done",
-            "answer": full_answer,
-            "rewritten_query": rewritten,
-            "sources": sources if verified else [],
-            "source_refs": source_refs if verified else [],
             "answer_mode": answer_mode,
             "verified": verified,
-        }
+            "source_count": len(sources),
+            "trace_id": trace.trace_id,
+        },
+        error=trace_err,
     )
+    yield _evt(done_payload)
 
 
 def _stream_tokens(client: OpenAI, kw: dict[str, Any], parts: list[str]) -> Iterator[str]:

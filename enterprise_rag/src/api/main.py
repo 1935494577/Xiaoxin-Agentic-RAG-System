@@ -93,6 +93,7 @@ from api.ui_config_store import (
     save_ui_config,
 )
 from chunker.parent_child import persist_chunks_jsonl, split_parent_child
+from chunker.utils import normalize_ingest_tags
 from document_loader.cleaner import clean_file, clean_raw_text
 from document_loader.processing.pipeline import process_upload_file
 from document_loader.processing.modes import UNCLEANED, normalize_ingest_mode
@@ -656,6 +657,7 @@ def ingest_text(req: IngestTextRequest):
         source=req.source,
         department=req.department,
         permission_label=req.permission_label,
+        tags=req.tags,
     )
 
 
@@ -664,6 +666,7 @@ def ingest_path(
     relative_path: str = Query(..., description="Path under enterprise_rag/data/raw"),
     department: str | None = Query(default=None, max_length=64),
     permission_label: str | None = Query(default=None, max_length=64),
+    tags: str | None = Query(default=None, max_length=512, description="逗号分隔的入库标签"),
 ):
     """开发入库（步骤4 小批量调试）；步骤7 未列此端点。"""
     src = _safe_raw_file(relative_path)
@@ -671,7 +674,13 @@ def ingest_path(
         raise HTTPException(status_code=404, detail="File not found")
     text = clean_file(src, use_presidio=settings.use_presidio)
     rel = str(Path(relative_path).as_posix())
-    return _ingest_text(text, source=rel, department=department, permission_label=permission_label)
+    return _ingest_text(
+        text,
+        source=rel,
+        department=department,
+        permission_label=permission_label,
+        tags=normalize_ingest_tags(tags),
+    )
 
 
 def _safe_upload_filename(filename: str | None) -> str:
@@ -694,6 +703,7 @@ async def ingest_upload(
         pattern="^(pre_cleaned|uncleaned|cleaned|raw)$",
         description="pre_cleaned=已清洗仅入库；uncleaned=未清洗走工具链（cleaned/raw 为兼容别名）",
     ),
+    tags: str | None = Query(default=None, max_length=512, description="逗号分隔的入库标签"),
     use_llm_router: bool | None = Query(default=None),
 ):
     safe_name = _safe_upload_filename(file.filename)
@@ -737,6 +747,7 @@ async def ingest_upload(
         source=safe_name,
         department=department,
         permission_label=permission_label,
+        tags=normalize_ingest_tags(tags),
     )
     result.ingest_mode = mode
     result.tools_used = proc.tools_used
@@ -752,7 +763,9 @@ def _ingest_text(
     source: str,
     department: str | None = None,
     permission_label: str | None = None,
+    tags: list[str] | None = None,
 ) -> IngestResponse:
+    doc_tags = normalize_ingest_tags(tags)
     settings.data_processed_dir.mkdir(parents=True, exist_ok=True)
     processed = settings.data_processed_dir / Path(source).name
     processed.write_text(text, encoding="utf-8")
@@ -760,10 +773,12 @@ def _ingest_text(
     milvus_delete_by_source(source)
     delete_parents_by_source(source)
 
-    parents, children = split_parent_child(text, source, department, permission_label)
+    parents, children = split_parent_child(
+        text, source, department, permission_label, tags=doc_tags
+    )
     persist_chunks_jsonl(parents, children)
     if not children:
-        return IngestResponse(chunks_indexed=0, source=source)
+        return IngestResponse(chunks_indexed=0, source=source, tags=doc_tags)
 
     mat = embed_texts([c.text for c in children])
     vectors = mat.tolist()
@@ -774,6 +789,7 @@ def _ingest_text(
         parent_ids=[c.parent_id for c in children],
         departments=[c.department for c in children],
         sources=[c.source for c in children],
+        tags=doc_tags,
     )
     parent_docs = [
         {
@@ -782,8 +798,9 @@ def _ingest_text(
             "department": p.department,
             "source": p.source,
             "permission_label": p.permission_label,
+            "tags": p.tags,
         }
         for p in parents
     ]
     index_parent_documents(parent_docs)
-    return IngestResponse(chunks_indexed=len(children), source=source)
+    return IngestResponse(chunks_indexed=len(children), source=source, tags=doc_tags)

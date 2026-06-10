@@ -19,15 +19,18 @@ DEFAULT_UI_CONFIG: dict[str, Any] = {
         "这些文档属于哪个部门？",
         "扫描速记有哪些注意事项？",
     ],
-    "stream_fast_mode": False,
+    "stream_fast_mode": True,
     "max_history_turns": 6,
     "max_history_chars": 6000,
     "kb_min_score": 0.55,
     "kb_min_rerank_score": 0.0,
     "kb_llm_judge": True,
     "general_fallback_enabled": True,
-    "stream_verifier_enabled": True,
+    "kb_post_stream_fallback": False,
+    "stream_verifier_enabled": False,
+    "graph_verifier_enabled": False,
     "long_term_memory_enabled": True,
+    "ingest_tag_presets": ["制度", "培训", "产品", "FAQ", "内部"],
 }
 
 SUPPORTED_UPLOAD_EXTENSIONS = ("txt", "md", "pdf", "docx", "html")
@@ -67,6 +70,8 @@ def save_ui_config(patch: dict[str, Any]) -> dict[str, Any]:
             continue
         if k == "suggested_questions" and isinstance(v, list):
             current[k] = [str(x).strip() for x in v if str(x).strip()][:12]
+        elif k == "ingest_tag_presets" and isinstance(v, list):
+            current[k] = [str(x).strip() for x in v if str(x).strip()][:30]
         elif v is not None:
             current[k] = v
     _config_path().parent.mkdir(parents=True, exist_ok=True)

@@ -72,5 +72,26 @@ def test_llm_judge_no(mock_openai):
     assert mode == "general"
 
 
+def test_hybrid_high_no_rerank_uses_llm_judge():
+    """无重排时即使混合分高，也走 LLM 判断。"""
+    with patch("agent.kb_judge.OpenAI") as mock_openai:
+        client = MagicMock()
+        mock_openai.return_value = client
+        client.chat.completions.create.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content="NO"))]
+        )
+        mode = resolve_answer_mode(
+            "stream trace test",
+            ["阅读资料"],
+            [{"hybrid_score": 0.9, "text": "阅读"}],
+            kb_min_score=0.55,
+            kb_min_rerank_score=0.0,
+            kb_llm_judge=True,
+            general_fallback_enabled=True,
+            llm_runtime={"llm_api_key": "sk-test", "llm_api_base": "http://x", "chat_model": "m"},
+        )
+        assert mode == "general"
+
+
 def test_kb_miss_detection():
     assert answer_indicates_kb_miss("根据参考资料，资料不足，无法确认。")

@@ -10,6 +10,7 @@ from indexing.es_indexer import bm25_parent_search, fetch_parents_by_ids
 from indexing.milvus_indexer import vector_search
 from retrieval.query_rewriter import rewrite_query
 from retrieval.reranker import rerank_parents
+from chunker.utils import tags_from_store_value
 
 
 def _norm_map(scores: dict[str, float], higher_is_better: bool) -> dict[str, float]:
@@ -105,11 +106,17 @@ def hybrid_search(
         department = user_department
         source = ""
         permission_label = ""
+        tags: list[str] = []
         if row:
             text = str(row.get("text") or "")
             department = str(row.get("department") or department or "")
             source = str(row.get("source") or "")
             permission_label = str(row.get("permission_label") or "")
+            raw_tags = row.get("tags")
+            if isinstance(raw_tags, list):
+                tags = [str(t) for t in raw_tags if str(t).strip()]
+            elif raw_tags:
+                tags = tags_from_store_value(str(raw_tags))
         if not text and pid in v_score:
             vrows = [h for h in vec_hits if str(h.get("parent_id")) == pid]
             if vrows:
@@ -118,6 +125,8 @@ def hybrid_search(
                     department = str(vrows[0].get("department") or department or "")
                 if not source:
                     source = str(vrows[0].get("source") or "")
+                if not tags:
+                    tags = tags_from_store_value(str(vrows[0].get("tags") or ""))
         candidates.append(
             {
                 "parent_id": pid,
@@ -125,6 +134,7 @@ def hybrid_search(
                 "department": department,
                 "source": source,
                 "permission_label": permission_label,
+                "tags": tags,
                 "hybrid_score": float(hy),
             }
         )

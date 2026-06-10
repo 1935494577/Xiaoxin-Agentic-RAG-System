@@ -78,6 +78,51 @@ function Get-DevPython {
     return "python"
 }
 
+function Get-DevNpmCmd {
+    # Windows: Start-Process "npm" 可能关联 npm.ps1 并用记事本打开，必须用 npm.cmd
+    $cmd = Get-Command npm.cmd -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+    foreach ($p in @(
+        "$env:ProgramFiles\nodejs\npm.cmd",
+        ${env:ProgramFiles(x86)} + "\nodejs\npm.cmd"
+    )) {
+        if ($p -and (Test-Path $p)) { return $p }
+    }
+    return $null
+}
+
+function Start-DevChatSpa {
+    param(
+        [Parameter(Mandatory)][string]$ChatDir,
+        [int]$Port = $script:DevChatSpaPort
+    )
+    $npm = Get-DevNpmCmd
+    if (-not $npm) {
+        Write-Host "WARN: npm.cmd not found — skip Chat SPA. Install Node.js LTS."
+        return $null
+    }
+    $nodeModules = Join-Path $ChatDir "node_modules"
+    if (-not (Test-Path $nodeModules)) {
+        Write-Host "Installing Chat SPA dependencies..."
+        Push-Location $ChatDir
+        & $npm install
+        $installOk = ($LASTEXITCODE -eq 0)
+        Pop-Location
+        if (-not $installOk) {
+            Write-Host "WARN: npm install failed."
+            return $null
+        }
+    }
+    Write-Host "Starting Chat SPA on port $Port..."
+    $proc = Start-Process -FilePath $npm -ArgumentList @("run", "dev") -WorkingDirectory $ChatDir -PassThru -WindowStyle Normal
+    Start-Sleep -Seconds 3
+    $listening = Get-PortListenerPids -Port $Port
+    if (-not $listening) {
+        Write-Host "WARN: Chat SPA port $Port not listening yet. If needed: .\scripts\run-chat-spa.ps1"
+    }
+    return $proc
+}
+
 function Get-UvicornReloadArgs {
     param([string]$SrcDir)
     # 仅监视 Python 源码；排除 data/models 等大目录，避免误触发

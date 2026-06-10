@@ -32,9 +32,9 @@ export type ChatMessage = {
 };
 
 export type StreamEvent =
-  | { type: "status"; phase: string; answer_mode?: string }
+  | { type: "status"; phase: string; answer_mode?: string; trace_id?: string }
   | { type: "token"; content: string }
-  | { type: "error"; message: string }
+  | { type: "error"; message: string; trace_id?: string }
   | {
       type: "done";
       answer: string;
@@ -43,6 +43,7 @@ export type StreamEvent =
       source_refs?: Array<{ source?: string; parent_id?: string; department?: string }>;
       answer_mode?: string;
       verified?: boolean;
+      trace_id?: string;
     };
 
 const ADMIN_URL = import.meta.env.VITE_ADMIN_URL || "http://127.0.0.1:8501";
@@ -54,6 +55,14 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(text || r.statusText);
   }
   return r.json() as Promise<T>;
+}
+
+export type UiConfig = {
+  stream_fast_mode?: boolean;
+};
+
+export async function fetchUiConfig(): Promise<UiConfig> {
+  return json<UiConfig>("/config/ui");
 }
 
 export async function fetchNav(): Promise<NavConfig> {

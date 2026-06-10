@@ -4,6 +4,7 @@ import {
   createSession,
   deleteSession,
   fetchNav,
+  fetchUiConfig,
   listSessions,
   loadMessages,
   streamChat,
@@ -25,7 +26,7 @@ export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [department, setDepartment] = useState("技术");
-  const [streamFast, setStreamFast] = useState(false);
+  const [streamFast, setStreamFast] = useState(true);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -42,6 +43,13 @@ export default function App() {
 
   useEffect(() => {
     fetchNav().then(setNav).catch(() => setNav(null));
+    fetchUiConfig()
+      .then((ui) => {
+        if (typeof ui.stream_fast_mode === "boolean") {
+          setStreamFast(ui.stream_fast_mode);
+        }
+      })
+      .catch(() => undefined);
     refreshSessions().then((rows) => {
       if (rows.length && !sessionId) {
         setSessionId(rows[0].id);
@@ -149,6 +157,7 @@ export default function App() {
             source_refs: evt.source_refs,
             answer_mode: evt.answer_mode,
             verified: evt.verified,
+            trace_id: evt.trace_id,
           };
         }
       },

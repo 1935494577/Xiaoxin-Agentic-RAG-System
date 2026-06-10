@@ -86,6 +86,7 @@ class FeedbackRequest(BaseModel):
 class IngestResponse(BaseModel):
     chunks_indexed: int
     source: str
+    tags: list[str] = Field(default_factory=list)
     ingest_mode: str | None = None
     tools_used: list[str] = Field(default_factory=list)
     router: str | None = None
@@ -107,6 +108,7 @@ class IngestTextRequest(BaseModel):
     source: str = Field(default="paste.txt", max_length=256)
     department: str | None = Field(default=None, max_length=64)
     permission_label: str | None = Field(default=None, max_length=64)
+    tags: list[str] = Field(default_factory=list, max_length=20)
     use_presidio: bool = True
 
 
@@ -180,14 +182,16 @@ class UiConfigPublic(BaseModel):
     suggested_questions: list[str] = Field(default_factory=list)
     supported_upload_extensions: list[str] = Field(default_factory=list)
     supported_upload_label: str = ""
-    stream_fast_mode: bool = False
+    stream_fast_mode: bool = True
     max_history_turns: int = 6
     max_history_chars: int = 6000
     kb_min_score: float = 0.55
     kb_min_rerank_score: float = 0.0
     kb_llm_judge: bool = True
     general_fallback_enabled: bool = True
-    stream_verifier_enabled: bool = True
+    kb_post_stream_fallback: bool = False
+    stream_verifier_enabled: bool = False
+    graph_verifier_enabled: bool = False
     long_term_memory_enabled: bool = True
 
 
@@ -205,7 +209,9 @@ class UiConfigUpdate(BaseModel):
     kb_min_rerank_score: float | None = None
     kb_llm_judge: bool | None = None
     general_fallback_enabled: bool | None = None
+    kb_post_stream_fallback: bool | None = None
     stream_verifier_enabled: bool | None = None
+    graph_verifier_enabled: bool | None = None
     long_term_memory_enabled: bool | None = None
 
 
