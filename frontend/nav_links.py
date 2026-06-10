@@ -3,26 +3,29 @@
 from __future__ import annotations
 
 import html
-import os
+import sys
+from pathlib import Path
 from typing import Any
 
 import httpx
 import streamlit as st
 
-_FALLBACK = {
-    "chat_url": os.environ.get("RAG_CHAT_SPA_URL", "http://127.0.0.1:8502"),
-    "admin_url": os.environ.get("RAG_ADMIN_URL", "http://127.0.0.1:8501"),
-    "items": [
-        {"id": "chat", "label": "对话", "href": os.environ.get("RAG_CHAT_SPA_URL", "http://127.0.0.1:8502"), "external": True, "primary": True},
-        {"id": "ingest", "label": "数据入库", "href": f"{os.environ.get('RAG_ADMIN_URL', 'http://127.0.0.1:8501')}/ingest"},
-        {"id": "processing", "label": "数据处理", "href": f"{os.environ.get('RAG_ADMIN_URL', 'http://127.0.0.1:8501')}/processing"},
-        {"id": "vector_store", "label": "向量库", "href": f"{os.environ.get('RAG_ADMIN_URL', 'http://127.0.0.1:8501')}/vector_store"},
-        {"id": "memory", "label": "对话记忆", "href": f"{os.environ.get('RAG_ADMIN_URL', 'http://127.0.0.1:8501')}/memory"},
-        {"id": "models", "label": "模型", "href": f"{os.environ.get('RAG_ADMIN_URL', 'http://127.0.0.1:8501')}/models"},
-        {"id": "trace", "label": "链路 Trace", "href": f"{os.environ.get('RAG_ADMIN_URL', 'http://127.0.0.1:8501')}/trace"},
-        {"id": "tutorial", "label": "教程", "href": f"{os.environ.get('RAG_ADMIN_URL', 'http://127.0.0.1:8501')}/tutorial"},
-    ],
-}
+
+def _fallback_nav() -> dict[str, Any]:
+    """Single source: api.nav_config.build_nav_config (API down)."""
+    try:
+        src = Path(__file__).resolve().parents[1] / "enterprise_rag" / "src"
+        if str(src) not in sys.path:
+            sys.path.insert(0, str(src))
+        from api.nav_config import build_nav_config
+
+        return build_nav_config()
+    except Exception:
+        return {
+            "chat_url": "http://127.0.0.1:8502",
+            "admin_url": "http://127.0.0.1:8501",
+            "items": [],
+        }
 
 
 def fetch_nav_links(api_base: str, headers: dict[str, str] | None = None) -> dict[str, Any]:
@@ -33,7 +36,7 @@ def fetch_nav_links(api_base: str, headers: dict[str, str] | None = None) -> dic
             return r.json()
     except Exception:
         pass
-    return dict(_FALLBACK)
+    return _fallback_nav()
 
 
 def render_unified_nav(active_id: str, nav: dict[str, Any], *, logo_src: str | None = None) -> None:

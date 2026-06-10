@@ -90,7 +90,7 @@ def main() -> None:
 | 阶段 | 内容 | 状态 |
 |------|------|------|
 | **① 基础** | 修正路径、状态诊断、LangSmith 可选接入 | ✅ 当前 |
-| **② 本地 Span** | 每次对话写 JSONL：retrieve / 路由 / 生成 / fallback / 耗时 | 下一步 |
+| **② 本地 Span** | 每次 /chat/stream 写 JSONL：retrieve / 路由 / 生成 / fallback / 耗时 | ✅ 当前 |
 | **③ LangGraph 节点** | 为 `router→retrieve→draft→verifier→citer` 每节点打 Span | 待做 |
 | **④ 工具调用** | 入库 Agent、未来 ReAct 的 `bind_tools` 记录入参/出参/耗时 | 待做 |
 | **⑤ 可视化** | 管理端 Trace 详情页：时间线树、性能、按 trace_id 检索 | 待做 |
@@ -117,7 +117,7 @@ trace_id → session_id → spans[]
         "LANGCHAIN_TRACING_V2=true\n"
         "LANGCHAIN_API_KEY=lsv2_...\n"
         "LANGCHAIN_PROJECT=enterprise-rag\n\n"
-        "# 本地 JSONL（第三步接入写入）\n"
+        "# 本地 JSONL（/chat/stream 写入）\n"
         "LOCAL_TRACE_ENABLED=true",
         language="ini",
     )

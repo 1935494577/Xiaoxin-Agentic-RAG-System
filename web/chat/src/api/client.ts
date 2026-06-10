@@ -59,25 +59,36 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
 
 export type UiConfig = {
   stream_fast_mode?: boolean;
+  app_title?: string;
+  app_tagline?: string;
+  suggested_questions?: string[];
 };
 
 export async function fetchUiConfig(): Promise<UiConfig> {
   return json<UiConfig>("/config/ui");
 }
 
+function navFallbackItems(admin: string, chat: string): NavItem[] {
+  return [
+    { id: "chat", label: "对话", href: chat, primary: true },
+    { id: "ingest", label: "数据入库", href: `${admin}/ingest` },
+    { id: "processing", label: "数据处理", href: `${admin}/processing` },
+    { id: "vector_store", label: "向量库", href: `${admin}/vector_store` },
+    { id: "memory", label: "对话记忆", href: `${admin}/memory` },
+    { id: "brand", label: "外观", href: `${admin}/brand` },
+    { id: "models", label: "模型", href: `${admin}/models` },
+    { id: "trace", label: "链路 Trace", href: `${admin}/trace` },
+    { id: "tutorial", label: "教程", href: `${admin}/tutorial` },
+  ];
+}
+
 export async function fetchNav(): Promise<NavConfig> {
   try {
     return await json<NavConfig>("/config/nav");
   } catch {
-    return {
-      chat_url: window.location.origin,
-      admin_url: ADMIN_URL,
-      items: [
-        { id: "chat", label: "对话", href: window.location.origin, primary: true },
-        { id: "ingest", label: "数据入库", href: `${ADMIN_URL}/ingest` },
-        { id: "models", label: "模型", href: `${ADMIN_URL}/models` },
-      ],
-    };
+    const admin = ADMIN_URL;
+    const chat = window.location.origin;
+    return { chat_url: chat, admin_url: admin, items: navFallbackItems(admin, chat) };
   }
 }
 

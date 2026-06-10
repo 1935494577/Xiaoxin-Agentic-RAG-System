@@ -26,6 +26,7 @@ def build_nav_config() -> dict[str, Any]:
             {"id": "processing", "label": "数据处理", "href": f"{admin}/processing", "external": False},
             {"id": "vector_store", "label": "向量库", "href": f"{admin}/vector_store", "external": False},
             {"id": "memory", "label": "对话记忆", "href": f"{admin}/memory", "external": False},
+            {"id": "brand", "label": "外观", "href": f"{admin}/brand", "external": False},
             {"id": "models", "label": "模型", "href": f"{admin}/models", "external": False},
             {"id": "trace", "label": "链路 Trace", "href": f"{admin}/trace", "external": False},
             {"id": "tutorial", "label": "教程", "href": f"{admin}/tutorial", "external": False},

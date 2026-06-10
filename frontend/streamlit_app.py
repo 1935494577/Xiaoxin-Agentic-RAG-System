@@ -37,6 +37,7 @@ pages = [
     st.Page("pages/processing_config.py", title="数据处理", url_path="processing"),
     st.Page("pages/vector_store_config.py", title="向量库", url_path="vector_store"),
     st.Page("pages/chat_memory_config.py", title="对话记忆", url_path="memory"),
+    st.Page("pages/brand_settings.py", title="外观", url_path="brand"),
     st.Page("pages/model_config.py", title="模型", url_path="models"),
     st.Page("pages/trace_config.py", title="链路 Trace", url_path="trace"),
     st.Page("pages/tutorial.py", title="教程", url_path="tutorial"),

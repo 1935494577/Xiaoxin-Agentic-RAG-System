@@ -65,9 +65,9 @@ def _build_hints(
     if langsmith_flag and langsmith_key and not langsmith_pkg:
         hints.append("LangSmith：执行 pip install langsmith")
     if local_enabled:
-        hints.append("本地 JSONL：已开启，对话链路将追加写入 chat_trace.jsonl")
+        hints.append("本地 JSONL：已开启，/chat/stream 每次对话追加写入 chat_trace.jsonl")
     else:
-        hints.append("本地 JSONL：尚未开启（可在 .env 设置 LOCAL_TRACE_ENABLED=true，第三步将接入写入）")
+        hints.append("本地 JSONL：在 .env 设置 LOCAL_TRACE_ENABLED=true 并重启 API")
     return hints
 
 

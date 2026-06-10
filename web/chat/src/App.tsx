@@ -32,6 +32,9 @@ export default function App() {
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState("");
   const [streamMode, setStreamMode] = useState<"kb" | "general" | null>(null);
+  const [appTitle, setAppTitle] = useState("企业知识库助手");
+  const [appTagline, setAppTagline] = useState("输入问题，助手将基于知识库内容回答");
+  const [suggestions, setSuggestions] = useState<string[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -47,6 +50,15 @@ export default function App() {
       .then((ui) => {
         if (typeof ui.stream_fast_mode === "boolean") {
           setStreamFast(ui.stream_fast_mode);
+        }
+        if (ui.app_title?.trim()) {
+          setAppTitle(ui.app_title.trim());
+        }
+        if (ui.app_tagline?.trim()) {
+          setAppTagline(ui.app_tagline.trim());
+        }
+        if (Array.isArray(ui.suggested_questions)) {
+          setSuggestions(ui.suggested_questions.filter((q) => String(q).trim()).slice(0, 12));
         }
       })
       .catch(() => undefined);
@@ -219,8 +231,22 @@ export default function App() {
             <div className="messages-inner">
               {!displayMessages.length && !streaming && (
                 <div className="welcome">
-                  <h2>企业知识库助手</h2>
-                  <p>输入问题，助手将基于知识库内容回答</p>
+                  <h2>{appTitle}</h2>
+                  <p>{appTagline}</p>
+                  {suggestions.length > 0 && (
+                    <div className="suggestion-chips">
+                      {suggestions.map((q) => (
+                        <button
+                          key={q}
+                          type="button"
+                          className="suggestion-chip"
+                          onClick={() => setInput(q)}
+                        >
+                          {q}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
               {displayMessages.map((m, i) => (

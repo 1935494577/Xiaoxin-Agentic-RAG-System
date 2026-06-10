@@ -11,8 +11,9 @@ import streamlit as st
 _FRONT = Path(__file__).resolve().parent.parent
 if str(_FRONT) not in sys.path:
     sys.path.insert(0, str(_FRONT))
+
 from _bootstrap import load_streamlit_common  # noqa: E402
-from ui_theme import fetch_ui_config, render_minimal_sidebar  # noqa: E402
+from page_init import init_app_page, invalidate_page_cache  # noqa: E402
 
 scom = load_streamlit_common(_FRONT)
 
@@ -23,12 +24,11 @@ def main() -> None:
 
     api_base = scom.get_api_base()
     auth = scom.get_api_auth_headers()
-    ui = fetch_ui_config(api_base, auth)
-
-    render_minimal_sidebar(ui, api_base, auth)
+    prof_data = scom.fetch_model_profiles(api_base)
+    ui, _, _ = init_app_page(api_base, auth, prof_data, check_model_status=False, nav_id="brand")
 
     st.title("外观配置")
-    st.caption("配置左上角 Logo 文案、应用标题与 RAG 对话推荐问题；保存后全站同步。")
+    st.caption("配置 Logo、应用标题与 Chat SPA 推荐问题；保存后全站同步。")
 
     with st.form("brand_form"):
         logo_en = st.text_input("Logo 英文", value=str(ui.get("logo_en") or "JNAO"))
@@ -36,7 +36,7 @@ def main() -> None:
         app_title = st.text_input("应用标题", value=str(ui.get("app_title") or ""))
         app_tagline = st.text_area("副标题", value=str(ui.get("app_tagline") or ""), height=80)
         questions_raw = st.text_area(
-            "RAG 推荐问题（每行一条，最多 12 条）",
+            "Chat SPA 推荐问题（每行一条，最多 12 条）",
             value="\n".join(ui.get("suggested_questions") or []),
             height=120,
         )
@@ -60,6 +60,7 @@ def main() -> None:
             if r.status_code != 200:
                 st.error(f"保存失败：{r.status_code} {r.text}")
             else:
+                invalidate_page_cache()
                 if logo_file is not None:
                     files = {"file": (logo_file.name, logo_file.getvalue(), logo_file.type or "image/png")}
                     with scom.http_client(api_base) as c:
@@ -82,6 +83,7 @@ def main() -> None:
             with scom.http_client(api_base) as c:
                 r = c.post("/config/ui/logo", files=files)
             if r.status_code == 200:
+                invalidate_page_cache()
                 st.success("Logo 图片已上传。")
                 st.rerun()
             else:

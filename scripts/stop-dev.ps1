@@ -1,4 +1,4 @@
-# Stop local API (8010) and Streamlit (8501); release ports.
+# Stop local API (8010), admin Streamlit (8501), and Chat SPA (8502); release ports.
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "_port_utils.ps1")
 
