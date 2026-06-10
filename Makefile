@@ -37,7 +37,7 @@ stop-dev:
 	bash scripts/stop-dev.sh
 
 run-frontend:
-	$(PY) -m streamlit run frontend/streamlit_app.py --server.port 8501
+	$(PY) -m streamlit run frontend/admin/streamlit_app.py --server.port 8501
 
 test:
 	$(PY) -m pytest tests/

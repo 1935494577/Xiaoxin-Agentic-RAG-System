@@ -3,7 +3,7 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "_port_utils.ps1")
 
-$ChatDir = Join-Path $Root "web\chat"
+$ChatDir = Join-Path $Root "frontend\chat"
 $ChatPort = $script:DevChatSpaPort
 
 Stop-PortListeners -Port $ChatPort -Label "Jnao Chat"

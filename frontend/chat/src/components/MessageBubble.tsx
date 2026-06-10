@@ -1,3 +1,4 @@
+import { memo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ChatMessage } from "../api/client";
@@ -55,7 +56,7 @@ function resolveAnswerMode(
   return null;
 }
 
-export default function MessageBubble({
+function MessageBubble({
   message,
   userLabel = "你",
   streaming,
@@ -111,3 +112,5 @@ export default function MessageBubble({
     </div>
   );
 }
+
+export default memo(MessageBubble);

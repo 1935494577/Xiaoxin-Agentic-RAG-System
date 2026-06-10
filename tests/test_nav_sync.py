@@ -10,8 +10,8 @@ from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "enterprise_rag" / "src"
-STREAMLIT_APP = ROOT / "frontend" / "streamlit_app.py"
-CLIENT_TS = ROOT / "web" / "chat" / "src" / "api" / "client.ts"
+STREAMLIT_APP = ROOT / "frontend" / "admin" / "streamlit_app.py"
+CLIENT_TS = ROOT / "frontend" / "chat" / "src" / "api" / "client.ts"
 
 
 def _load_nav_config():

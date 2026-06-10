@@ -18,14 +18,14 @@ AUTH_REQUIRED = "访问被拒绝，请检查网关密钥配置。"
 
 
 def _api_src_on_path() -> None:
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
     src = str(root / "enterprise_rag" / "src")
     if src not in sys.path:
         sys.path.insert(0, src)
 
 
 def _env_api_base() -> str:
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
     env_path = root / ".env"
     if env_path.is_file():
         for line in env_path.read_text(encoding="utf-8").splitlines():

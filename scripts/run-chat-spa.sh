@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 . "$SCRIPT_DIR/_port_utils.sh"
 
-CHAT_DIR="$ROOT/web/chat"
+CHAT_DIR="$ROOT/frontend/chat"
 
 if ! command -v npm >/dev/null 2>&1; then
   echo "npm not found. Install Node.js LTS (https://nodejs.org)." >&2

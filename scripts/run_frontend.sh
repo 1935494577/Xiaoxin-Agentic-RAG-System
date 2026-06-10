@@ -12,7 +12,7 @@ trap 'stop_port_listeners "$DEV_FRONTEND_PORT" "Streamlit frontend"' EXIT INT TE
 
 echo "Frontend: http://127.0.0.1:${DEV_FRONTEND_PORT}  (save file to refresh, Ctrl+C to stop)"
 cd "$ROOT"
-exec "$PY" -m streamlit run frontend/streamlit_app.py \
+exec "$PY" -m streamlit run frontend/admin/streamlit_app.py \
   --server.port "$DEV_FRONTEND_PORT" \
   --server.runOnSave true \
   "$@"

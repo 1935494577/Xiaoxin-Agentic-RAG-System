@@ -14,7 +14,7 @@ import streamlit as st
 def _fallback_nav() -> dict[str, Any]:
     """Single source: api.nav_config.build_nav_config (API down)."""
     try:
-        src = Path(__file__).resolve().parents[1] / "enterprise_rag" / "src"
+        src = Path(__file__).resolve().parents[2] / "enterprise_rag" / "src"
         if str(src) not in sys.path:
             sys.path.insert(0, str(src))
         from api.nav_config import build_nav_config

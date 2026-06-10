@@ -26,7 +26,7 @@ ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 PY="$(get_dev_python)"
 SRC="$ROOT/enterprise_rag/src"
-CHAT_DIR="$ROOT/web/chat"
+CHAT_DIR="$ROOT/frontend/chat"
 PIDS=""
 
 cleanup() {
@@ -70,7 +70,7 @@ fi
 
 if [[ "$NO_ADMIN" -eq 0 ]]; then
   echo "Starting Streamlit admin on port ${DEV_FRONTEND_PORT}..."
-  (cd "$ROOT" && "$PY" -m streamlit run frontend/streamlit_app.py \
+  (cd "$ROOT" && "$PY" -m streamlit run frontend/admin/streamlit_app.py \
     --server.port "$DEV_FRONTEND_PORT" \
     --server.runOnSave true) &
   PIDS="$PIDS $!"

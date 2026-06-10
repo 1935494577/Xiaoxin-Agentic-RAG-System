@@ -72,6 +72,8 @@ export default function App() {
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
+  const initDone = useRef(false);
+
 
 
   const refreshSessions = useCallback(async () => {
@@ -88,6 +90,8 @@ export default function App() {
 
   useEffect(() => {
 
+    if (initDone.current) return;
+
     const stored = localStorage.getItem(HYBRID_KEY);
 
     if (stored === "1") {
@@ -100,39 +104,27 @@ export default function App() {
 
     }
 
-    fetchNav().then(setNav).catch(() => setNav(null));
-
-    fetchUiConfig()
-
-      .then((ui) => {
-
-        if (stored === null && typeof ui.hybrid_expert_mode === "boolean") {
-
-          setHybridExpert(ui.hybrid_expert_mode);
-
+    Promise.all([
+      fetchNav().then(setNav).catch(() => setNav(null)),
+      fetchUiConfig()
+        .then((ui) => {
+          if (stored === null && typeof ui.hybrid_expert_mode === "boolean") {
+            setHybridExpert(ui.hybrid_expert_mode);
+          }
+          if (Array.isArray(ui.suggested_questions)) {
+            setSuggestedQuestions(ui.suggested_questions.filter((q) => String(q).trim()).slice(0, 12));
+          }
+        })
+        .catch(() => undefined),
+      refreshSessions().then((rows) => {
+        if (rows.length && !sessionId) {
+          setSessionId(rows[0].id);
         }
+      }),
+    ]).then(() => { initDone.current = true; });
 
-        if (Array.isArray(ui.suggested_questions)) {
-
-          setSuggestedQuestions(ui.suggested_questions.filter((q) => String(q).trim()).slice(0, 12));
-
-        }
-
-      })
-
-      .catch(() => undefined);
-
-    refreshSessions().then((rows) => {
-
-      if (rows.length && !sessionId) {
-
-        setSessionId(rows[0].id);
-
-      }
-
-    });
-
-  }, [refreshSessions, sessionId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
 
 
@@ -351,7 +343,7 @@ export default function App() {
 
         ...messages,
 
-        ...(streamText || streaming ? [{ role: "assistant" as const, content: streamText }] : []),
+        ...(streamText ? [{ role: "assistant" as const, content: streamText }] : []),
 
       ]
 
@@ -447,7 +439,7 @@ export default function App() {
 
                 <MessageBubble
 
-                  key={i}
+                  key={m.id || i}
 
                   message={m}
 

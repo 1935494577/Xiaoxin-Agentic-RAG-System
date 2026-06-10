@@ -1,7 +1,7 @@
 """
 知识库 — 管理后台（对话入口：Jnao Chat 8502）。
 
-本页: python -m streamlit run frontend/streamlit_app.py --server.port 8501
+本页: python -m streamlit run frontend/admin/streamlit_app.py --server.port 8501
 主入口: http://127.0.0.1:8502  （Jnao Chat）
 """
 

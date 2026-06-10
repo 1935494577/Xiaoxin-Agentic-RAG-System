@@ -14,7 +14,7 @@ class AdminPageSpec(TypedDict, total=False):
     default: bool
 
 
-# Single registry — keep in sync with frontend/streamlit_app.py pages list.
+# Single registry — keep in sync with frontend/admin/streamlit_app.py pages list.
 ADMIN_PAGES: list[AdminPageSpec] = [
     {"id": "ingest", "label": "数据入库", "url_path": "", "module": "pages/ingest.py", "default": True},
     {"id": "processing", "label": "工具", "url_path": "processing", "module": "pages/processing_config.py"},

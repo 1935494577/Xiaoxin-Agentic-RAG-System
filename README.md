@@ -16,7 +16,7 @@
 | **对话智能体** | LangGraph 与非流式 `/chat`；**SSE 流式** `/chat/stream`；**混合专家模式**（KB 优先、未命中静默通用兜底）；引文按文件去重 |
 | **HTTP API** | FastAPI：健康检查、入库（含 dedup 统计）、检索调试、流式对话、会话记忆、可插拔提示词、模型/向量库/UI 配置（`api`） |
 | **安全** | 可选 `RAG_API_SECRET`、CORS、可信 Host、安全头；注入检测与按来源权限（`security`） |
-| **前端** | **Jnao Chat** React SPA（`web/chat`，8502）；**Streamlit 管理后台**（8501）：入库、工具、提示词、模型、记忆、Trace 等（`frontend`） |
+| **前端** | **Jnao Chat** React SPA（`frontend/chat`，8502）；**Streamlit 管理后台**（8501）：入库、工具、提示词、模型、记忆、Trace 等（`frontend/admin`） |
 | **评测与追踪** | 可选 LangSmith / 本地 JSONL trace；`scripts/eval_ingest_dedup.py` 检索去重 A/B 评估 |
 | **容器与脚本** | `Dockerfile`、`docker-compose.yml`、`Makefile`；Windows `.ps1` 与 **macOS/Linux `.sh`** 一键启停 |
 
@@ -72,8 +72,9 @@ xiaoxin_RAG/
 │       ├── evaluation/
 │       ├── config.py
 │       └── runtime_device.py
-├── frontend/                    # Streamlit 管理后台（pages/）
-├── web/chat/                    # Jnao Chat React SPA（Vite，端口 8502）
+├── frontend/
+│   ├── admin/                  # Streamlit 管理后台（pages/）
+│   └── chat/                   # Jnao Chat React SPA（Vite，端口 8502）
 ├── scripts/                     # 安装、启停 API/前端/Chat、评测与预下载
 └── tests/                       # pytest 用例
 ```
@@ -192,7 +193,7 @@ cd <仓库根目录>
 |------|------|------|
 | API | 8010 | FastAPI / Uvicorn |
 | 管理后台 | 8501 | Streamlit |
-| Jnao Chat | 8502 | React SPA（`web/chat`） |
+| Jnao Chat | 8502 | React SPA（`frontend/chat`） |
 
 ### 8. Docker（可选）
 
@@ -231,6 +232,7 @@ cd <仓库根目录>
 ## 更多文档
 
 - 安全与网关：**`docs/deploy_security.md`**
+- 变更记录：**`docs/changelog.md`**
 
 ## 许可证
 

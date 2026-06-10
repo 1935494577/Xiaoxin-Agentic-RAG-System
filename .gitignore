@@ -51,3 +51,7 @@ enterprise_rag/data/processed/**
 !enterprise_rag/data/processed/.gitkeep
 enterprise_rag/data/doc_registry.json
 enterprise_rag/data/chunk_dedup_index.json
+# 用户上传的原始文档（保留目录 .gitkeep 和示例）
+enterprise_rag/data/raw/*
+!enterprise_rag/data/raw/.gitkeep
+!enterprise_rag/data/raw/sample.txt

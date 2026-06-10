@@ -14,7 +14,7 @@ $ApiPort = $script:DevApiPort
 $AdminPort = $script:DevFrontendPort
 $ChatPort = $script:DevChatSpaPort
 $Src = Join-Path $Root "enterprise_rag\src"
-$ChatDir = Join-Path $Root "web\chat"
+$ChatDir = Join-Path $Root "frontend\chat"
 
 Stop-DevPorts
 
@@ -40,7 +40,7 @@ $adminProc = $null
 if (-not $NoAdmin) {
     Write-Host "Starting Streamlit admin on port $AdminPort..."
     $adminProc = Start-Process -FilePath $Py -ArgumentList @(
-        "-m", "streamlit", "run", "frontend/streamlit_app.py",
+        "-m", "streamlit", "run", "frontend/admin/streamlit_app.py",
         "--server.port", "$AdminPort",
         "--server.runOnSave", "true"
     ) -WorkingDirectory $Root -PassThru -WindowStyle Normal
