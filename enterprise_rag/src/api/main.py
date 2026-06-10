@@ -20,6 +20,8 @@ from agent.graph import run_agent
 from agent.stream_chat import stream_rag_chat
 from agent.conversation_context import resolve_chat_history
 from api.chat_memory import chat_memory_settings
+from api.prompt_config_store import public_prompt_config, save_prompt_config
+from api.routing_mode import apply_hybrid_expert_memory, resolve_hybrid_expert_mode
 from api.stream_retrieval import build_stream_retrieval_state, resolve_stream_fast_mode
 from api.auth_middleware import APIAuthMiddleware, SecurityHeadersMiddleware
 from api.chat_session_store import (
@@ -66,6 +68,8 @@ from api.schemas import (
     PreviewResponse,
     ProcessingToolsPublic,
     ProcessingToolsUpdate,
+    PromptConfigPublic,
+    PromptConfigUpdate,
     PublicConfigResponse,
     RetrieveHit,
     RetrieveRequest,
@@ -243,6 +247,27 @@ def update_processing_tools_config(body: ProcessingToolsUpdate):
     patch = body.model_dump(exclude_unset=True)
     save_processing_config(patch)
     return ProcessingToolsPublic.model_validate(public_processing_config())
+
+
+@app.get("/config/prompts", response_model=PromptConfigPublic)
+def get_prompt_config(
+    mode: str = Query(default="kb", pattern="^(kb|general)$"),
+    fast: bool = Query(default=False),
+):
+    return PromptConfigPublic.model_validate(public_prompt_config(mode=mode, fast=fast))
+
+
+@app.put("/config/prompts", response_model=PromptConfigPublic)
+def update_prompt_config(
+    body: PromptConfigUpdate,
+    mode: str = Query(default="kb", pattern="^(kb|general)$"),
+    fast: bool = Query(default=False),
+):
+    raw_slots = None
+    if body.slots is not None:
+        raw_slots = [s.model_dump(exclude_unset=True) for s in body.slots]
+    save_prompt_config(slots=raw_slots, reset_defaults=bool(body.reset_defaults))
+    return PromptConfigPublic.model_validate(public_prompt_config(mode=mode, fast=fast))
 
 
 @app.get("/config/vector-stores", response_model=VectorStoreListResponse)
@@ -546,7 +571,8 @@ def chat_stream(req: ChatRequest):
         )
 
     fast = resolve_stream_fast_mode(req.stream_fast_mode)
-    mem = chat_memory_settings()
+    hybrid = resolve_hybrid_expert_mode(req.hybrid_expert_mode)
+    mem = apply_hybrid_expert_memory(chat_memory_settings(), hybrid)
     history = _resolve_request_history(req, mem)
     state: dict[str, Any] = {
         "question": req.message,
@@ -555,6 +581,8 @@ def chat_stream(req: ChatRequest):
         "allowed_sources": req.allowed_sources,
         "history": history,
         "memory_config": mem,
+        "quiet_routing": True,
+        "hybrid_expert_mode": hybrid,
         "llm_temperature_answer": req.temperature if req.temperature is not None else 0.2,
         "llm_max_tokens_rewrite": req.max_tokens_rewrite if req.max_tokens_rewrite is not None else 128,
         "llm_max_tokens_answer": req.max_tokens_answer,

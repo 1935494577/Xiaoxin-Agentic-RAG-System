@@ -11,7 +11,7 @@ from agent.answer_prompts import (
     kb_system_prompt,
     kb_user_content,
 )
-from agent.kb_judge import answer_indicates_kb_miss
+from agent.kb_judge import answer_indicates_kb_miss, should_attach_citations
 from agent.answer_router import resolve_answer_mode
 from agent.context_format import format_source_citation, source_ref_dict
 from agent.conversation_context import build_llm_messages
@@ -35,6 +35,8 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
     history: list[dict[str, Any]] = list(state.get("history") or [])
     mem = state.get("memory_config") or {}
     fast = bool(state.get("stream_fast_mode"))
+    prompt_slots = mem.get("prompt_slots")
+    hybrid = bool(state.get("hybrid_expert_mode"))
     llm_runtime = {
         "llm_api_key": state.get("llm_api_key"),
         "llm_api_base": state.get("llm_api_base"),
@@ -44,8 +46,10 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
 
     trace = new_stream_tracer(state)
     trace_err: str | None = None
+    quiet = bool(state.get("quiet_routing"))
 
-    yield _evt({"type": "status", "phase": "retrieving", "trace_id": trace.trace_id})
+    if not quiet:
+        yield _evt({"type": "status", "phase": "retrieving", "trace_id": trace.trace_id})
 
     try:
         with trace.span(
@@ -97,35 +101,25 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
         yield _evt({"type": "error", "message": "未配置 API Key", "trace_id": trace.trace_id})
         return
 
-    yield _evt(
-        {
-            "type": "status",
-            "phase": "generating",
-            "answer_mode": answer_mode,
-            "trace_id": trace.trace_id,
-        }
+    if not quiet:
+        yield _evt(
+            {
+                "type": "status",
+                "phase": "generating",
+                "answer_mode": answer_mode,
+                "trace_id": trace.trace_id,
+            }
+        )
+
+    client, model, temp, mt = _llm_client(state, api_key, api_base)
+
+    may_post_fallback = (
+        answer_mode == "kb"
+        and hybrid
+        and bool(mem.get("kb_post_stream_fallback", False))
+        and bool(mem.get("general_fallback_enabled", True))
     )
-
-    if answer_mode == "kb":
-        system = kb_system_prompt(fast=fast)
-        user_content = kb_user_content(ctx, state["question"])
-    else:
-        system = general_system_prompt()
-        user_content = general_user_content(state["question"])
-
-    messages = build_llm_messages(system=system, history=history, user_content=user_content)
-
-    headers = state.get("llm_extra_headers")
-    client_kw: dict[str, Any] = {"api_key": api_key, "base_url": api_base}
-    if isinstance(headers, dict) and headers:
-        client_kw["default_headers"] = headers
-    client = OpenAI(**client_kw)
-    model = state.get("chat_model") or settings.openai_chat_model
-    temp = float(state.get("llm_temperature_answer") if state.get("llm_temperature_answer") is not None else 0.2)
-    kw: dict[str, Any] = {"model": model, "messages": messages, "temperature": temp, "stream": True}
-    mt = state.get("llm_max_tokens_answer")
-    if mt is not None:
-        kw["max_tokens"] = int(mt)
+    fell_back_to_general = False
 
     parts: list[str] = []
     try:
@@ -135,13 +129,26 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
             inputs={
                 "model": model,
                 "answer_mode": answer_mode,
-                "message_count": len(messages),
+                "buffered_kb": may_post_fallback,
                 "stream": True,
             },
         ) as draft_out:
+            if answer_mode == "kb":
+                system = kb_system_prompt(fast=fast, slots=prompt_slots)
+                user_content = kb_user_content(ctx, state["question"])
+            else:
+                system = general_system_prompt(slots=prompt_slots)
+                user_content = general_user_content(state["question"])
+
+            messages = build_llm_messages(system=system, history=history, user_content=user_content)
+            kw = _gen_kw(model, messages, temp, mt)
+
             try:
-                for evt in _stream_tokens(client, kw, parts):
-                    yield evt
+                if may_post_fallback:
+                    for _ in _stream_tokens(client, kw, parts, emit=False):
+                        pass
+                else:
+                    yield from _stream_tokens(client, kw, parts, emit=True)
             except Exception as e:
                 trace_err = str(e)
                 raise
@@ -155,44 +162,25 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
     answer = "".join(parts).strip()
     verified = True
 
-    # 兜底：仅当显式开启 kb_post_stream_fallback 时才二次 LLM（默认关，避免 draft+fallback）
-    if (
-        answer_mode == "kb"
-        and bool(mem.get("kb_post_stream_fallback", False))
-        and bool(mem.get("general_fallback_enabled", True))
-        and answer_indicates_kb_miss(answer)
-    ):
-        yield _evt(
-            {
-                "type": "status",
-                "phase": "fallback",
-                "answer_mode": "general",
-                "trace_id": trace.trace_id,
-            }
-        )
+    if may_post_fallback and answer_indicates_kb_miss(answer):
         answer_mode = "general"
+        fell_back_to_general = True
         meta = []
         ctx = []
         parts = []
-        system = general_system_prompt()
+        system = general_system_prompt(slots=prompt_slots)
         user_content = general_user_content(state["question"])
         messages = build_llm_messages(system=system, history=history, user_content=user_content)
-        gen_kw: dict[str, Any] = {
-            "model": model,
-            "messages": messages,
-            "temperature": temp,
-            "stream": True,
-        }
-        if mt is not None:
-            gen_kw["max_tokens"] = int(mt)
+        gen_kw = _gen_kw(model, messages, temp, mt)
         with trace.span("fallback", "llm", inputs={"model": model, "stream": True}) as fb_out:
             try:
-                for evt in _stream_tokens(client, gen_kw, parts):
-                    yield evt
+                yield from _stream_tokens(client, gen_kw, parts, emit=True)
                 answer = "".join(parts).strip()
                 fb_out.update({"answer_len": len(answer)})
             except Exception:
                 pass
+    elif may_post_fallback:
+        yield from _replay_tokens(parts)
 
     if answer_mode == "kb" and bool(mem.get("stream_verifier_enabled", False)):
         runtime = {
@@ -201,7 +189,7 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
             "chat_model": model,
             "llm_temperature_verifier": state.get("llm_temperature_verifier"),
             "llm_max_tokens_verifier": state.get("llm_max_tokens_verifier"),
-            "llm_extra_headers": headers,
+            "llm_extra_headers": state.get("llm_extra_headers"),
         }
         with trace.span(
             "verifier",
@@ -219,11 +207,15 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
             verified = bool(vout.get("verified", True))
             ver_out.update({"verified": verified})
 
-    refs = [m for m in meta if m.get("parent_id")] if answer_mode == "kb" else []
+    attach = should_attach_citations(
+        answer_mode=answer_mode,
+        answer=answer,
+        contexts_meta=meta,
+    )
+    refs = [m for m in meta if m.get("parent_id")] if attach else []
     sources = [format_source_citation(m) for m in refs]
     source_refs = [source_ref_dict(m) for m in refs]
-    foot = "\n\n引用: " + "; ".join(sources) if sources and verified else ""
-    full_answer = answer + foot
+    full_answer = answer
 
     done_payload = {
         "type": "done",
@@ -240,6 +232,7 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
             "answer_mode": answer_mode,
             "verified": verified,
             "source_count": len(sources),
+            "kb_fallback": fell_back_to_general,
             "trace_id": trace.trace_id,
         },
         error=trace_err,
@@ -247,14 +240,54 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
     yield _evt(done_payload)
 
 
-def _stream_tokens(client: OpenAI, kw: dict[str, Any], parts: list[str]) -> Iterator[str]:
-    """Yield SSE token events; append text to parts."""
+def _llm_client(
+    state: dict[str, Any],
+    api_key: str,
+    api_base: str,
+) -> tuple[OpenAI, str, float, int | None]:
+    headers = state.get("llm_extra_headers")
+    client_kw: dict[str, Any] = {"api_key": api_key, "base_url": api_base}
+    if isinstance(headers, dict) and headers:
+        client_kw["default_headers"] = headers
+    client = OpenAI(**client_kw)
+    model = state.get("chat_model") or settings.openai_chat_model
+    temp = float(state.get("llm_temperature_answer") if state.get("llm_temperature_answer") is not None else 0.2)
+    mt = state.get("llm_max_tokens_answer")
+    mt_int = int(mt) if mt is not None else None
+    return client, model, temp, mt_int
+
+
+def _gen_kw(
+    model: str,
+    messages: list[dict[str, Any]],
+    temp: float,
+    max_tokens: int | None,
+) -> dict[str, Any]:
+    kw: dict[str, Any] = {"model": model, "messages": messages, "temperature": temp, "stream": True}
+    if max_tokens is not None:
+        kw["max_tokens"] = max_tokens
+    return kw
+
+
+def _stream_tokens(
+    client: OpenAI,
+    kw: dict[str, Any],
+    parts: list[str],
+    *,
+    emit: bool = True,
+) -> Iterator[str]:
     stream = client.chat.completions.create(**kw)
     for chunk in stream:
         delta = chunk.choices[0].delta.content or ""
         if not delta:
             continue
         parts.append(delta)
+        if emit:
+            yield _evt({"type": "token", "content": delta})
+
+
+def _replay_tokens(parts: list[str]) -> Iterator[str]:
+    for delta in parts:
         yield _evt({"type": "token", "content": delta})
 
 

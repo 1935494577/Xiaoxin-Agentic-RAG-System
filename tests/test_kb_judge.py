@@ -95,3 +95,19 @@ def test_hybrid_high_no_rerank_uses_llm_judge():
 
 def test_kb_miss_detection():
     assert answer_indicates_kb_miss("根据参考资料，资料不足，无法确认。")
+    assert answer_indicates_kb_miss(
+        "喵~很抱歉呀，我还是不认识「永雏塔菲」呢，知识库里没有相关的内容喵(｡•́︿•̀｡)"
+    )
+
+
+def test_should_attach_citations():
+    from agent.kb_judge import should_attach_citations
+
+    meta = [{"parent_id": "p1", "source": "a.txt"}]
+    assert should_attach_citations(answer_mode="kb", answer="根据资料，扫描速记需抽检。", contexts_meta=meta)
+    assert not should_attach_citations(
+        answer_mode="kb",
+        answer="知识库中没有相关资料，无法回答。",
+        contexts_meta=meta,
+    )
+    assert not should_attach_citations(answer_mode="general", answer="永雏塔菲是虚拟主播。", contexts_meta=meta)

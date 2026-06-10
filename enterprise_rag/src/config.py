@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     chat_trace_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "chat_trace.jsonl"
     model_profiles_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "model_profiles.json"
     ui_config_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "ui_config.json"
+    prompt_config_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "prompt_config.json"
     processing_tools_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "processing_tools.json"
     ui_branding_dir: Path = _REPO_ROOT / "enterprise_rag" / "data" / "branding"
 
@@ -159,6 +160,16 @@ def _apply_hf_hub_cache() -> None:
 
 
 _apply_hf_hub_cache()
+
+
+def _apply_modelscope_env() -> None:
+    if os.name == "nt":
+        os.environ.setdefault("MODELSCOPE_SYMLINK_FILES_IN_ROOT_ENABLED", "false")
+        os.environ.setdefault("MODELSCOPE_SYMLINK", "0")
+    os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+
+
+_apply_modelscope_env()
 
 
 def _apply_hf_local_files_only() -> None:

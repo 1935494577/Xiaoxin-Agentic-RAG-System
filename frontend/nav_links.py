@@ -53,7 +53,7 @@ def render_unified_nav(active_id: str, nav: dict[str, Any], *, logo_src: str | N
         parts.append(f'<a class="{cls}" href="{href}" target="_self">{label}</a>')
 
     chat_url = html.escape(str(nav.get("chat_url") or ""))
-    brand = "企业知识库"
+    brand = "知识库"
     if logo_src:
         brand = (
             f'<img class="unified-nav-logo" src="{html.escape(logo_src)}" alt="logo"/>'
@@ -63,7 +63,7 @@ def render_unified_nav(active_id: str, nav: dict[str, Any], *, logo_src: str | N
         '<div class="unified-nav">'
         f'<div class="unified-nav-brand">{brand}</div>'
         '<nav class="unified-nav-links">' + "".join(parts) + "</nav>"
-        f'<a class="unified-nav-cta" href="{chat_url}">进入对话</a>'
+        f'<a class="unified-nav-cta" href="{chat_url}">Jnao Chat</a>'
         "</div>"
     )
     st.markdown(bar, unsafe_allow_html=True)

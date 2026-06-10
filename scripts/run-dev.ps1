@@ -47,7 +47,7 @@ if (-not $NoAdmin) {
 }
 
 Write-Host ""
-Write-Host "  >>> 主入口（对话）: http://127.0.0.1:$ChatPort"
+Write-Host "  >>> Jnao Chat:      http://127.0.0.1:$ChatPort"
 Write-Host "  API:              http://127.0.0.1:$ApiPort"
 if ($adminProc) { Write-Host "  管理后台:         http://127.0.0.1:$AdminPort" }
 Write-Host ""

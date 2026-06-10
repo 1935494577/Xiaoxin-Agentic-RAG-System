@@ -17,7 +17,7 @@ DEFAULT_UI: dict[str, Any] = {
     "logo_en": "JNAO",
     "logo_cn": "劲脑",
     "has_logo_image": False,
-    "app_title": "企业知识库助手",
+    "app_title": "入库小帮手",
     "app_tagline": "把文档放进知识库，用自然语言提问；无需编写代码。",
     "suggested_questions": [
         "1-3年级超脑阅读要求是什么？",
@@ -403,7 +403,7 @@ def render_minimal_sidebar(cfg: dict[str, Any], api_base: str, headers: dict[str
 
 
 def render_page_header(cfg: dict[str, Any], *, compact: bool = False) -> None:
-    title = str(cfg.get("app_title") or "企业知识库助手")
+    title = str(cfg.get("app_title") or "入库小帮手")
     tagline = str(cfg.get("app_tagline") or "")
     if compact:
         tagline_html = f"<p>{tagline}</p>" if tagline else ""

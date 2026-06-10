@@ -1,4 +1,4 @@
-"""数据处理工具配置（管理员）。"""
+"""工具配置（管理员）。"""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ def main() -> None:
     prof_data = scom.fetch_model_profiles(api_base)
     init_app_page(api_base, auth, prof_data, check_model_status=False, nav_id="processing")
 
-    st.title("数据处理工具")
+    st.title("工具")
     st.caption("入库时按文件类型选择解析/清洗工具；已清洗模式可启用大模型自动选工具。")
 
     data = _fetch_tools(api_base)

@@ -197,7 +197,7 @@ def main() -> None:
                     invalidate_page_cache()
                     st.success(
                         f"已{'更新' if editing_id else '保存'}「{saved.get('name', '')}」。"
-                        "请回到「企业知识库助手」，在侧栏选择该接入方式。"
+                        "请回到 Jnao Chat，在侧栏选择该接入方式。"
                     )
                     _clear_form()
                     st.rerun()

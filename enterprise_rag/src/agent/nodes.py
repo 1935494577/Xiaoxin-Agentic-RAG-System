@@ -134,11 +134,14 @@ def answer_node(state: AgentState) -> dict[str, Any]:
     if int(state.get("retry_count") or 0) > 0:
         retry_note = "上一轮未通过一致性校验，请更严格依据资料重写。\n"
 
+    mem = state.get("memory_config") or {}
+    prompt_slots = mem.get("prompt_slots")
+
     if answer_mode == "kb":
-        system = kb_system_prompt(fast=bool(state.get("stream_fast_mode")))
+        system = kb_system_prompt(fast=bool(state.get("stream_fast_mode")), slots=prompt_slots)
         user_content = retry_note + kb_user_content(ctx, state["question"])
     else:
-        system = general_system_prompt()
+        system = general_system_prompt(slots=prompt_slots)
         user_content = retry_note + general_user_content(state["question"])
 
     messages = build_llm_messages(system=system, history=history, user_content=user_content)
@@ -211,8 +214,16 @@ def citer_node(state: AgentState) -> dict[str, Any]:
     sources = [format_source_citation(m) for m in refs]
     source_refs = [source_ref_dict(m) for m in refs]
     ans = state.get("answer") or ""
-    foot = "\n\n引用: " + "; ".join(sources) if sources else ""
-    return {"sources": sources, "source_refs": source_refs, "answer": ans + foot}
+    from agent.kb_judge import should_attach_citations
+
+    if not should_attach_citations(
+        answer_mode="kb",
+        answer=ans,
+        contexts_meta=meta,
+    ):
+        sources = []
+        source_refs = []
+    return {"sources": sources, "source_refs": source_refs, "answer": ans}
 
 
 def route_after_router(state: AgentState) -> str:

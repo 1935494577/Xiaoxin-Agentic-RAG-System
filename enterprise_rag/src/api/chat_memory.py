@@ -8,6 +8,8 @@ from api.ui_config_store import load_ui_config
 
 
 def chat_memory_settings() -> dict[str, Any]:
+    from api.prompt_config_store import load_prompt_slots
+
     ui = load_ui_config()
     return {
         "max_history_turns": int(ui.get("max_history_turns") or 6),
@@ -20,4 +22,5 @@ def chat_memory_settings() -> dict[str, Any]:
         "stream_verifier_enabled": bool(ui.get("stream_verifier_enabled", False)),
         "graph_verifier_enabled": bool(ui.get("graph_verifier_enabled", False)),
         "long_term_memory_enabled": bool(ui.get("long_term_memory_enabled", True)),
+        "prompt_slots": load_prompt_slots(),
     }

@@ -8,11 +8,14 @@ type Props = {
   userLabel?: string;
   streaming?: boolean;
   streamingMode?: "kb" | "general" | null;
+  hideModeTag?: boolean;
 };
 
 function stripFootnotes(text: string): string {
-  const idx = text.indexOf("\n\n引用:");
-  return idx >= 0 ? text.slice(0, idx).trim() : text;
+  // 兼容旧消息：后端曾追加「引用: file#p_xxx; …」；引用由下方 sources-row 展示
+  return text
+    .replace(/\r?\n(\r?\n)?引用[:：][^\n]*(?:[;\n][^\n]*)*$/u, "")
+    .trim();
 }
 
 function sourceLabels(message: ChatMessage): string[] {
@@ -43,11 +46,12 @@ export default function MessageBubble({
   userLabel = "你",
   streaming,
   streamingMode,
+  hideModeTag = false,
 }: Props) {
   const isUser = message.role === "user";
   const body = isUser ? message.content : stripFootnotes(message.content);
   const sources = sourceLabels(message);
-  const answerMode = !isUser ? resolveAnswerMode(message, streamingMode) : null;
+  const answerMode = !isUser && !hideModeTag ? resolveAnswerMode(message, streamingMode) : null;
 
   return (
     <div className={"message-row" + (isUser ? " user" : " assistant")}>
@@ -64,7 +68,15 @@ export default function MessageBubble({
           {isUser ? (
             body
           ) : (
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{body || (streaming ? "" : "…")}</ReactMarkdown>
+            <ReactMarkdown
+              remarkPlugins={[[remarkGfm, { singleTilde: false }]]}
+              components={{
+                // LLM 人设（猫娘等）常用 ~ 作语气装饰，勿渲染为删除线
+                del: ({ children }) => <span className="md-plain">{children}</span>,
+              }}
+            >
+              {body || (streaming ? "" : "…")}
+            </ReactMarkdown>
           )}
         </div>
         {!isUser && sources.length > 0 && (

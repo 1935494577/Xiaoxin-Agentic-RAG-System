@@ -27,8 +27,8 @@ def main() -> None:
 
     st.title("对话记忆")
     st.caption(
-        "性能默认：8502 快速流式 + 路由 LLM 判断；同步 Verifier / 流式 fallback 默认关闭。"
-        " 修改后需保存；8502 刷新生效，API 配置即时读取。"
+        "Jnao Chat 默认仅知识库检索；用户可在对话框上方开启「混合专家模式」。"
+        " 下方为服务端默认与阈值；修改后需保存。"
     )
 
     c1, c2 = st.columns(2)
@@ -65,9 +65,9 @@ def main() -> None:
         )
     with c2:
         fast = st.toggle(
-            "快速流式（stream_fast_mode，8502 默认）",
+            "内部快速检索（stream_fast_mode）",
             value=bool(ui.get("stream_fast_mode", True)),
-            help="跳过重排、减小 top_k，retrieve 通常更快。",
+            help="跳过重排、减小 top_k；与混合专家模式无关，建议保持开启。",
         )
         long_term = st.toggle(
             "长期记忆（long_term_memory_enabled）",
@@ -75,9 +75,9 @@ def main() -> None:
             help="开启后，请求带 session_id 时自动从 SQLite 加载历史。",
         )
         general_fb = st.toggle(
-            "检索不足时走通用（general_fallback_enabled）",
-            value=bool(ui.get("general_fallback_enabled", True)),
-            help="路由阶段：判断资料不足则直接用通用回答。",
+            "全局通用兜底（general_fallback_enabled）",
+            value=bool(ui.get("general_fallback_enabled", False)),
+            help="仅当客户端未传 hybrid_expert_mode 时生效；Jnao Chat 以界面开关为准。",
         )
         llm_judge = st.toggle(
             "LLM 相关性判断（kb_llm_judge）",
@@ -87,7 +87,12 @@ def main() -> None:
         post_fb = st.toggle(
             "流式 KB 后再 fallback（kb_post_stream_fallback）",
             value=bool(ui.get("kb_post_stream_fallback", False)),
-            help="默认关：避免 draft 后再打一次通用 LLM。",
+            help="混合专家模式开启时由客户端自动启用。",
+        )
+        hybrid_default = st.toggle(
+            "混合专家模式默认开（hybrid_expert_mode）",
+            value=bool(ui.get("hybrid_expert_mode", False)),
+            help="新用户首次打开 Jnao Chat 时的默认开关状态。",
         )
         stream_ver = st.toggle(
             "流式 Verifier（stream_verifier_enabled）",
@@ -98,6 +103,20 @@ def main() -> None:
             value=bool(ui.get("graph_verifier_enabled", False)),
             help="LangGraph 校验节点，约 +1s；评测时可开。",
         )
+
+    st.subheader("Jnao Chat 推荐问题")
+    st.caption("空对话页展示，每行一条，最多 12 条。")
+    sq_raw = ui.get("suggested_questions") or []
+    suggested_text = st.text_area(
+        "suggested_questions",
+        value="\n".join(str(x) for x in sq_raw),
+        height=100,
+        placeholder="每行一个问题",
+        label_visibility="collapsed",
+    )
+
+    def _lines(raw: str) -> list[str]:
+        return [ln.strip() for ln in str(raw or "").splitlines() if ln.strip()]
 
     if st.button("保存", type="primary"):
         patch = {
@@ -110,8 +129,10 @@ def main() -> None:
             "long_term_memory_enabled": long_term,
             "general_fallback_enabled": general_fb,
             "kb_post_stream_fallback": post_fb,
+            "hybrid_expert_mode": hybrid_default,
             "stream_verifier_enabled": stream_ver,
             "graph_verifier_enabled": graph_ver,
+            "suggested_questions": _lines(suggested_text)[:12],
         }
         try:
             with scom.http_client(api_base, timeout=15.0) as c:
@@ -126,7 +147,8 @@ def main() -> None:
 
     st.divider()
     st.markdown(
-        "对话界面在 **Chat SPA（8502）**。"
+        "对话界面在 **Jnao Chat（8502）**。"
+        " 提示词请在 **提示词** 页配置。"
         " 发送时传 `session_id` 或 `history` 即可启用多轮记忆。"
     )
 

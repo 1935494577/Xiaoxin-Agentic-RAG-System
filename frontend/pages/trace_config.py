@@ -44,7 +44,7 @@ def main() -> None:
 
     st.title("链路 Trace")
     st.caption(
-        "LangSmith：同步 /chat 为 LangGraph；Chat SPA 8502 流式为 stream_rag_chat（标签 stream）。"
+        "LangSmith：同步 /chat 为 LangGraph；Jnao Chat 8502 流式为 stream_rag_chat（标签 stream）。"
         "修改 .env 后需重启 API。"
     )
 

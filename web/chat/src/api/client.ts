@@ -33,6 +33,7 @@ export type ChatMessage = {
 
 export type StreamEvent =
   | { type: "status"; phase: string; answer_mode?: string; trace_id?: string }
+  | { type: "stream_reset" }
   | { type: "token"; content: string }
   | { type: "error"; message: string; trace_id?: string }
   | {
@@ -58,11 +59,25 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export type UiConfig = {
-  stream_fast_mode?: boolean;
   app_title?: string;
   app_tagline?: string;
   suggested_questions?: string[];
+  stream_fast_mode?: boolean;
+  hybrid_expert_mode?: boolean;
+  ingest_tag_presets?: string[];
 };
+
+/** Keep ids/labels/paths aligned with enterprise_rag/src/api/nav_config.py ADMIN_PAGES */
+export const NAV_FALLBACK_ITEMS: Omit<NavItem, "external">[] = [
+  { id: "ingest", label: "数据入库", href: "" },
+  { id: "processing", label: "工具", href: "/processing" },
+  { id: "vector_store", label: "向量库", href: "/vector_store" },
+  { id: "memory", label: "对话记忆", href: "/memory" },
+  { id: "prompts", label: "提示词", href: "/prompts" },
+  { id: "models", label: "模型", href: "/models" },
+  { id: "trace", label: "链路 Trace", href: "/trace" },
+  { id: "tutorial", label: "教程", href: "/tutorial" },
+];
 
 export async function fetchUiConfig(): Promise<UiConfig> {
   return json<UiConfig>("/config/ui");
@@ -70,15 +85,11 @@ export async function fetchUiConfig(): Promise<UiConfig> {
 
 function navFallbackItems(admin: string, chat: string): NavItem[] {
   return [
-    { id: "chat", label: "对话", href: chat, primary: true },
-    { id: "ingest", label: "数据入库", href: `${admin}/ingest` },
-    { id: "processing", label: "数据处理", href: `${admin}/processing` },
-    { id: "vector_store", label: "向量库", href: `${admin}/vector_store` },
-    { id: "memory", label: "对话记忆", href: `${admin}/memory` },
-    { id: "brand", label: "外观", href: `${admin}/brand` },
-    { id: "models", label: "模型", href: `${admin}/models` },
-    { id: "trace", label: "链路 Trace", href: `${admin}/trace` },
-    { id: "tutorial", label: "教程", href: `${admin}/tutorial` },
+    { id: "chat", label: "Jnao Chat", href: chat, primary: true },
+    ...NAV_FALLBACK_ITEMS.map((item) => ({
+      ...item,
+      href: item.href ? `${admin}${item.href}` : `${admin}/`,
+    })),
   ];
 }
 

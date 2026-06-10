@@ -41,7 +41,7 @@ function Stop-PortListeners {
 function Stop-DevPorts {
     Stop-PortListeners -Port $script:DevApiPort -Label "API"
     Stop-PortListeners -Port $script:DevFrontendPort -Label "Streamlit admin"
-    Stop-PortListeners -Port $script:DevChatSpaPort -Label "Chat SPA"
+    Stop-PortListeners -Port $script:DevChatSpaPort -Label "Jnao Chat"
 }
 
 function Register-DevPortCleanup {
@@ -98,12 +98,12 @@ function Start-DevChatSpa {
     )
     $npm = Get-DevNpmCmd
     if (-not $npm) {
-        Write-Host "WARN: npm.cmd not found — skip Chat SPA. Install Node.js LTS."
+        Write-Host "WARN: npm.cmd not found — skip Jnao Chat. Install Node.js LTS."
         return $null
     }
     $nodeModules = Join-Path $ChatDir "node_modules"
     if (-not (Test-Path $nodeModules)) {
-        Write-Host "Installing Chat SPA dependencies..."
+        Write-Host "Installing Jnao Chat dependencies..."
         Push-Location $ChatDir
         & $npm install
         $installOk = ($LASTEXITCODE -eq 0)
@@ -113,12 +113,12 @@ function Start-DevChatSpa {
             return $null
         }
     }
-    Write-Host "Starting Chat SPA on port $Port..."
+    Write-Host "Starting Jnao Chat on port $Port..."
     $proc = Start-Process -FilePath $npm -ArgumentList @("run", "dev") -WorkingDirectory $ChatDir -PassThru -WindowStyle Normal
     Start-Sleep -Seconds 3
     $listening = Get-PortListenerPids -Port $Port
     if (-not $listening) {
-        Write-Host "WARN: Chat SPA port $Port not listening yet. If needed: .\scripts\run-chat-spa.ps1"
+        Write-Host "WARN: Jnao Chat port $Port not listening yet. If needed: .\scripts\run-chat-spa.ps1"
     }
     return $proc
 }

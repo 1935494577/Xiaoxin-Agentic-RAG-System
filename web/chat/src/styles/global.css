@@ -31,22 +31,6 @@ body {
   min-height: 0;
   background: #fff;
 }
-.chat-header {
-  padding: 12px 24px;
-  border-bottom: 1px solid #eee;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 14px;
-  color: #666;
-}
-.chat-header label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  user-select: none;
-}
 .messages-scroll {
   flex: 1;
   overflow-y: auto;
@@ -70,7 +54,7 @@ body {
   color: #1a1a1a;
   font-weight: 600;
 }
-.suggestion-chips {
+.welcome-suggestions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -78,23 +62,86 @@ body {
   margin-top: 20px;
 }
 .suggestion-chip {
-  border: 1px solid #e5e7eb;
-  background: #fff;
+  border: 1px solid #dce3ec;
+  background: #f7f9fc;
   color: #333;
   border-radius: 999px;
   padding: 8px 14px;
   font-size: 13px;
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  max-width: 100%;
+  text-align: left;
+  line-height: 1.35;
 }
-.suggestion-chip:hover {
-  border-color: #4f46e5;
-  background: #f5f3ff;
+.suggestion-chip:hover:not(:disabled) {
+  border-color: #1565c0;
+  background: #eef4fc;
+}
+.suggestion-chip:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 .composer-wrap {
   border-top: 1px solid #e8e8e8;
   padding: 12px 20px 20px;
   background: #fff;
+}
+.composer-toolbar {
+  max-width: 820px;
+  margin: 0 auto 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+.mode-switch-label {
+  font-size: 13px;
+  color: #333;
+  font-weight: 500;
+}
+.mode-switch-btn {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border: none;
+  border-radius: 999px;
+  background: #d1d5db;
+  padding: 0;
+  cursor: pointer;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.mode-switch-btn.on {
+  background: #4d6bfe;
+}
+.mode-switch-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.mode-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  transition: transform 0.2s;
+}
+.mode-switch-btn.on .mode-switch-knob {
+  transform: translateX(18px);
+}
+.mode-switch-hint {
+  font-size: 12px;
+  color: #888;
 }
 .composer {
   max-width: 820px;

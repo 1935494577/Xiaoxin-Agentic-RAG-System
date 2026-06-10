@@ -34,7 +34,11 @@ class ChatRequest(BaseModel):
     )
     stream_fast_mode: bool | None = Field(
         default=None,
-        description="true=快速流式（跳过重排等）；false=标准流式；None 使用 UI 配置 stream_fast_mode",
+        description="内部快速检索路径；None 使用 UI 配置 stream_fast_mode",
+    )
+    hybrid_expert_mode: bool | None = Field(
+        default=None,
+        description="混合专家模式：true=RAG 未命中可走通用；false=仅 RAG；None 使用 UI 默认",
     )
 
 
@@ -177,7 +181,7 @@ class UiConfigPublic(BaseModel):
     logo_cn: str = "劲脑"
     logo_image_path: str = ""
     has_logo_image: bool = False
-    app_title: str = "企业知识库助手"
+    app_title: str = "入库小帮手"
     app_tagline: str = ""
     suggested_questions: list[str] = Field(default_factory=list)
     supported_upload_extensions: list[str] = Field(default_factory=list)
@@ -188,11 +192,13 @@ class UiConfigPublic(BaseModel):
     kb_min_score: float = 0.55
     kb_min_rerank_score: float = 0.0
     kb_llm_judge: bool = True
-    general_fallback_enabled: bool = True
+    general_fallback_enabled: bool = False
     kb_post_stream_fallback: bool = False
+    hybrid_expert_mode: bool = False
     stream_verifier_enabled: bool = False
     graph_verifier_enabled: bool = False
     long_term_memory_enabled: bool = True
+    ingest_tag_presets: list[str] = Field(default_factory=list)
 
 
 class UiConfigUpdate(BaseModel):
@@ -210,9 +216,11 @@ class UiConfigUpdate(BaseModel):
     kb_llm_judge: bool | None = None
     general_fallback_enabled: bool | None = None
     kb_post_stream_fallback: bool | None = None
+    hybrid_expert_mode: bool | None = None
     stream_verifier_enabled: bool | None = None
     graph_verifier_enabled: bool | None = None
     long_term_memory_enabled: bool | None = None
+    ingest_tag_presets: list[str] | None = None
 
 
 class ProcessingToolPublic(BaseModel):
@@ -230,6 +238,50 @@ class ProcessingToolsPublic(BaseModel):
 class ProcessingToolsUpdate(BaseModel):
     use_llm_router: bool | None = None
     tools: dict[str, dict[str, Any]] | None = None
+
+
+class PromptSlotPublic(BaseModel):
+    id: str
+    label: str
+    description: str = ""
+    category: str = "custom"
+    scope: list[str] = Field(default_factory=lambda: ["all"])
+    enabled: bool = True
+    order: int = 100
+    content: str = ""
+    builtin: bool = False
+    variant: str | None = None
+
+
+class PromptPreviewPublic(BaseModel):
+    mode: str
+    fast: bool = False
+    layers: list[dict[str, str]] = Field(default_factory=list)
+    composed: str = ""
+
+
+class PromptConfigPublic(BaseModel):
+    version: int = 1
+    slots: list[PromptSlotPublic] = Field(default_factory=list)
+    categories: dict[str, str] = Field(default_factory=dict)
+    preview: PromptPreviewPublic | None = None
+
+
+class PromptSlotUpdate(BaseModel):
+    id: str = Field(..., min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_]{0,63}$")
+    label: str | None = Field(default=None, max_length=64)
+    description: str | None = Field(default=None, max_length=256)
+    category: str | None = Field(default=None, max_length=32)
+    scope: list[str] | None = None
+    enabled: bool | None = None
+    order: int | None = Field(default=None, ge=0, le=9999)
+    content: str | None = Field(default=None, max_length=8000)
+    variant: str | None = Field(default=None, max_length=16)
+
+
+class PromptConfigUpdate(BaseModel):
+    slots: list[PromptSlotUpdate] | None = None
+    reset_defaults: bool = False
 
 
 class ChatSessionPublic(BaseModel):

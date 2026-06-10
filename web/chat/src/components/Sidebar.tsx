@@ -25,7 +25,7 @@ export default function Sidebar({
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        <h1>企业知识库助手</h1>
+        <h1>Jnao Chat</h1>
         <div className="sidebar-actions">
           <button type="button" className="primary" onClick={onNew}>
             新建
