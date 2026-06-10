@@ -49,7 +49,19 @@ class Settings(BaseSettings):
     ui_config_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "ui_config.json"
     prompt_config_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "prompt_config.json"
     processing_tools_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "processing_tools.json"
+    doc_registry_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "doc_registry.json"
+    chunk_dedup_index_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "chunk_dedup_index.json"
     ui_branding_dir: Path = _REPO_ROOT / "enterprise_rag" / "data" / "branding"
+
+    # L1/L2 ingest dedup
+    ingest_content_hash_enabled: bool = True
+    ingest_chunk_dedup_enabled: bool = True
+    ingest_chunk_simhash_max_hamming: int = 3
+
+    # L3 retrieval dedup
+    retrieval_dedup_enabled: bool = True
+    retrieval_dedup_similarity: float = 0.88
+    retrieval_mmr_lambda: float = 0.72
 
     parent_chunk_size: int = 1000
     parent_chunk_overlap: int = 200

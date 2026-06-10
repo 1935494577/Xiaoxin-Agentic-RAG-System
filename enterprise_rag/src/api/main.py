@@ -56,6 +56,7 @@ from api.schemas import (
     ChatSessionPublic,
     ChatSessionUpdate,
     FeedbackRequest,
+    IngestDedupStatsResponse,
     IngestResponse,
     IngestTextRequest,
     ModelProfileCreate,
@@ -106,8 +107,15 @@ from document_loader.processing.registry import public_config as public_processi
 from document_loader.processing.registry import save_config as save_processing_config
 from api.nav_config import build_nav_config
 from evaluation.langsmith_trace import configure_tracing, get_trace_status
+from indexing.dedup_text import content_hash
 from indexing.embeddings import embed_texts
 from indexing.es_indexer import delete_parents_by_source, index_parent_documents
+from indexing.ingest_dedup import (
+    check_document_duplicate,
+    filter_parent_child_duplicates,
+    finalize_document_registry,
+    prepare_source_reingest,
+)
 from indexing.milvus_indexer import delete_by_source as milvus_delete_by_source
 from indexing.milvus_indexer import init_vector_db, insert_child_vectors
 
@@ -501,7 +509,12 @@ def retrieve(req: RetrieveRequest):
     from retrieval.hybrid_searcher import hybrid_search
     from security.permissions import filter_by_sources
 
-    rewritten, parents = hybrid_search(req.query, req.user_department, top_k=req.top_k)
+    rewritten, parents = hybrid_search(
+        req.query,
+        req.user_department,
+        top_k=req.top_k,
+        retrieval_dedup=req.retrieval_dedup,
+    )
     parents = filter_by_sources(parents, req.allowed_sources)
     hits = [
         RetrieveHit(
@@ -798,15 +811,55 @@ def _ingest_text(
     processed = settings.data_processed_dir / Path(source).name
     processed.write_text(text, encoding="utf-8")
 
+    l1 = check_document_duplicate(text, source)
+    if l1 and l1.early_exit:
+        st = l1.stats
+        return IngestResponse(
+            chunks_indexed=0,
+            source=source,
+            tags=doc_tags,
+            message=st.message,
+            dedup=IngestDedupStatsResponse(
+                content_hash=st.content_hash,
+                doc_duplicate=True,
+                canonical_source=st.canonical_source,
+                alias_sources=st.alias_sources,
+            ),
+        )
+
+    prepare_source_reingest(source)
     milvus_delete_by_source(source)
     delete_parents_by_source(source)
 
     parents, children = split_parent_child(
         text, source, department, permission_label, tags=doc_tags
     )
+    digest = content_hash(text)
+    plan = filter_parent_child_duplicates(
+        parents, children, source, doc_content_hash=digest
+    )
+    parents = plan.parents
+    children = plan.children
+    dedup_stats = plan.stats
+
     persist_chunks_jsonl(parents, children)
     if not children:
-        return IngestResponse(chunks_indexed=0, source=source, tags=doc_tags)
+        finalize_document_registry(
+            source, text, parent_count=len(parents), child_count=0
+        )
+        return IngestResponse(
+            chunks_indexed=0,
+            source=source,
+            tags=doc_tags,
+            message=dedup_stats.message,
+            dedup=IngestDedupStatsResponse(
+                content_hash=dedup_stats.content_hash or None,
+                skipped_parents=dedup_stats.skipped_parents,
+                skipped_children=dedup_stats.skipped_children,
+                indexed_parents=dedup_stats.indexed_parents,
+                indexed_children=0,
+            ),
+        )
 
     mat = embed_texts([c.text for c in children])
     vectors = mat.tolist()
@@ -831,4 +884,21 @@ def _ingest_text(
         for p in parents
     ]
     index_parent_documents(parent_docs)
-    return IngestResponse(chunks_indexed=len(children), source=source, tags=doc_tags)
+    doc_rec = finalize_document_registry(
+        source, text, parent_count=len(parents), child_count=len(children)
+    )
+    alias_sources = list(doc_rec.alias_sources) if doc_rec else dedup_stats.alias_sources
+    return IngestResponse(
+        chunks_indexed=len(children),
+        source=source,
+        tags=doc_tags,
+        message=dedup_stats.message,
+        dedup=IngestDedupStatsResponse(
+            content_hash=dedup_stats.content_hash or None,
+            skipped_parents=dedup_stats.skipped_parents,
+            skipped_children=dedup_stats.skipped_children,
+            indexed_parents=dedup_stats.indexed_parents,
+            indexed_children=dedup_stats.indexed_children,
+            alias_sources=alias_sources,
+        ),
+    )

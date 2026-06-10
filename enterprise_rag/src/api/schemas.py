@@ -63,6 +63,7 @@ class RetrieveRequest(BaseModel):
     user_department: str = Field(default="general", max_length=64)
     top_k: int = Field(default=5, ge=1, le=20)
     allowed_sources: list[str] | None = None
+    retrieval_dedup: bool | None = None
 
 
 class RetrieveHit(BaseModel):
@@ -87,6 +88,17 @@ class FeedbackRequest(BaseModel):
     correction: str | None = None
 
 
+class IngestDedupStatsResponse(BaseModel):
+    content_hash: str | None = None
+    doc_duplicate: bool = False
+    canonical_source: str | None = None
+    alias_sources: list[str] = Field(default_factory=list)
+    skipped_parents: int = 0
+    skipped_children: int = 0
+    indexed_parents: int = 0
+    indexed_children: int = 0
+
+
 class IngestResponse(BaseModel):
     chunks_indexed: int
     source: str
@@ -96,6 +108,7 @@ class IngestResponse(BaseModel):
     router: str | None = None
     file_type: str | None = None
     message: str | None = None
+    dedup: IngestDedupStatsResponse | None = None
 
 
 class PreviewRequest(BaseModel):
