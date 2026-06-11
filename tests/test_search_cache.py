@@ -11,6 +11,7 @@ from retrieval.search_cache import (
     RedisSearchCache,
     build_search_cache_key,
     get_search_cache,
+    invalidate_search_cache,
 )
 
 
@@ -25,6 +26,17 @@ class _FakeRedis:
     def setex(self, key: str, ttl: int, value: str) -> None:
         self._store[key] = value
         self._ttl[key] = ttl
+
+    def scan_iter(self, *, match: str, count: int = 10):
+        prefix = match[:-1] if match.endswith("*") else match
+        for key in list(self._store):
+            if key.startswith(prefix):
+                yield key
+
+    def delete(self, *keys: str) -> None:
+        for key in keys:
+            self._store.pop(key, None)
+            self._ttl.pop(key, None)
 
 
 def test_build_search_cache_key_is_stable_and_namespaced():
@@ -77,6 +89,30 @@ def test_get_search_cache_returns_null_without_url(monkeypatch):
     monkeypatch.setattr(settings, "redis_url", "")
     monkeypatch.setattr(settings, "redis_search_cache_enabled", True)
     assert isinstance(get_search_cache(), NullSearchCache)
+
+
+def test_redis_search_cache_invalidate_all():
+    fake = _FakeRedis()
+    cache = RedisSearchCache(fake, ttl_seconds=60)
+    cache.set("rag:search:v1:general:aaa", "q", [{"parent_id": "p1"}])
+    cache.set("rag:search:v1:hr:bbb", "q", [{"parent_id": "p2"}])
+    fake.setex("other:key", 60, "{}")
+    cache.invalidate_all()
+    assert fake.get("rag:search:v1:general:aaa") is None
+    assert fake.get("rag:search:v1:hr:bbb") is None
+    assert fake.get("other:key") == "{}"
+
+
+def test_invalidate_search_cache_delegates(monkeypatch):
+    calls: list[str] = []
+
+    class _Cache(NullSearchCache):
+        def invalidate_all(self) -> None:
+            calls.append("yes")
+
+    monkeypatch.setattr("retrieval.search_cache.get_search_cache", lambda: _Cache())
+    invalidate_search_cache()
+    assert calls == ["yes"]
 
 
 def test_get_search_cache_uses_redis_when_configured(monkeypatch):

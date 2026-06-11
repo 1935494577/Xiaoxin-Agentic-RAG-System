@@ -20,12 +20,17 @@ class SearchCache(Protocol):
 
     def set(self, key: str, rewritten_query: str, parents: list[dict[str, Any]]) -> None: ...
 
+    def invalidate_all(self) -> None: ...
+
 
 class NullSearchCache:
     def get(self, key: str) -> tuple[str, list[dict[str, Any]]] | None:
         return None
 
     def set(self, key: str, rewritten_query: str, parents: list[dict[str, Any]]) -> None:
+        return None
+
+    def invalidate_all(self) -> None:
         return None
 
 
@@ -64,6 +69,20 @@ class RedisSearchCache:
             self._client.setex(key, self.ttl_seconds, payload)
         except Exception:
             logger.warning("Redis search cache set failed", exc_info=True)
+
+    def invalidate_all(self) -> None:
+        pattern = "rag:search:v1:*"
+        try:
+            batch: list[str] = []
+            for key in self._client.scan_iter(match=pattern, count=200):
+                batch.append(key)
+                if len(batch) >= 200:
+                    self._client.delete(*batch)
+                    batch.clear()
+            if batch:
+                self._client.delete(*batch)
+        except Exception:
+            logger.warning("Redis search cache invalidate failed", exc_info=True)
 
 
 def build_search_cache_key(query: str, user_department: str, **search_params: Any) -> str:
@@ -117,3 +136,8 @@ def get_search_cache() -> SearchCache:
         return _cached_impl
     _cached_impl = RedisSearchCache(client, ttl_seconds=int(settings.redis_search_cache_ttl_seconds))
     return _cached_impl
+
+
+def invalidate_search_cache() -> None:
+    """Drop cached hybrid-search results after index mutations (ingest, store switch)."""
+    get_search_cache().invalidate_all()

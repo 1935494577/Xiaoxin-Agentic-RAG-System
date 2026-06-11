@@ -834,6 +834,12 @@ def _ingest_text(
     milvus_delete_by_source(source)
     delete_parents_by_source(source)
 
+    def _finish(response: IngestResponse) -> IngestResponse:
+        from retrieval.search_cache import invalidate_search_cache
+
+        invalidate_search_cache()
+        return response
+
     parents, children = split_parent_child(
         text, source, department, permission_label, tags=doc_tags
     )
@@ -850,18 +856,20 @@ def _ingest_text(
         finalize_document_registry(
             source, text, parent_count=len(parents), child_count=0
         )
-        return IngestResponse(
-            chunks_indexed=0,
-            source=source,
-            tags=doc_tags,
-            message=dedup_stats.message,
-            dedup=IngestDedupStatsResponse(
-                content_hash=dedup_stats.content_hash or None,
-                skipped_parents=dedup_stats.skipped_parents,
-                skipped_children=dedup_stats.skipped_children,
-                indexed_parents=dedup_stats.indexed_parents,
-                indexed_children=0,
-            ),
+        return _finish(
+            IngestResponse(
+                chunks_indexed=0,
+                source=source,
+                tags=doc_tags,
+                message=dedup_stats.message,
+                dedup=IngestDedupStatsResponse(
+                    content_hash=dedup_stats.content_hash or None,
+                    skipped_parents=dedup_stats.skipped_parents,
+                    skipped_children=dedup_stats.skipped_children,
+                    indexed_parents=dedup_stats.indexed_parents,
+                    indexed_children=0,
+                ),
+            )
         )
 
     mat = embed_texts([c.text for c in children])
@@ -891,17 +899,19 @@ def _ingest_text(
         source, text, parent_count=len(parents), child_count=len(children)
     )
     alias_sources = list(doc_rec.alias_sources) if doc_rec else dedup_stats.alias_sources
-    return IngestResponse(
-        chunks_indexed=len(children),
-        source=source,
-        tags=doc_tags,
-        message=dedup_stats.message,
-        dedup=IngestDedupStatsResponse(
-            content_hash=dedup_stats.content_hash or None,
-            skipped_parents=dedup_stats.skipped_parents,
-            skipped_children=dedup_stats.skipped_children,
-            indexed_parents=dedup_stats.indexed_parents,
-            indexed_children=dedup_stats.indexed_children,
-            alias_sources=alias_sources,
-        ),
+    return _finish(
+        IngestResponse(
+            chunks_indexed=len(children),
+            source=source,
+            tags=doc_tags,
+            message=dedup_stats.message,
+            dedup=IngestDedupStatsResponse(
+                content_hash=dedup_stats.content_hash or None,
+                skipped_parents=dedup_stats.skipped_parents,
+                skipped_children=dedup_stats.skipped_children,
+                indexed_parents=dedup_stats.indexed_parents,
+                indexed_children=dedup_stats.indexed_children,
+                alias_sources=alias_sources,
+            ),
+        )
     )

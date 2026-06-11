@@ -351,6 +351,9 @@ def activate_store(store_id: str) -> dict[str, Any]:
     found["updated_at"] = _utc_now()
     save_registry(reg)
     reload_all_indexes()
+    from retrieval.search_cache import invalidate_search_cache
+
+    invalidate_search_cache()
     return _public_store(found, active=True)
 
 
