@@ -105,6 +105,7 @@ from document_loader.processing.modes import UNCLEANED, normalize_ingest_mode
 from document_loader.processing.registry import load_config as load_processing_config
 from document_loader.processing.registry import public_config as public_processing_config
 from document_loader.processing.registry import save_config as save_processing_config
+from agent.tools.api.router import router as agent_tools_router
 from api.nav_config import build_nav_config
 from evaluation.langsmith_trace import configure_tracing, get_trace_status
 from indexing.dedup_text import content_hash
@@ -174,6 +175,8 @@ app.add_middleware(
 _hosts = [h.strip() for h in settings.trusted_hosts.split(",") if h.strip()]
 if _hosts:
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=_hosts)
+
+app.include_router(agent_tools_router)
 
 
 @app.get("/", include_in_schema=False)
@@ -882,6 +885,7 @@ def _ingest_text(
         departments=[c.department for c in children],
         sources=[c.source for c in children],
         tags=doc_tags,
+        permission_labels=[c.permission_label for c in children],
     )
     parent_docs = [
         {

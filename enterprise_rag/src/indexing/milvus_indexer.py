@@ -14,6 +14,7 @@ from pymilvus import (
 from config import settings
 from indexing.embeddings import embedding_dim
 from chunker.utils import tags_to_store_value
+from security.access_control import milvus_access_expr
 
 _backend: str | None = None
 _lite_started = False
@@ -206,6 +207,7 @@ def ensure_collection() -> Collection:
         FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=2000),
         FieldSchema(name="parent_id", dtype=DataType.VARCHAR, max_length=128),
         FieldSchema(name="department", dtype=DataType.VARCHAR, max_length=64),
+        FieldSchema(name="permission_label", dtype=DataType.VARCHAR, max_length=32),
         FieldSchema(name="source", dtype=DataType.VARCHAR, max_length=1024),
         FieldSchema(name="tags", dtype=DataType.VARCHAR, max_length=512),
     ]
@@ -243,11 +245,21 @@ def insert_child_vectors(
     departments: list[str],
     sources: list[str],
     tags: list[str] | None = None,
+    permission_labels: list[str] | None = None,
 ) -> None:
     if _get_backend() == "numpy":
         from indexing.numpy_vector_index import insert_child_vectors as np_ins
 
-        np_ins(ids, vectors, texts, parent_ids, departments, sources, tags=tags)
+        np_ins(
+            ids,
+            vectors,
+            texts,
+            parent_ids,
+            departments,
+            sources,
+            tags=tags,
+            permission_labels=permission_labels,
+        )
         return
     try:
         from api.vector_store_registry import validate_insert_vectors
@@ -258,7 +270,11 @@ def insert_child_vectors(
     col = ensure_collection()
     texts_t = [t[:1990] for t in texts]
     tag_str = tags_to_store_value(tags)
-    entities: list[Any] = [ids, vectors, texts_t, parent_ids, departments, sources]
+    perms = permission_labels or ["internal"] * len(ids)
+    entities: list[Any] = [ids, vectors, texts_t, parent_ids, departments]
+    if _collection_has_field(col, "permission_label"):
+        entities.append([perms[i] if i < len(perms) else "internal" for i in range(len(ids))])
+    entities.append(sources)
     if _collection_has_field(col, "tags"):
         entities.append([tag_str] * len(ids))
     col.insert(entities)
@@ -284,6 +300,8 @@ def vector_search(
     col = ensure_collection()
     search_params = {"metric_type": "IP", "params": {"nprobe": 10}}
     output_fields = ["id", "parent_id", "department", "source", "text"]
+    if _collection_has_field(col, "permission_label"):
+        output_fields.append("permission_label")
     if _collection_has_field(col, "tags"):
         output_fields.append("tags")
     kw: dict[str, Any] = dict(
@@ -294,7 +312,12 @@ def vector_search(
         output_fields=output_fields,
     )
     if user_department:
-        kw["expr"] = f'department == "{_esc(user_department)}"'
+        expr = milvus_access_expr(
+            user_department,
+            has_permission_field=_collection_has_field(col, "permission_label"),
+        )
+        if expr:
+            kw["expr"] = expr
     res = col.search(**kw)
     hits: list[dict[str, Any]] = []
     for hit in res[0]:
@@ -306,6 +329,8 @@ def vector_search(
             "text": hit.entity.get("text"),
             "score": float(hit.distance),
         }
+        if "permission_label" in output_fields:
+            row["permission_label"] = hit.entity.get("permission_label") or ""
         if "tags" in output_fields:
             row["tags"] = hit.entity.get("tags") or ""
         hits.append(row)

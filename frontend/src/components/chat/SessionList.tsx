@@ -1,4 +1,5 @@
 import type { ChatSession } from "../../api/types";
+import { DEPT_OPTIONS } from "../../lib/constants";
 
 type Props = {
   sessions: ChatSession[];
@@ -9,8 +10,6 @@ type Props = {
   department: string;
   onDepartment: (d: string) => void;
 };
-
-const DEPTS = ["general", "技术", "市场", "人事", "财务"];
 
 export function SessionList({
   sessions,
@@ -68,8 +67,10 @@ export function SessionList({
           onChange={(e) => onDepartment(e.target.value)}
           className="w-full rounded-lg border border-border bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
         >
-          {DEPTS.map((d) => (
-            <option key={d} value={d}>{d}</option>
+          {DEPT_OPTIONS.map((d) => (
+            <option key={d} value={d}>
+              {d}
+            </option>
           ))}
         </select>
       </div>

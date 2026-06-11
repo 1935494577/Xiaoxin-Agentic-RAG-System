@@ -13,10 +13,10 @@
 | **嵌入与重排** | FlagEmbedding / sentence-transformers、CrossEncoder 重排；可选 **ModelScope** 下载到 `enterprise_rag/data/models` |
 | **检索** | 查询改写、向量 + BM25 混合检索、重排；**L3 检索去重**（文本相似度 + MMR） |
 | **入库去重** | **L1** 文档 content_hash 别名跳过重复嵌入；**L2** 父块 simhash 近似去重（`indexing/ingest_dedup`） |
-| **对话智能体** | LangGraph 与非流式 `/chat`；**SSE 流式** `/chat/stream`；**混合专家模式**（KB 优先、未命中静默通用兜底）；引文按文件去重 |
+| **对话智能体** | LangGraph 与非流式 `/chat`；**SSE 流式** `/chat/stream`；**混合专家模式**（KB 优先、未命中静默通用兜底）；引文按文件去重；**对话工具**（`agent/tools/`，OpenAI function calling，通用模式可调用天气等，SSE 推送 `tool_call`/`tool_result`） |
 | **HTTP API** | FastAPI：健康检查、入库（含 dedup 统计）、检索调试、流式对话、会话记忆、可插拔提示词、模型/向量库/UI 配置（`api`） |
-| **安全** | 可选 `RAG_API_SECRET`、CORS、可信 Host、安全头；注入检测与按来源权限（`security`） |
-| **前端** | **Jnao Chat** React SPA（`frontend/chat`，8502）；**Streamlit 管理后台**（8501）：入库、工具、提示词、模型、记忆、Trace 等（`frontend/admin`） |
+| **安全** | 可选 `RAG_API_SECRET`、CORS、可信 Host、安全头；注入检测；**部门 + 可见范围 ACL**（内部仅本部门、公开全员可见，向量/BM25 检索层过滤） |
+| **前端** | **Jnao Chat** React SPA（8502）：流式对话、工具调用展示；**React 管理后台**（`/admin`）：入库、**入库工具 / 对话工具** 分 Tab、提示词、模型、记忆、Trace 等 |
 | **评测与追踪** | 可选 LangSmith / 本地 JSONL trace；`scripts/eval_ingest_dedup.py` 检索去重 A/B 评估 |
 | **容器与脚本** | `Dockerfile`、`docker-compose.yml`、`Makefile`；Windows `.ps1` 与 **macOS/Linux `.sh`** 一键启停；**生产启动** `run-api-prod.ps1` / `run-api-prod.sh` |
 
@@ -63,7 +63,7 @@ xiaoxin_RAG/
 │   │   └── milvus_lite/       # Milvus Lite 数据目录（不提交）
 │   └── src/                   # 应用源码（PYTHONPATH / Uvicorn 工作目录）
 │       ├── api/               # FastAPI 路由、Schema、鉴权
-│       ├── agent/             # LangGraph 编排与节点
+│       ├── agent/             # LangGraph 编排；tools/ 为 Chat 对话工具（与入库 processing 独立）
 │       ├── chunker/
 │       ├── document_loader/
 │       ├── indexing/          # Milvus、BM25、嵌入、modelscope_hub
@@ -170,6 +170,15 @@ cd <仓库根目录>
 pytest
 ```
 
+**部门 ACL 集成测试**（使用 `d:\dataset\各年级要求.txt`，索引写入临时目录，不污染生产库）：
+
+```powershell
+pytest tests/test_dept_acl_integration.py -v
+# 自定义数据路径：
+$env:ACL_TEST_DATASET="D:\dataset\各年级要求.txt"
+pytest tests/test_dept_acl_integration.py -q
+```
+
 ### 7. Streamlit 前端（可选）
 
 **Windows：**
@@ -213,7 +222,7 @@ cd <仓库根目录>
 |------|------|------|
 | GET | `/health` | 存活探测 |
 | GET | `/config/public` | 公开运行配置（无密钥） |
-| GET/POST/PUT | `/config/ui` `/config/prompts` `/config/processing-tools` … | UI、提示词、入库工具等配置 |
+| GET/POST/PUT | `/config/ui` `/config/prompts` `/config/processing-tools` `/config/agent-tools` … | UI、提示词、入库工具、**对话工具**等配置 |
 | GET/POST/PUT/DELETE | `/config/model-profiles`… | 多供应商模型档案（密钥仅存服务端） |
 | POST | `/chat` | RAG 对话（LangGraph） |
 | POST | `/chat/stream` | SSE 流式对话（Chat SPA 使用） |

@@ -62,7 +62,9 @@ def format_context_with_meta(meta: dict[str, Any]) -> str:
     if meta.get("department"):
         tags.append(f"部门={meta['department']}")
     if meta.get("permission_label"):
-        tags.append(f"标签={meta['permission_label']}")
+        vis = str(meta["permission_label"])
+        label = {"public": "公开", "internal": "内部", "confidential": "机密"}.get(vis, vis)
+        tags.append(f"可见范围={label}")
     if tags:
         return f"[{' | '.join(tags)}]\n{text}"
     return text
@@ -76,7 +78,9 @@ def format_source_citation(meta: dict[str, Any]) -> str:
     if meta.get("department"):
         extras.append(f"部门={meta['department']}")
     if meta.get("permission_label"):
-        extras.append(f"标签={meta['permission_label']}")
+        vis = str(meta["permission_label"])
+        label = {"public": "公开", "internal": "内部", "confidential": "机密"}.get(vis, vis)
+        extras.append(f"可见范围={label}")
     if extras:
         return f"{base} ({', '.join(extras)})"
     return base

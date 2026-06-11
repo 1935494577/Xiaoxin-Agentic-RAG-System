@@ -40,13 +40,13 @@ class _FakeRedis:
 
 
 def test_build_search_cache_key_is_stable_and_namespaced():
-    k1 = build_search_cache_key("请假流程", "hr", retrieve_top_k=20, rerank_top_k=5)
-    k2 = build_search_cache_key("请假流程", "hr", retrieve_top_k=20, rerank_top_k=5)
-    k3 = build_search_cache_key("请假流程", "finance", retrieve_top_k=20, rerank_top_k=5)
+    k1 = build_search_cache_key("请假流程", "技术", retrieve_top_k=20, rerank_top_k=5)
+    k2 = build_search_cache_key("请假流程", "技术", retrieve_top_k=20, rerank_top_k=5)
+    k3 = build_search_cache_key("请假流程", "媒体", retrieve_top_k=20, rerank_top_k=5)
 
     assert k1 == k2
-    assert k1.startswith("rag:search:v1:hr:")
-    assert k3.startswith("rag:search:v1:finance:")
+    assert k1.startswith("rag:search:v1:技术部:")
+    assert k3.startswith("rag:search:v1:媒体部:")
     assert k1 != k3
 
 

@@ -30,18 +30,37 @@ class BM25Index:
         self.metadata_list: list[dict[str, Any]] = []
         self.bm25: BM25Okapi | None = None
         self._parent_by_id: dict[str, dict[str, Any]] | None = None
+        self._acl_row_cache: dict[str, list[int]] = {}
         if self.index_path.is_file():
             self.load()
+
+    def _invalidate_acl_cache(self) -> None:
+        self._acl_row_cache = {}
+
+    def _accessible_row_indices(self, user_department: str) -> list[int]:
+        from security.access_control import can_access_row, normalize_department
+
+        dept_key = normalize_department(user_department)
+        cached = self._acl_row_cache.get(dept_key)
+        if cached is not None:
+            return cached
+        indices = [
+            i for i, meta in enumerate(self.metadata_list) if can_access_row(meta, dept_key)
+        ]
+        self._acl_row_cache[dept_key] = indices
+        return indices
 
     def load(self) -> None:
         with self.index_path.open(encoding="utf-8") as f:
             data = json.load(f)
         self.corpus = list(data.get("corpus") or [])
         self.metadata_list = list(data.get("metadata_list") or [])
+        self._invalidate_acl_cache()
         self._rebuild_bm25()
 
     def _rebuild_bm25(self) -> None:
         self._parent_by_id = None
+        self._invalidate_acl_cache()
         if not self.corpus:
             self.bm25 = None
             return
@@ -107,14 +126,27 @@ class BM25Index:
             self.save()
         return len(docs)
 
-    def search(self, query: str, top_k: int = 20) -> list[dict[str, Any]]:
+    def search(
+        self,
+        query: str,
+        top_k: int = 20,
+        user_department: str | None = None,
+    ) -> list[dict[str, Any]]:
         with _lock:
             if not self.bm25 or not self.corpus:
                 return []
             q_tok = _tokenize(query)
             scores = self.bm25.get_scores(q_tok)
-            k = min(top_k, len(scores))
-            top_indices = heapq.nlargest(k, range(len(scores)), key=lambda i: scores[i])
+            if user_department:
+                candidate_indices = self._accessible_row_indices(user_department)
+            else:
+                candidate_indices = list(range(len(scores)))
+            if not candidate_indices:
+                return []
+            k = min(top_k, len(candidate_indices))
+            top_indices = heapq.nlargest(
+                k, candidate_indices, key=lambda i: scores[i]
+            )
             out: list[dict[str, Any]] = []
             for idx in top_indices:
                 meta = self.metadata_list[idx] if idx < len(self.metadata_list) else {}
@@ -180,8 +212,12 @@ def index_parent_documents(docs: list[dict[str, Any]]) -> int:
     return get_bm25_index().index_parent_documents(docs)
 
 
-def bm25_parent_search(query: str, top_k: int) -> list[dict[str, Any]]:
-    return get_bm25_index().search(query, top_k=top_k)
+def bm25_parent_search(
+    query: str,
+    top_k: int,
+    user_department: str | None = None,
+) -> list[dict[str, Any]]:
+    return get_bm25_index().search(query, top_k=top_k, user_department=user_department)
 
 
 def fetch_parents_by_ids(parent_ids: list[str]) -> dict[str, dict[str, Any]]:

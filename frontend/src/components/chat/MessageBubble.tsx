@@ -3,12 +3,14 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { submitFeedback } from "../../api/client";
 import { useAuth } from "../../hooks/useAuth";
-import type { ChatMessage } from "../../api/types";
+import type { ChatMessage, ToolTraceItem } from "../../api/types";
+import { ToolTracePanel } from "./ToolTracePanel";
 
 type Props = {
   message: ChatMessage;
   streaming?: boolean;
   hideModeTag?: boolean;
+  liveTools?: ToolTraceItem[];
 };
 
 function stripFootnotes(text: string): string {
@@ -48,7 +50,7 @@ function resolveAnswerMode(message: ChatMessage): "kb" | "general" | null {
   return null;
 }
 
-function MessageBubble({ message, streaming, hideModeTag = false }: Props) {
+function MessageBubble({ message, streaming, hideModeTag = false, liveTools }: Props) {
   const { userId } = useAuth();
   const [feedback, setFeedback] = useState<number | null>(null);
 
@@ -56,6 +58,7 @@ function MessageBubble({ message, streaming, hideModeTag = false }: Props) {
   const body = isUser ? message.content : stripFootnotes(message.content);
   const sources = sourceLabels(message);
   const answerMode = !isUser && !hideModeTag ? resolveAnswerMode(message) : null;
+  const toolTrace = liveTools?.length ? liveTools : message.meta?.tool_trace;
 
   const handleFeedback = useCallback(
     async (rating: number) => {
@@ -102,6 +105,10 @@ function MessageBubble({ message, streaming, hideModeTag = false }: Props) {
             </span>
           </div>
         )}
+
+        {!isUser && toolTrace?.length ? (
+          <ToolTracePanel items={toolTrace} live={Boolean(streaming && liveTools?.length)} />
+        ) : null}
 
         <div
           className={

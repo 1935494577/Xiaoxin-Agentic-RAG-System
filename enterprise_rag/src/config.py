@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     ui_config_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "ui_config.json"
     prompt_config_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "prompt_config.json"
     processing_tools_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "processing_tools.json"
+    agent_tools_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "agent_tools.json"
     doc_registry_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "doc_registry.json"
     chunk_dedup_index_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "chunk_dedup_index.json"
     ui_branding_dir: Path = _REPO_ROOT / "enterprise_rag" / "data" / "branding"
@@ -88,7 +89,7 @@ class Settings(BaseSettings):
     query_rewrite_enabled: bool = False
 
     use_presidio: bool = True
-    default_department: str = "general"
+    default_department: str = "技术部"
     default_permission_label: str = "public"
 
     llama_cloud_api_key: str = ""

@@ -24,6 +24,9 @@ def _make_unit_vectors(n: int, dim: int, seed: int = 0) -> np.ndarray:
 def numpy_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     store = tmp_path / "vecs.json"
     monkeypatch.setattr(settings, "numpy_vector_store_path", store)
+    monkeypatch.setattr("api.vector_store_registry.get_active_numpy_path", lambda: store)
+    monkeypatch.setattr("api.vector_store_registry.assert_search_compatible", lambda _d: None)
+    monkeypatch.setattr("api.vector_store_registry.validate_insert_vectors", lambda _v: None)
     nvi.reload_store()
     yield store
     nvi.reload_store()
@@ -40,7 +43,8 @@ def test_numpy_vector_search_returns_top_by_similarity(numpy_store: Path):
                 "vector": v.tolist(),
                 "text": f"text-{i}",
                 "parent_id": f"p{i}",
-                "department": "general" if i != 3 else "hr",
+                "department": "技术部" if i != 3 else "运营部",
+                "permission_label": "internal",
                 "source": "doc",
                 "tags": "",
             }
@@ -49,14 +53,14 @@ def test_numpy_vector_search_returns_top_by_similarity(numpy_store: Path):
     nvi.reload_store()
 
     query = vecs[2].tolist()
-    hits = nvi.vector_search(query, top_k=3, user_department="general")
+    hits = nvi.vector_search(query, top_k=3, user_department="技术部")
     assert len(hits) == 3
     assert hits[0]["parent_id"] == "p2"
     assert hits[0]["score"] >= hits[1]["score"] >= hits[2]["score"]
 
-    hr_hits = nvi.vector_search(query, top_k=5, user_department="hr")
-    assert len(hr_hits) == 1
-    assert hr_hits[0]["parent_id"] == "p3"
+    ops_hits = nvi.vector_search(query, top_k=5, user_department="运营部")
+    assert len(ops_hits) == 1
+    assert ops_hits[0]["parent_id"] == "p3"
 
 
 def test_numpy_vector_search_after_insert(numpy_store: Path):
@@ -67,7 +71,7 @@ def test_numpy_vector_search_after_insert(numpy_store: Path):
         vectors=[v0.tolist()],
         texts=["hello"],
         parent_ids=["pa"],
-        departments=["general"],
+        departments=["技术部"],
         sources=["s"],
     )
     hits = nvi.vector_search(v0.tolist(), top_k=1)

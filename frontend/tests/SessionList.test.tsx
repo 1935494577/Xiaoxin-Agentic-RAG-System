@@ -19,7 +19,7 @@ describe("SessionList", () => {
     onSelect: vi.fn(),
     onNew: vi.fn(),
     onDelete: vi.fn(),
-    department: "general",
+    department: "技术部",
     onDepartment: vi.fn(),
   };
 
@@ -97,18 +97,17 @@ describe("SessionList", () => {
   it("renders department selector with all options", () => {
     render(React.createElement(SessionList, baseProps));
     const select = screen.getByRole("combobox") as HTMLSelectElement;
-    expect(select.value).toBe("general");
-    expect(screen.getByText("技术")).toBeTruthy();
-    expect(screen.getByText("市场")).toBeTruthy();
-    expect(screen.getByText("人事")).toBeTruthy();
-    expect(screen.getByText("财务")).toBeTruthy();
+    expect(select.value).toBe("技术部");
+    expect(screen.getByText("运营部")).toBeTruthy();
+    expect(screen.getByText("媒体部")).toBeTruthy();
+    expect(screen.getByText("剪辑部")).toBeTruthy();
   });
 
   it("calls onDepartment when department changed", () => {
     const onDepartment = vi.fn();
     render(React.createElement(SessionList, { ...baseProps, onDepartment }));
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "技术" } });
-    expect(onDepartment).toHaveBeenCalledWith("技术");
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "运营部" } });
+    expect(onDepartment).toHaveBeenCalledWith("运营部");
   });
 
   it("renders empty session list gracefully", () => {
