@@ -37,10 +37,10 @@ stop-dev:
 	bash scripts/stop-dev.sh
 
 run-frontend:
-	cd frontend/app && npm run dev
+	cd frontend && npm run dev
 
 run-chat-spa:
-	cd frontend/app && npm run dev
+	cd frontend && npm run dev
 
 test:
 	$(PY) -m pytest tests/

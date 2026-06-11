@@ -1,6 +1,8 @@
-import { memo } from "react";
+import { memo, useCallback, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { submitFeedback } from "../../api/client";
+import { useAuth } from "../../hooks/useAuth";
 import type { ChatMessage } from "../../api/types";
 
 type Props = {
@@ -47,10 +49,30 @@ function resolveAnswerMode(message: ChatMessage): "kb" | "general" | null {
 }
 
 function MessageBubble({ message, streaming, hideModeTag = false }: Props) {
+  const { userId } = useAuth();
+  const [feedback, setFeedback] = useState<number | null>(null);
+
   const isUser = message.role === "user";
   const body = isUser ? message.content : stripFootnotes(message.content);
   const sources = sourceLabels(message);
   const answerMode = !isUser && !hideModeTag ? resolveAnswerMode(message) : null;
+
+  const handleFeedback = useCallback(
+    async (rating: number) => {
+      if (feedback !== null) return; // already submitted
+      setFeedback(rating);
+      try {
+        await submitFeedback({
+          user_id: userId,
+          rating,
+          message_id: message.meta?.trace_id,
+        });
+      } catch {
+        setFeedback(null); // revert on failure
+      }
+    },
+    [feedback, userId, message.meta?.trace_id]
+  );
 
   return (
     <div
@@ -112,6 +134,24 @@ function MessageBubble({ message, streaming, hideModeTag = false }: Props) {
 
         {!isUser && !streaming && (
           <div className="flex gap-1 mt-2 opacity-0 hover:opacity-100 transition-opacity">
+            <button
+              type="button"
+              onClick={() => handleFeedback(1)}
+              disabled={feedback !== null}
+              className={"text-xs px-2.5 py-1 rounded-md cursor-pointer " + (feedback === 1 ? "bg-success-bg text-success" : "bg-surface-muted text-text-muted hover:bg-border hover:text-text")}
+              title="有帮助"
+            >
+              👍
+            </button>
+            <button
+              type="button"
+              onClick={() => handleFeedback(0)}
+              disabled={feedback !== null}
+              className={"text-xs px-2.5 py-1 rounded-md cursor-pointer " + (feedback === 0 ? "bg-warning-bg text-warning" : "bg-surface-muted text-text-muted hover:bg-border hover:text-text")}
+              title="没帮助"
+            >
+              👎
+            </button>
             <button
               type="button"
               onClick={() => navigator.clipboard.writeText(body)}

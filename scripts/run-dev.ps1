@@ -12,7 +12,7 @@ $Py = Get-DevPython
 $ApiPort = $script:DevApiPort
 $SpaPort = $script:DevSpaPort
 $Src = Join-Path $Root "enterprise_rag\src"
-$SpaDir = Join-Path $Root "frontend\app"
+$SpaDir = Join-Path $Root "frontend"
 
 Stop-DevPorts
 
