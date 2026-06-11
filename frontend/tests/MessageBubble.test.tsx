@@ -163,11 +163,11 @@ describe("MessageBubble", () => {
     expect(screen.getByText("正在输入")).toBeTruthy();
   });
 
-  it("shows empty placeholder for assistant with no content and streaming", () => {
+  it("shows '…' thinking indicator for assistant with no content while streaming", () => {
     const msg = { role: "assistant" as const, content: "" };
     render(React.createElement(MessageBubble, { message: msg, streaming: true }));
-    // Streaming + empty => empty string (not "…")
-    expect(screen.queryByText("…")).toBeNull();
+    // Streaming + empty => show "…" to indicate AI is thinking
+    expect(screen.getByText("…")).toBeTruthy();
   });
 
   it("shows ellipsis for assistant with no content and not streaming", () => {

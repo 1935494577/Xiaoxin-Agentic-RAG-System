@@ -120,7 +120,7 @@ function MessageBubble({ message, streaming, hideModeTag = false }: Props) {
                 del: ({ children }) => <span className="line-through">{children}</span>,
               }}
             >
-              {body || (streaming ? "" : "…")}
+              {body || "…"}
             </ReactMarkdown>
           )}
         </div>

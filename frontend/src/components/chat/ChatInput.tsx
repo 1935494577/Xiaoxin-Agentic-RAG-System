@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useRef, useEffect } from "react";
+import { type KeyboardEvent, useRef, useEffect, useCallback } from "react";
 
 type Props = {
   value: string;
@@ -23,6 +23,23 @@ export function ChatInput({
     if (!streaming) ref.current?.focus();
   }, [streaming]);
 
+  // Auto-grow: reset height, then set to scrollHeight so the box expands
+  // with content instead of scrolling internally.
+  const autoGrow = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
+  }, []);
+
+  useEffect(() => {
+    autoGrow();
+  }, [value, autoGrow]);
+
+  const handleChange = (v: string) => {
+    onChange(v);
+  };
+
   const handleKey = (e: KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -31,13 +48,13 @@ export function ChatInput({
   };
 
   return (
-    <div className="w-full max-w-[820px] mx-auto flex gap-2.5 items-end bg-surface-muted border border-border rounded-[20px] px-[18px] py-2.5 shadow-sm transition-all focus-within:border-brand focus-within:shadow-[0_2px_16px_rgba(21,101,192,0.12)]">
+    <div className="w-full max-w-[820px] mx-auto flex gap-2.5 items-center bg-surface-muted border border-border rounded-[20px] px-[18px] py-2.5 shadow-sm transition-all focus-within:border-brand focus-within:shadow-[0_2px_16px_rgba(21,101,192,0.12)]">
       <textarea
         ref={ref}
         rows={1}
         value={value}
         placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => handleChange(e.target.value)}
         onKeyDown={handleKey}
         disabled={streaming}
         className="flex-1 border-none outline-none resize-none text-[15px] leading-relaxed min-h-6 max-h-[200px] font-[inherit] bg-transparent placeholder:text-text-muted disabled:opacity-50"
