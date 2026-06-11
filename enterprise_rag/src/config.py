@@ -27,6 +27,11 @@ class Settings(BaseSettings):
 
     elasticsearch_url: str = "http://localhost:9200"
 
+    # Optional Redis: hybrid search result cache (TTL + connection pool)
+    redis_url: str = ""
+    redis_search_cache_enabled: bool = True
+    redis_search_cache_ttl_seconds: int = 300
+
     openai_api_base: str = "https://api.openai.com/v1"
     openai_api_key: str = ""
     openai_chat_model: str = "gpt-4o-mini"
@@ -91,6 +96,10 @@ class Settings(BaseSettings):
     torch_device: str = "auto"
     use_fp16: bool = True
     embedding_batch_size: int = 8
+    # 为 false 时启动只预热嵌入模型（流式+跳过重排时可省 ~500MB）
+    warmup_reranker_on_startup: bool = True
+    # 为 false 时跳过启动线程中的模型下载/预热（首请求会冷启动）
+    warmup_models_on_startup: bool = True
 
     hf_endpoint: str = ""
     http_proxy: str = ""

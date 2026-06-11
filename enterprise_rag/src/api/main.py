@@ -131,17 +131,20 @@ async def lifespan(app: FastAPI):
     reload_all_indexes()
 
     def _warmup() -> None:
+        import logging
+
         try:
             from indexing.model_preload import ensure_models_on_disk, warmup_models_in_memory
 
             ensure_models_on_disk()
             warmup_models_in_memory()
         except Exception:
-            pass
+            logging.getLogger(__name__).exception("Model warmup failed")
 
     import threading
 
-    threading.Thread(target=_warmup, daemon=True).start()
+    if settings.warmup_models_on_startup:
+        threading.Thread(target=_warmup, daemon=True).start()
     yield
 
 

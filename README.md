@@ -18,7 +18,7 @@
 | **安全** | 可选 `RAG_API_SECRET`、CORS、可信 Host、安全头；注入检测与按来源权限（`security`） |
 | **前端** | **Jnao Chat** React SPA（`frontend/chat`，8502）；**Streamlit 管理后台**（8501）：入库、工具、提示词、模型、记忆、Trace 等（`frontend/admin`） |
 | **评测与追踪** | 可选 LangSmith / 本地 JSONL trace；`scripts/eval_ingest_dedup.py` 检索去重 A/B 评估 |
-| **容器与脚本** | `Dockerfile`、`docker-compose.yml`、`Makefile`；Windows `.ps1` 与 **macOS/Linux `.sh`** 一键启停 |
+| **容器与脚本** | `Dockerfile`、`docker-compose.yml`、`Makefile`；Windows `.ps1` 与 **macOS/Linux `.sh`** 一键启停；**生产启动** `run-api-prod.ps1` / `run-api-prod.sh` |
 
 ---
 
@@ -199,6 +199,12 @@ cd <仓库根目录>
 
 见根目录 **`docker-compose.yml`** 与 **`Dockerfile`**，结合 **`deploy/`** 下 Nginx 示例做反向代理与 TLS。
 
+### 9. 生产部署（性能 / 内存 / 落地）
+
+- 配置模板：**`.env.production.example`**（小模型、Redis 缓存、安全项）
+- 完整步骤：**[`docs/production_deploy.md`](docs/production_deploy.md)**
+- 生产启动（无热重载）：`.\scripts\run-api-prod.ps1` 或 `./scripts/run-api-prod.sh`
+
 ---
 
 ## 主要 HTTP 路径
@@ -232,6 +238,7 @@ cd <仓库根目录>
 ## 更多文档
 
 - 安全与网关：**`docs/deploy_security.md`**
+- **生产部署（性能 / 内存）：`docs/production_deploy.md`**
 - 变更记录：**`docs/changelog.md`**
 
 ## 许可证
