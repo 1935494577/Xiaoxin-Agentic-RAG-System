@@ -56,6 +56,7 @@ def test_execute_weather_mocked():
     assert "杭州" in out
     assert "22" in out
     assert "晴" in out
+    assert "建议" in out
 
 
 def test_agent_tools_config_roundtrip(agent_tools_cfg):

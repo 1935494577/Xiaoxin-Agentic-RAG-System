@@ -56,6 +56,11 @@ class Settings(BaseSettings):
     processing_tools_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "processing_tools.json"
     agent_tools_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "agent_tools.json"
     doc_registry_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "doc_registry.json"
+
+    # Tavily 联网搜索（Chat 对话工具 web_search）
+    tavily_api_key: str = ""
+    web_search_max_results: int = 5
+    web_search_timeout_seconds: int = 12
     chunk_dedup_index_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "chunk_dedup_index.json"
     ui_branding_dir: Path = _REPO_ROOT / "enterprise_rag" / "data" / "branding"
 
