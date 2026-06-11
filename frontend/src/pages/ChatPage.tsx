@@ -209,8 +209,10 @@ export default function ChatPage() {
   }, []);
 
   // ---- derived display (computed during render, NOT via useEffect - matches old App.tsx) ----
+  // Always append a streaming placeholder bubble so the AI avatar and "…"
+  // thinking indicator appear immediately (before the first token lands).
   const displayMessages: ChatMessage[] = streaming
-    ? [...messages, ...(streamText ? [{ role: "assistant" as const, content: streamText }] : [])]
+    ? [...messages, { role: "assistant" as const, content: streamText }]
     : messages;
 
   // ---- UI data ----
@@ -239,7 +241,7 @@ export default function ChatPage() {
           <div className="bg-error-bg text-error text-sm text-center py-2">{error}</div>
         )}
 
-        <div className="flex-1 overflow-y-auto bg-surface-muted px-5 pb-4">
+        <div className="flex-1 overflow-y-auto bg-surface-muted px-5 pt-20 pb-4">
           <div className="min-h-full flex flex-col pb-2">
             {!displayMessages.length && !streaming && (
               <div className="max-w-[480px] mx-auto my-auto text-center py-12">
