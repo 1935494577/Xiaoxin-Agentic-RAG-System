@@ -1,18 +1,26 @@
 #!/usr/bin/env bash
+# Start Frontend SPA (port 8502) — unified chat + admin
+# Replaces the old Streamlit admin (8501); admin pages now at /admin/* in the SPA
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 . "$SCRIPT_DIR/_port_utils.sh"
 
-PY="$(get_dev_python)"
+SPA_DIR="$ROOT/frontend/app"
 
-stop_port_listeners "$DEV_FRONTEND_PORT" "Streamlit frontend"
-trap 'stop_port_listeners "$DEV_FRONTEND_PORT" "Streamlit frontend"' EXIT INT TERM
+if ! command -v npm >/dev/null 2>&1; then
+  echo "npm not found. Install Node.js LTS (https://nodejs.org)." >&2
+  exit 1
+fi
 
-echo "Frontend: http://127.0.0.1:${DEV_FRONTEND_PORT}  (save file to refresh, Ctrl+C to stop)"
-cd "$ROOT"
-exec "$PY" -m streamlit run frontend/admin/streamlit_app.py \
-  --server.port "$DEV_FRONTEND_PORT" \
-  --server.runOnSave true \
-  "$@"
+stop_port_listeners "$DEV_SPA_PORT" "Frontend SPA"
+trap 'stop_port_listeners "$DEV_SPA_PORT" "Frontend SPA"' EXIT INT TERM
+
+if [[ ! -d "$SPA_DIR/node_modules" ]]; then
+  (cd "$SPA_DIR" && npm install)
+fi
+
+echo "Frontend SPA: http://127.0.0.1:${DEV_SPA_PORT}  (管理后台: /admin/ingest)"
+cd "$SPA_DIR"
+exec npm run dev

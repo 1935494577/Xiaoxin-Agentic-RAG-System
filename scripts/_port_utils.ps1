@@ -3,8 +3,7 @@
 $ErrorActionPreference = "SilentlyContinue"
 
 $script:DevApiPort = 8010
-$script:DevFrontendPort = 8501
-$script:DevChatSpaPort = 8502
+$script:DevSpaPort = 8502
 
 function Stop-ProcessTree {
     param([Parameter(Mandatory)][int]$ProcessId)
@@ -40,8 +39,7 @@ function Stop-PortListeners {
 
 function Stop-DevPorts {
     Stop-PortListeners -Port $script:DevApiPort -Label "API"
-    Stop-PortListeners -Port $script:DevFrontendPort -Label "Streamlit admin"
-    Stop-PortListeners -Port $script:DevChatSpaPort -Label "Jnao Chat"
+    Stop-PortListeners -Port $script:DevSpaPort -Label "Frontend SPA"
 }
 
 function Register-DevPortCleanup {
@@ -91,20 +89,20 @@ function Get-DevNpmCmd {
     return $null
 }
 
-function Start-DevChatSpa {
+function Start-DevSpa {
     param(
-        [Parameter(Mandatory)][string]$ChatDir,
-        [int]$Port = $script:DevChatSpaPort
+        [Parameter(Mandatory)][string]$SpaDir,
+        [int]$Port = $script:DevSpaPort
     )
     $npm = Get-DevNpmCmd
     if (-not $npm) {
-        Write-Host "WARN: npm.cmd not found — skip Jnao Chat. Install Node.js LTS."
+        Write-Host "WARN: npm.cmd not found — skip Frontend SPA. Install Node.js LTS."
         return $null
     }
-    $nodeModules = Join-Path $ChatDir "node_modules"
+    $nodeModules = Join-Path $SpaDir "node_modules"
     if (-not (Test-Path $nodeModules)) {
-        Write-Host "Installing Jnao Chat dependencies..."
-        Push-Location $ChatDir
+        Write-Host "Installing Frontend SPA dependencies..."
+        Push-Location $SpaDir
         & $npm install
         $installOk = ($LASTEXITCODE -eq 0)
         Pop-Location
@@ -113,12 +111,12 @@ function Start-DevChatSpa {
             return $null
         }
     }
-    Write-Host "Starting Jnao Chat on port $Port..."
-    $proc = Start-Process -FilePath $npm -ArgumentList @("run", "dev") -WorkingDirectory $ChatDir -PassThru -WindowStyle Normal
+    Write-Host "Starting Frontend SPA on port $Port..."
+    $proc = Start-Process -FilePath $npm -ArgumentList @("run", "dev") -WorkingDirectory $SpaDir -PassThru -WindowStyle Normal
     Start-Sleep -Seconds 3
     $listening = Get-PortListenerPids -Port $Port
     if (-not $listening) {
-        Write-Host "WARN: Jnao Chat port $Port not listening yet. If needed: .\scripts\run-chat-spa.ps1"
+        Write-Host "WARN: Frontend SPA port $Port not listening yet. If needed: .\scripts\run-chat-spa.ps1"
     }
     return $proc
 }
