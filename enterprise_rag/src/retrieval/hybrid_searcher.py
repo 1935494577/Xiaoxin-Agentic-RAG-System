@@ -11,7 +11,10 @@ from indexing.milvus_indexer import vector_search
 from retrieval.query_rewriter import rewrite_query
 from retrieval.reranker import rerank_parents
 from retrieval.result_dedup import deduplicate_retrieval_results
+from retrieval.search_cache import build_search_cache_key, get_search_cache
 from chunker.utils import tags_from_store_value
+
+_search_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="hybrid-search")
 
 
 def _norm_map(scores: dict[str, float], higher_is_better: bool) -> dict[str, float]:
@@ -51,6 +54,22 @@ def hybrid_search(
     步骤4：改写 → Milvus(部门过滤) + 本地 rank-bm25 父块 → 按 parent_id 融合 → Rerank → Top 父块。
     返回 (rewritten_query, parents)。
     """
+    cache_params = {
+        "top_k": top_k,
+        "skip_query_rewrite": skip_query_rewrite,
+        "retrieve_top_k": retrieve_top_k,
+        "skip_rerank": skip_rerank,
+        "rerank_top_k": rerank_top_k,
+        "pre_rerank_k": pre_rerank_k,
+        "retrieval_dedup": retrieval_dedup,
+        "query_rewrite_enabled": settings.query_rewrite_enabled,
+    }
+    cache_key = build_search_cache_key(query, user_department, **cache_params)
+    cache = get_search_cache()
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     do_rewrite = settings.query_rewrite_enabled if skip_query_rewrite is None else not skip_query_rewrite
     if do_rewrite:
         rewritten = rewrite_query(
@@ -67,11 +86,10 @@ def hybrid_search(
     q_emb = embed_texts([rewritten])[0].tolist()
 
     dept = user_department or None
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        f_vec = pool.submit(vector_search, q_emb, rk, user_department=dept)
-        f_bm25 = pool.submit(bm25_parent_search, rewritten, rk)
-        vec_hits = f_vec.result()
-        es_hits = f_bm25.result()
+    f_vec = _search_pool.submit(vector_search, q_emb, rk, user_department=dept)
+    f_bm25 = _search_pool.submit(bm25_parent_search, rewritten, rk)
+    vec_hits = f_vec.result()
+    es_hits = f_bm25.result()
 
     v_score: dict[str, float] = defaultdict(float)
     for h in vec_hits:
@@ -150,10 +168,12 @@ def hybrid_search(
             top_k=final_k,
             enabled=retrieval_dedup,
         )
+        cache.set(cache_key, rewritten, ranked)
         return rewritten, ranked
 
     cap = pre_rerank_k if pre_rerank_k is not None else min(len(candidates), max(final_k * 2, dedup_pool))
     pool = candidates[: max(final_k, cap)]
     ranked = rerank_parents(query, pool, top_k=min(len(pool), dedup_pool))
     deduped, _ = deduplicate_retrieval_results(ranked, top_k=final_k, enabled=retrieval_dedup)
+    cache.set(cache_key, rewritten, deduped)
     return rewritten, deduped

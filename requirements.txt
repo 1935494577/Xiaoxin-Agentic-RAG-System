@@ -40,5 +40,6 @@ ragas>=0.2.2
 langsmith>=0.1.140
 datasets>=2.21.0
 pytest>=8.0
+redis>=5.0.0
 # If ragas import fails with numpy/pandas dtype mismatch, reinstall matching wheels:
 #   pip install -U "numpy>=1.26,<2.2" "pandas>=2.0,<2.2"

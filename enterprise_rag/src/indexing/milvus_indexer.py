@@ -18,6 +18,8 @@ from chunker.utils import tags_to_store_value
 _backend: str | None = None
 _lite_started = False
 _atexit_registered = False
+_collection_cache: Collection | None = None
+_collection_cache_name: str | None = None
 
 
 def _get_backend() -> str:
@@ -63,8 +65,10 @@ def _get_backend() -> str:
 
 
 def reload_vector_backend() -> None:
-    global _backend
+    global _backend, _collection_cache, _collection_cache_name
     _backend = None
+    _collection_cache = None
+    _collection_cache_name = None
 
 
 def count_vectors_for_collection(collection: str, *, backend: str | None = None) -> tuple[int, int | None]:
@@ -172,8 +176,12 @@ def _collection_has_field(col: Collection, name: str) -> bool:
 def ensure_collection() -> Collection:
     if _get_backend() == "numpy":
         raise RuntimeError("ensure_collection() not used in numpy vector mode")
-    _connect()
+    global _collection_cache, _collection_cache_name
     name = _active_collection_name()
+    if _collection_cache is not None and _collection_cache_name == name:
+        _collection_cache.load()
+        return _collection_cache
+    _connect()
     dim = embedding_dim()
     if utility.has_collection(name):
         col = Collection(name)
@@ -188,6 +196,8 @@ def ensure_collection() -> Collection:
                 f"Milvus 集合 {name} 为 {existing_dim} 维，当前嵌入模型为 {dim} 维。"
                 "请新建并切换到匹配的向量库。"
             )
+        _collection_cache = col
+        _collection_cache_name = name
         return col
 
     fields = [
@@ -204,6 +214,8 @@ def ensure_collection() -> Collection:
     idx = {"index_type": "IVF_FLAT", "metric_type": "IP", "params": {"nlist": 1024}}
     col.create_index(field_name="vector", index_params=idx)
     col.load()
+    _collection_cache = col
+    _collection_cache_name = name
     return col
 
 
@@ -270,7 +282,6 @@ def vector_search(
     except ImportError:
         pass
     col = ensure_collection()
-    col.load()
     search_params = {"metric_type": "IP", "params": {"nprobe": 10}}
     output_fields = ["id", "parent_id", "department", "source", "text"]
     if _collection_has_field(col, "tags"):

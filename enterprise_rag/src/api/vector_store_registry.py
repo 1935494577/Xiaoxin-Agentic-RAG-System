@@ -10,6 +10,8 @@ from typing import Any
 
 from config import settings
 
+from indexing.embeddings import known_embedding_dim
+
 BACKEND_NUMPY = "numpy"
 BACKEND_MILVUS_LITE = "milvus_lite"
 BACKEND_MILVUS_REMOTE = "milvus_remote"
@@ -117,9 +119,13 @@ def _count_bm25_docs(path: Path) -> int:
 
 
 def _current_embedding_meta() -> tuple[str, int]:
-    from indexing.embeddings import embedding_dim
+    model = settings.embedding_model.strip()
+    dim = known_embedding_dim(model)
+    if dim is None:
+        from indexing.embeddings import embedding_dim
 
-    return settings.embedding_model.strip(), int(embedding_dim())
+        dim = int(embedding_dim())
+    return model, dim
 
 
 def store_status(store: dict[str, Any]) -> dict[str, Any]:
@@ -253,11 +259,13 @@ def get_active_backend() -> str:
 
 def reload_all_indexes() -> None:
     from indexing.bm25_indexer import reload_bm25_index
-    from indexing.milvus_indexer import reload_vector_backend
-    from indexing.numpy_vector_index import reload_store
+    from indexing.milvus_indexer import get_vector_backend, reload_vector_backend
 
     reload_vector_backend()
-    reload_store()
+    if get_vector_backend() == "numpy":
+        from indexing.numpy_vector_index import reload_store
+
+        reload_store()
     reload_bm25_index()
 
 

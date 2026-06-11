@@ -1,0 +1,119 @@
+"""Optional Redis cache for hybrid search results."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+from typing import Any, Protocol
+
+from config import settings
+
+logger = logging.getLogger(__name__)
+
+_cached_client: Any | None = None
+_cached_impl: "SearchCache | None" = None
+
+
+class SearchCache(Protocol):
+    def get(self, key: str) -> tuple[str, list[dict[str, Any]]] | None: ...
+
+    def set(self, key: str, rewritten_query: str, parents: list[dict[str, Any]]) -> None: ...
+
+
+class NullSearchCache:
+    def get(self, key: str) -> tuple[str, list[dict[str, Any]]] | None:
+        return None
+
+    def set(self, key: str, rewritten_query: str, parents: list[dict[str, Any]]) -> None:
+        return None
+
+
+class RedisSearchCache:
+    """Redis string cache with TTL (plugin: ram-ttl, data-key-naming, conn-pooling)."""
+
+    def __init__(self, client: Any, *, ttl_seconds: int) -> None:
+        self._client = client
+        self.ttl_seconds = ttl_seconds
+
+    def get(self, key: str) -> tuple[str, list[dict[str, Any]]] | None:
+        try:
+            raw = self._client.get(key)
+        except Exception:
+            logger.warning("Redis search cache get failed", exc_info=True)
+            return None
+        if not raw:
+            return None
+        try:
+            payload = json.loads(raw)
+            rewritten = str(payload.get("rewritten_query") or "")
+            parents = payload.get("parents")
+            if not isinstance(parents, list):
+                return None
+            return rewritten, parents
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return None
+
+    def set(self, key: str, rewritten_query: str, parents: list[dict[str, Any]]) -> None:
+        payload = json.dumps(
+            {"rewritten_query": rewritten_query, "parents": parents},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        try:
+            self._client.setex(key, self.ttl_seconds, payload)
+        except Exception:
+            logger.warning("Redis search cache set failed", exc_info=True)
+
+
+def build_search_cache_key(query: str, user_department: str, **search_params: Any) -> str:
+    dept = (user_department or settings.default_department or "general").strip() or "general"
+    canonical = {
+        "query": query.strip(),
+        "department": dept,
+        **{k: search_params[k] for k in sorted(search_params)},
+    }
+    digest = hashlib.sha256(
+        json.dumps(canonical, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    ).hexdigest()[:32]
+    return f"rag:search:v1:{dept}:{digest}"
+
+
+def _redis_client():
+    global _cached_client
+    if _cached_client is not None:
+        return _cached_client
+    url = (settings.redis_url or "").strip()
+    if not url:
+        return None
+    try:
+        import redis
+        from redis.connection import ConnectionPool
+    except ImportError:
+        logger.warning("redis package not installed; search cache disabled")
+        return None
+
+    pool = ConnectionPool.from_url(
+        url,
+        max_connections=10,
+        socket_connect_timeout=5,
+        socket_timeout=5,
+        decode_responses=True,
+    )
+    _cached_client = redis.Redis(connection_pool=pool)
+    return _cached_client
+
+
+def get_search_cache() -> SearchCache:
+    global _cached_impl
+    if _cached_impl is not None:
+        return _cached_impl
+    if not settings.redis_search_cache_enabled or not (settings.redis_url or "").strip():
+        _cached_impl = NullSearchCache()
+        return _cached_impl
+    client = _redis_client()
+    if client is None:
+        _cached_impl = NullSearchCache()
+        return _cached_impl
+    _cached_impl = RedisSearchCache(client, ttl_seconds=int(settings.redis_search_cache_ttl_seconds))
+    return _cached_impl

@@ -12,13 +12,17 @@ logger = logging.getLogger(__name__)
 
 def _model_ids() -> list[str]:
     out: list[str] = []
-    for raw in (settings.embedding_model, settings.reranker_model):
+    for raw in (settings.embedding_model,):
         s = str(raw).strip()
         if s and "/" in s:
             out.append(s)
     fb = (settings.embedding_st_fallback or "").strip()
     if fb and "/" in fb and fb not in out:
         out.append(fb)
+    if settings.warmup_reranker_on_startup:
+        rr = str(settings.reranker_model or "").strip()
+        if rr and "/" in rr and rr not in out:
+            out.append(rr)
     return out
 
 
@@ -32,8 +36,12 @@ def ensure_models_on_disk() -> None:
 def warmup_models_in_memory() -> None:
     """Load embedding/reranker once at startup so ingest/chat do not pay cold-start."""
     from indexing.embeddings import embed_texts
-    from retrieval.reranker import rerank_parents
 
     embed_texts(["warmup"], batch_size=1)
-    rerank_parents("warmup", [{"text": "warmup"}], top_k=1)
-    logger.info("Embedding and reranker models warmed up in memory")
+    if settings.warmup_reranker_on_startup:
+        from retrieval.reranker import rerank_parents
+
+        rerank_parents("warmup", [{"text": "warmup"}], top_k=1)
+        logger.info("Embedding and reranker models warmed up in memory")
+    else:
+        logger.info("Embedding model warmed up; reranker deferred (warmup_reranker_on_startup=false)")

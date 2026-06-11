@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import heapq
 import json
 import threading
 from pathlib import Path
@@ -28,6 +29,7 @@ class BM25Index:
         self.corpus: list[str] = []
         self.metadata_list: list[dict[str, Any]] = []
         self.bm25: BM25Okapi | None = None
+        self._parent_by_id: dict[str, dict[str, Any]] | None = None
         if self.index_path.is_file():
             self.load()
 
@@ -39,11 +41,28 @@ class BM25Index:
         self._rebuild_bm25()
 
     def _rebuild_bm25(self) -> None:
+        self._parent_by_id = None
         if not self.corpus:
             self.bm25 = None
             return
         tokenized = [_tokenize(t) for t in self.corpus]
         self.bm25 = BM25Okapi(tokenized)
+
+    def _rebuild_parent_index(self) -> None:
+        out: dict[str, dict[str, Any]] = {}
+        for text, meta in zip(self.corpus, self.metadata_list):
+            pid = str(meta.get("parent_id", ""))
+            if not pid:
+                continue
+            out[pid] = {
+                "parent_id": pid,
+                "text": text,
+                "department": meta.get("department"),
+                "source": meta.get("source"),
+                "permission_label": meta.get("permission_label"),
+                "tags": meta.get("tags") or [],
+            }
+        self._parent_by_id = out
 
     def save(self) -> None:
         self.index_path.parent.mkdir(parents=True, exist_ok=True)
@@ -94,7 +113,8 @@ class BM25Index:
                 return []
             q_tok = _tokenize(query)
             scores = self.bm25.get_scores(q_tok)
-            top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:top_k]
+            k = min(top_k, len(scores))
+            top_indices = heapq.nlargest(k, range(len(scores)), key=lambda i: scores[i])
             out: list[dict[str, Any]] = []
             for idx in top_indices:
                 meta = self.metadata_list[idx] if idx < len(self.metadata_list) else {}
@@ -112,21 +132,11 @@ class BM25Index:
             return out
 
     def fetch_by_parent_ids(self, parent_ids: list[str]) -> dict[str, dict[str, Any]]:
-        want = set(parent_ids)
-        out: dict[str, dict[str, Any]] = {}
         with _lock:
-            for text, meta in zip(self.corpus, self.metadata_list):
-                pid = str(meta.get("parent_id", ""))
-                if pid in want:
-                    out[pid] = {
-                        "parent_id": pid,
-                        "text": text,
-                        "department": meta.get("department"),
-                        "source": meta.get("source"),
-                        "permission_label": meta.get("permission_label"),
-                        "tags": meta.get("tags") or [],
-                    }
-        return out
+            if self._parent_by_id is None:
+                self._rebuild_parent_index()
+            parent_map = self._parent_by_id or {}
+            return {pid: dict(parent_map[pid]) for pid in parent_ids if pid in parent_map}
 
 
 _index: BM25Index | None = None

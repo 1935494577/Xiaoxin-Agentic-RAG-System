@@ -9,6 +9,30 @@ import numpy as np
 from config import settings
 from runtime_device import use_fp16_safe, torch_device_string
 
+# 常见模型维度 — 避免 registry 初始化时加载权重
+_KNOWN_EMBEDDING_DIMS: dict[str, int] = {
+    "BAAI/bge-small-zh-v1.5": 512,
+    "BAAI/bge-small-zh-v1___5": 512,
+    "BAAI/bge-base-zh-v1.5": 768,
+    "BAAI/bge-base-zh-v1___5": 768,
+    "BAAI/bge-m3": 1024,
+    "BAAI/bge-large-zh-v1.5": 1024,
+    "BAAI/bge-large-zh-v1___5": 1024,
+}
+
+
+def known_embedding_dim(model_id: str) -> int | None:
+    mid = (model_id or "").strip()
+    if not mid:
+        return None
+    if mid in _KNOWN_EMBEDDING_DIMS:
+        return _KNOWN_EMBEDDING_DIMS[mid]
+    tail = mid.rsplit("/", 1)[-1]
+    for key, dim in _KNOWN_EMBEDDING_DIMS.items():
+        if key.rsplit("/", 1)[-1] == tail:
+            return dim
+    return None
+
 
 def _hf_cache_dir() -> str | None:
     raw = (settings.hf_hub_cache or "").strip()
@@ -132,7 +156,11 @@ def embed_texts(texts: list[str], batch_size: int | None = None) -> np.ndarray:
 def embedding_dim() -> int:
     mode = (settings.embedding_backend or "auto").strip().lower()
     if mode == "sentence_transformers":
-        return int(_st_model().get_sentence_embedding_dimension())
+        model = _st_model()
+        dim_fn = getattr(model, "get_embedding_dimension", None)
+        if callable(dim_fn):
+            return int(dim_fn())
+        return int(model.get_sentence_embedding_dimension())
     if mode == "flag":
         v = _flag_encode_to_array(_flag_model(), ["ping"], batch_size=1)
         return int(v.shape[-1])
