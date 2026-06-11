@@ -179,9 +179,13 @@ def should_use_knowledge_base(
             return _llm_kb_relevant(question, contexts, llm_runtime)
         return True
 
+    hybrid_best = best_hybrid_score(contexts_meta)
+    if hybrid_best >= float(kb_min_score):
+        return True
+
     if kb_llm_judge and llm_runtime:
         return _llm_kb_relevant(question, contexts, llm_runtime)
-    return best_hybrid_score(contexts_meta) >= float(kb_min_score)
+    return hybrid_best >= float(kb_min_score)
 
 
 def resolve_answer_mode(
