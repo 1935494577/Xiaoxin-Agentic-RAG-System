@@ -13,7 +13,7 @@
 | **嵌入与重排** | FlagEmbedding / sentence-transformers、CrossEncoder 重排；可选 **ModelScope** 下载到 `enterprise_rag/data/models` |
 | **检索** | 查询改写、向量 + BM25 混合检索、重排；**L3 检索去重**（文本相似度 + MMR） |
 | **入库去重** | **L1** 文档 content_hash 别名跳过重复嵌入；**L2** 父块 simhash 近似去重（`indexing/ingest_dedup`） |
-| **对话智能体** | LangGraph 与非流式 `/chat`；**SSE 流式** `/chat/stream`；**混合专家模式**（KB 优先、未命中静默通用兜底）；引文按文件去重；**对话工具**（`agent/tools/`，OpenAI function calling，通用模式可调用天气等，SSE 推送 `tool_call`/`tool_result`） |
+| **对话智能体** | LangGraph 与非流式 `/chat`；**SSE 流式** `/chat/stream`；**混合专家模式**（KB 优先、未命中静默通用兜底）；引文按文件去重；**对话工具**（`agent/tools/`：`get_beijing_time` 北京时间、**天气实况+数小时预报与建议**、Tavily `web_search`；实时类问题强制走工具、禁止编造日期） |
 | **HTTP API** | FastAPI：健康检查、入库（含 dedup 统计）、检索调试、流式对话、会话记忆、可插拔提示词、模型/向量库/UI 配置（`api`） |
 | **安全** | 可选 `RAG_API_SECRET`、CORS、可信 Host、安全头；注入检测；**部门 + 可见范围 ACL**（内部仅本部门、公开全员可见，向量/BM25 检索层过滤） |
 | **前端** | **Jnao Chat** React SPA（8502）：流式对话、工具调用展示；**React 管理后台**（`/admin`）：入库、**入库工具 / 对话工具** 分 Tab、提示词、模型、记忆、Trace 等 |

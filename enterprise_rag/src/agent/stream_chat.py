@@ -18,6 +18,7 @@ from agent.conversation_context import build_llm_messages
 from agent.nodes import retrieve_node
 from agent.stream_verifier import run_stream_verifier
 from agent.tools.runtime.stream import is_tools_active, stream_general_answer
+from agent.tools.runtime.routing import question_needs_agent_tools
 from config import settings
 from evaluation.stream_langsmith import new_stream_tracer
 from openai import OpenAI
@@ -93,6 +94,9 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
             general_fallback_enabled=bool(mem.get("general_fallback_enabled", True)),
             llm_runtime=llm_runtime,
         )
+        if is_tools_active() and question_needs_agent_tools(state["question"]):
+            answer_mode = "general"
+            route_out["tool_route_override"] = True
         route_out["answer_mode"] = answer_mode
 
     api_key = (state.get("llm_api_key") or "").strip() or settings.openai_api_key

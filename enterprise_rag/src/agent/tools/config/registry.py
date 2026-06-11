@@ -8,18 +8,54 @@ from agent.tools.builtins import run_builtin
 from agent.tools.config.store import load_json_config, save_json_config
 
 TOOL_DEFINITIONS: dict[str, dict[str, Any]] = {
+    "get_beijing_time": {
+        "label": "北京时间",
+        "description": (
+            "获取当前北京时间（年月日、星期、时刻）。"
+            "用户问今天几号、现在几点、星期几、哪年哪月时必须调用此工具，禁止自行猜测。"
+        ),
+        "parameters": {"type": "object", "properties": {}, "required": []},
+    },
     "get_weather": {
         "label": "天气查询",
-        "description": "查询指定城市或地区的当前天气（温度、体感、湿度、风速等）。",
+        "description": (
+            "查询指定城市或地区的实时天气，并给出未来数小时（默认约 12 小时）"
+            "的逐时段预报与出行/穿衣建议。用户问天气、要不要带伞、穿什么时必须调用。"
+        ),
         "parameters": {
             "type": "object",
             "properties": {
                 "city": {
                     "type": "string",
                     "description": "城市或地区名，例如：杭州、北京、上海",
-                }
+                },
+                "forecast_hours": {
+                    "type": "integer",
+                    "description": "预报未来多少小时，3-24，默认 12",
+                },
             },
             "required": ["city"],
+        },
+    },
+    "web_search": {
+        "label": "联网搜索",
+        "description": (
+            "搜索互联网上的实时信息，适用于新闻、政策、节假日安排、股价、"
+            "公开资料等知识库中没有的内容。不要用于已有内部文档可回答的问题。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "搜索关键词或完整问句，例如：2026年春节放假安排、今日科技新闻",
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "返回条数，1-10，默认 5",
+                },
+            },
+            "required": ["query"],
         },
     },
 }
