@@ -12,7 +12,7 @@ import { toast } from "sonner";
 export default function IngestPage() {
   const queryClient = useQueryClient();
   const [dept, setDept] = useState("技术");
-  const [perm, setPerm] = useState("1");
+  const [perm, setPerm] = useState("internal");
   const [selectedPresets, setSelectedPresets] = useState<string[]>([]);
   const [customTags, setCustomTags] = useState("");
   const [file, setFile] = useState<File | null>(null);

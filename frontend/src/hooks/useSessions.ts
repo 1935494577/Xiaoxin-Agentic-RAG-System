@@ -12,7 +12,7 @@ export function useSessions(userId: string) {
   const queryClient = useQueryClient();
   const sessionsKey = ["sessions", userId];
 
-  const { data: sessions = [], isLoading, refetch } = useQuery({
+  const { data: sessions = [], isLoading, error, refetch } = useQuery({
     queryKey: sessionsKey,
     queryFn: () => listSessions(userId),
   });
@@ -32,7 +32,7 @@ export function useSessions(userId: string) {
     [userId, refetch, queryClient]
   );
 
-  return { sessions, isLoading, create, remove, refetch };
+  return { sessions, isLoading, error, create, remove, refetch };
 }
 
 export function useMessages(userId: string, sessionId: string | null) {

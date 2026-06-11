@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchProcessingTools, saveProcessingTools } from "../../api/client";
 import type { ProcessingToolsData } from "../../api/types";
@@ -19,7 +19,7 @@ export default function ProcessingPage() {
   });
 
   // Init form state from API data
-  useState(() => {
+  useEffect(() => {
     if (data) {
       setUseLlmRouter(Boolean(data.use_hybrid_expert_router));
       const t: Record<string, boolean> = {};
@@ -28,7 +28,7 @@ export default function ProcessingPage() {
       });
       if (Object.keys(t).length) setToggles(t);
     }
-  });
+  }, [data]);
 
   const saveMutation = useMutation({
     mutationFn: (body: ProcessingToolsData) => saveProcessingTools(body),
