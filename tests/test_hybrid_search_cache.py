@@ -24,6 +24,9 @@ class _RecordingCache(NullSearchCache):
         self.set_calls += 1
         self.store[key] = (rewritten_query, parents)
 
+    def invalidate_all(self) -> None:
+        self.store.clear()
+
 
 @pytest.fixture()
 def recording_cache(monkeypatch):
@@ -54,8 +57,12 @@ def test_hybrid_search_returns_cached_result_without_retrieval(recording_cache):
         rewritten, got = hybrid_searcher.hybrid_search(
             query,
             dept,
+            top_k=5,
             skip_query_rewrite=True,
+            retrieve_top_k=20,
             skip_rerank=True,
+            rerank_top_k=5,
+            retrieval_dedup=True,
         )
 
     embed_mock.assert_not_called()

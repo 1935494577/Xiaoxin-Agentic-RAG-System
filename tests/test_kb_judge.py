@@ -72,8 +72,8 @@ def test_llm_judge_no(mock_openai):
     assert mode == "general"
 
 
-def test_hybrid_high_no_rerank_uses_llm_judge():
-    """无重排时即使混合分高，也走 LLM 判断。"""
+def test_hybrid_high_no_rerank_prefers_kb_even_if_llm_no():
+    """流式快速路径无重排时：混合分达标则优先 KB，避免误走通用回答。"""
     with patch("agent.kb_judge.OpenAI") as mock_openai:
         client = MagicMock()
         mock_openai.return_value = client
@@ -81,16 +81,17 @@ def test_hybrid_high_no_rerank_uses_llm_judge():
             choices=[MagicMock(message=MagicMock(content="NO"))]
         )
         mode = resolve_answer_mode(
-            "stream trace test",
-            ["阅读资料"],
-            [{"hybrid_score": 0.9, "text": "阅读"}],
+            "扫描笔记有哪些注意事项",
+            ["扫描速记晋级要求片段"],
+            [{"hybrid_score": 0.9, "text": "扫描速记"}],
             kb_min_score=0.55,
             kb_min_rerank_score=0.0,
             kb_llm_judge=True,
             general_fallback_enabled=True,
             llm_runtime={"llm_api_key": "sk-test", "llm_api_base": "http://x", "chat_model": "m"},
         )
-        assert mode == "general"
+        assert mode == "kb"
+        mock_openai.assert_not_called()
 
 
 def test_kb_miss_detection():

@@ -128,7 +128,7 @@ export default function MemoryPage() {
                 step={0.05}
               />
               <span className="text-xs text-text-muted">
-                快速流式无重排时默认走 LLM 判断；关闭 LLM 判断后此项生效。
+                快速流式无重排时：混合分 ≥ 阈值则优先知识库；低于阈值时再用 LLM 判断。
               </span>
             </div>
 
