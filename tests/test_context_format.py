@@ -9,7 +9,7 @@ def test_format_context_with_meta_includes_tags():
         "text": "示例正文",
     }
     out = format_context_with_meta(meta)
-    assert "[来源=1-3.txt | 部门=技术 | 标签=1]" in out
+    assert "[来源=1-3.txt | 部门=技术 | 可见范围=1]" in out
     assert "示例正文" in out
 
 
@@ -21,7 +21,7 @@ def test_format_source_citation_includes_tags():
         "permission_label": "1",
     }
     out = format_source_citation(meta)
-    assert out == "1-3.txt#p_abc (部门=技术, 标签=1)"
+    assert out == "1-3.txt#p_abc (部门=技术, 可见范围=1)"
 
 
 def test_source_ref_dict():

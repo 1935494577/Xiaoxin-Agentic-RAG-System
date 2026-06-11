@@ -54,6 +54,9 @@ def hybrid_search(
     步骤4：改写 → Milvus(部门过滤) + 本地 rank-bm25 父块 → 按 parent_id 融合 → Rerank → Top 父块。
     返回 (rewritten_query, parents)。
     """
+    from security.access_control import normalize_department
+
+    user_department = normalize_department(user_department)
     cache_params = {
         "top_k": top_k,
         "skip_query_rewrite": skip_query_rewrite,
@@ -87,7 +90,7 @@ def hybrid_search(
 
     dept = user_department or None
     f_vec = _search_pool.submit(vector_search, q_emb, rk, user_department=dept)
-    f_bm25 = _search_pool.submit(bm25_parent_search, rewritten, rk)
+    f_bm25 = _search_pool.submit(bm25_parent_search, rewritten, rk, user_department=dept)
     vec_hits = f_vec.result()
     es_hits = f_bm25.result()
 

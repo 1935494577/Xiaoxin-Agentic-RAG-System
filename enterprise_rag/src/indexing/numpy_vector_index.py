@@ -16,6 +16,7 @@ _rows: list[dict[str, Any]] = []
 _loaded_path: str | None = None
 _matrix: np.ndarray | None = None
 _meta: list[dict[str, Any]] = []
+_acl_row_cache: dict[str, np.ndarray] = {}
 
 
 def _path() -> Path:
@@ -28,9 +29,10 @@ def _path() -> Path:
 
 
 def _invalidate_matrix() -> None:
-    global _matrix, _meta
+    global _matrix, _meta, _acl_row_cache
     _matrix = None
     _meta = []
+    _acl_row_cache = {}
 
 
 def reload_store() -> None:
@@ -108,6 +110,7 @@ def insert_child_vectors(
     departments: list[str],
     sources: list[str],
     tags: list[str] | None = None,
+    permission_labels: list[str] | None = None,
 ) -> None:
     try:
         from api.vector_store_registry import validate_insert_vectors
@@ -118,6 +121,7 @@ def insert_child_vectors(
     from chunker.utils import tags_to_store_value
 
     tag_str = tags_to_store_value(tags)
+    perms = permission_labels or ["internal"] * len(ids)
     with _lock:
         _load_unlocked()
         for i in range(len(ids)):
@@ -128,12 +132,26 @@ def insert_child_vectors(
                     "text": texts[i][:1990],
                     "parent_id": parent_ids[i],
                     "department": departments[i],
+                    "permission_label": perms[i] if i < len(perms) else "internal",
                     "source": sources[i],
                     "tags": tag_str,
                 }
             )
         _invalidate_matrix()
         _save_unlocked()
+
+
+def _accessible_row_indices(user_department: str) -> np.ndarray:
+    from security.access_control import can_access_row, normalize_department
+
+    dept_key = normalize_department(user_department)
+    cached = _acl_row_cache.get(dept_key)
+    if cached is not None:
+        return cached
+    indices = [i for i, row in enumerate(_meta) if can_access_row(row, dept_key)]
+    arr = np.asarray(indices, dtype=np.int32)
+    _acl_row_cache[dept_key] = arr
+    return arr
 
 
 def vector_search(
@@ -163,9 +181,11 @@ def vector_search(
                 "请用同一嵌入模型重新入库（数据入库页重新上传），或清空向量库后重建索引。"
             )
         if user_department:
-            indices = [i for i, r in enumerate(_meta) if str(r.get("department", "")) == user_department]
-            mat = _matrix[indices] if indices else np.zeros((0, q.shape[0]), dtype=np.float32)
-            meta_slice = [_meta[i] for i in indices]
+            row_idx = _accessible_row_indices(user_department)
+            if row_idx.size == 0:
+                return []
+            mat = _matrix[row_idx]
+            meta_slice = [_meta[int(i)] for i in row_idx]
         else:
             mat = _matrix
             meta_slice = _meta
@@ -188,6 +208,7 @@ def vector_search(
                     "id": r.get("id"),
                     "parent_id": r.get("parent_id"),
                     "department": r.get("department"),
+                    "permission_label": r.get("permission_label") or "",
                     "source": r.get("source"),
                     "text": r.get("text"),
                     "tags": r.get("tags") or "",

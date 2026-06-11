@@ -88,7 +88,7 @@ class Settings(BaseSettings):
     query_rewrite_enabled: bool = False
 
     use_presidio: bool = True
-    default_department: str = "general"
+    default_department: str = "技术部"
     default_permission_label: str = "public"
 
     llama_cloud_api_key: str = ""

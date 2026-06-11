@@ -86,7 +86,9 @@ class RedisSearchCache:
 
 
 def build_search_cache_key(query: str, user_department: str, **search_params: Any) -> str:
-    dept = (user_department or settings.default_department or "general").strip() or "general"
+    from security.access_control import normalize_department
+
+    dept = normalize_department(user_department or settings.default_department)
     canonical = {
         "query": query.strip(),
         "department": dept,

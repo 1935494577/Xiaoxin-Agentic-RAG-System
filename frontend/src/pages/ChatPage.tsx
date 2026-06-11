@@ -9,7 +9,7 @@ import {
   loadMessages,
   streamChat,
 } from "../api/client";
-import { HYBRID_MODE_KEY } from "../lib/constants";
+import { HYBRID_MODE_KEY, USER_DEPT_KEY } from "../lib/constants";
 import { useAuth } from "../hooks/useAuth";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import type { ChatMessage, ChatSession, StreamEvent } from "../api/types";
@@ -42,7 +42,7 @@ export default function ChatPage() {
   const initDone = useRef(false);
 
   const [input, setInput] = useState("");
-  const [department, setDepartment] = useState("技术");
+  const [department, setDepartment] = useLocalStorage<string>(USER_DEPT_KEY, "技术部");
   const [hybridExpert, setHybridExpert] = useLocalStorage<boolean>(HYBRID_MODE_KEY, false);
 
   const { data: uiConfig } = useQuery({
