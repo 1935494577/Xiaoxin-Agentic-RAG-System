@@ -882,6 +882,7 @@ def _ingest_text(
         departments=[c.department for c in children],
         sources=[c.source for c in children],
         tags=doc_tags,
+        permission_labels=[c.permission_label for c in children],
     )
     parent_docs = [
         {

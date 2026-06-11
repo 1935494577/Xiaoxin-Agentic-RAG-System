@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchUiConfig, uploadDocument } from "../../api/client";
-import { DEPT_OPTIONS, PERM_OPTIONS, PERM_LABELS } from "../../lib/constants";
+import { DEPT_OPTIONS, DEPT_LABELS, PERM_OPTIONS, PERM_LABELS } from "../../lib/constants";
 import { PageHeader } from "../../components/admin/PageHeader";
 import { Button } from "../../components/ui/Button";
 import { Tabs } from "../../components/ui/Tabs";
@@ -11,7 +11,7 @@ import { toast } from "sonner";
 
 export default function IngestPage() {
   const queryClient = useQueryClient();
-  const [dept, setDept] = useState("技术");
+  const [dept, setDept] = useState("技术部");
   const [perm, setPerm] = useState("internal");
   const [selectedPresets, setSelectedPresets] = useState<string[]>([]);
   const [customTags, setCustomTags] = useState("");
@@ -125,7 +125,7 @@ export default function IngestPage() {
             <Select value={dept} onChange={(e) => setDept(e.target.value)} className="mt-1">
               {DEPT_OPTIONS.map((d) => (
                 <option key={d} value={d}>
-                  {d === "general" ? "通用" : d}
+                  {DEPT_LABELS[d]}
                 </option>
               ))}
             </Select>
@@ -146,7 +146,7 @@ export default function IngestPage() {
         <div>
           <h3 className="text-sm font-semibold text-text mb-1">入库标签（可选）</h3>
           <p className="text-xs text-text-muted mb-3">
-            为本次上传的文档打上标签，便于后续区分来源与类型。
+            标签仅用于检索与分类，不控制权限。内部文档仅本部门可见；公开文档所有部门可见。
           </p>
 
           {presets.length > 0 && (

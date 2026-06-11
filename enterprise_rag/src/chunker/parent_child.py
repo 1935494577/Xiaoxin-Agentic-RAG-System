@@ -13,6 +13,7 @@ except ImportError:  # 旧环境：仅 community 暴露该符号
 
 from chunker.utils import new_chunk_id, normalize_ingest_tags
 from config import settings
+from security.access_control import normalize_department, normalize_visibility
 
 
 @dataclass
@@ -46,8 +47,8 @@ def split_parent_child(
     tags: list[str] | None = None,
 ) -> tuple[list[ParentChunk], list[ChildChunk]]:
     """步骤2：父子块 + 元数据（部门、权限标签、自定义标签）。"""
-    dept = department or settings.default_department
-    perm = permission_label or settings.default_permission_label
+    dept = normalize_department(department or settings.default_department)
+    perm = normalize_visibility(permission_label or settings.default_permission_label)
     doc_tags = normalize_ingest_tags(tags)
 
     parent_splitter = RecursiveCharacterTextSplitter(
