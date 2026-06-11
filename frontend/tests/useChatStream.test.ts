@@ -112,6 +112,25 @@ describe("useChatStream", () => {
     expect(result.current.streaming).toBe(false);
   });
 
+  it("done event captures tool_trace from stream events", async () => {
+    mockStream([
+      { type: "tool_call", tool: "get_weather", arguments: { city: "杭州" } },
+      { type: "tool_result", tool: "get_weather", output: "杭州 晴", ok: true },
+      { type: "done", answer: "杭州今天晴。" },
+    ]);
+
+    const onPersist = vi.fn();
+    const { result } = renderHook(() => useChatStream("user1", onPersist));
+
+    let messages: Awaited<ReturnType<typeof result.current.send>>;
+    await act(async () => {
+      messages = await result.current.send({ message: "天气", user_id: "user1" }, []);
+    });
+
+    expect(messages![1].meta?.tool_trace?.[0].tool).toBe("get_weather");
+    expect(messages![1].meta?.tool_trace?.[0].output).toBe("杭州 晴");
+  });
+
   it("done event captures sources and answer_mode", async () => {
     mockStream([
       {

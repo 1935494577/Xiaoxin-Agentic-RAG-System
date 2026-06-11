@@ -6,6 +6,9 @@ import type {
   ModelProfilesData,
   NavConfig,
   ProcessingToolsData,
+  ProcessingToolsSave,
+  AgentToolsData,
+  AgentToolsSave,
   PromptData,
   StreamEvent,
   StreamPayload,
@@ -173,11 +176,24 @@ export function fetchProcessingTools(): Promise<ProcessingToolsData> {
   return request<ProcessingToolsData>("/config/processing-tools");
 }
 
-export function saveProcessingTools(tools: ProcessingToolsData): Promise<void> {
-  return request("/config/processing-tools", {
+export function saveProcessingTools(body: ProcessingToolsSave): Promise<ProcessingToolsData> {
+  return request<ProcessingToolsData>("/config/processing-tools", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(tools),
+    body: JSON.stringify(body),
+  });
+}
+
+// ===== Agent Chat Tools =====
+export function fetchAgentTools(): Promise<AgentToolsData> {
+  return request<AgentToolsData>("/config/agent-tools");
+}
+
+export function saveAgentTools(body: AgentToolsSave): Promise<AgentToolsData> {
+  return request<AgentToolsData>("/config/agent-tools", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
 }
 

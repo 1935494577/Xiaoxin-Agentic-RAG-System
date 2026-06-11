@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { appendMessages, streamChat } from "../api/client";
-import type { ChatMessage, StreamEvent, StreamPayload } from "../api/types";
+import type { ChatMessage, StreamEvent, StreamPayload, ToolTraceItem } from "../api/types";
+import { applyToolStreamEvent } from "../lib/streamTools";
 
 type StreamState = {
   streaming: boolean;
@@ -25,6 +26,7 @@ export function useChatStream(userId: string, onPersist: () => void) {
 
       let assistant = "";
       let meta: ChatMessage["meta"] = {};
+      let toolTrace: ToolTraceItem[] = [];
 
       await streamChat(
         {
@@ -37,6 +39,8 @@ export function useChatStream(userId: string, onPersist: () => void) {
           if (evt.type === "token") {
             assistant += evt.content;
             setState((s) => ({ ...s, streamText: assistant }));
+          } else if (evt.type === "tool_call" || evt.type === "tool_result") {
+            toolTrace = applyToolStreamEvent(toolTrace, evt);
           } else if (evt.type === "error") {
             setState((s) => ({ ...s, error: evt.message }));
           } else if (evt.type === "done") {
@@ -47,6 +51,7 @@ export function useChatStream(userId: string, onPersist: () => void) {
               answer_mode: evt.answer_mode,
               verified: evt.verified,
               trace_id: evt.trace_id,
+              tool_trace: evt.tool_trace?.length ? evt.tool_trace : toolTrace,
             };
           }
         },
