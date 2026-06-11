@@ -37,7 +37,10 @@ stop-dev:
 	bash scripts/stop-dev.sh
 
 run-frontend:
-	$(PY) -m streamlit run frontend/admin/streamlit_app.py --server.port 8501
+	cd frontend/app && npm run dev
+
+run-chat-spa:
+	cd frontend/app && npm run dev
 
 test:
 	$(PY) -m pytest tests/
@@ -63,7 +66,7 @@ down: infra-down
 demo:
 	@echo "plan1 (no Docker): make install && python scripts/run_closed_loop.py"
 	@echo "Dev (all):  Windows: scripts/run-dev.ps1   macOS: ./scripts/run-dev.sh"
-	@echo "API only:   make run-api   Frontend: make run-frontend"
+	@echo "API only:   make run-api   Frontend: make run-frontend  (or make run-chat-spa)"
 	@echo "Deploy/security: docs/deploy_security.md"
 	@echo "Windows venv: powershell -File scripts/bootstrap_venv.ps1 && powershell -File scripts/verify_env.ps1"
 	@echo "Legacy stack: make infra-up  (docker compose --profile legacy)"

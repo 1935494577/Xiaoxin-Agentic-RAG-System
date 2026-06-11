@@ -9,10 +9,15 @@ __pycache__/
 .ruff_cache/
 *.egg-info/
 
+# 旧前端（已重写为 frontend/app/，保留本地参考，不提交）
+frontend/admin/
+frontend/chat/
+
 # 内部笔记 / 规划稿（不推 GitHub，本地可保留）
 PROJECT_PLAN.md
 plan1.md
 project.txt
+docs/PROJECT_REFERENCE.md
 
 # IDE / OS
 .cursor/

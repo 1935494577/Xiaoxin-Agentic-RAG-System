@@ -1,14 +1,28 @@
+# Start Frontend SPA (port 8502) — unified chat + admin
+# Replaces the old Streamlit admin (8501); admin pages now at /admin/* in the SPA
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "_port_utils.ps1")
 
-$Port = $script:DevFrontendPort
-$Py = Get-DevPython
+$SpaDir = Join-Path $Root "frontend\app"
+$SpaPort = $script:DevSpaPort
 
-Invoke-DevService -Port $Port -Label "Streamlit frontend" -Run {
-    Set-Location $Root
-    Write-Host "Frontend: http://127.0.0.1:$($using:Port)  (save file to refresh, Ctrl+C to stop)"
-    & $using:Py -m streamlit run frontend/admin/streamlit_app.py `
-        --server.port $using:Port `
-        --server.runOnSave true @args
+$npm = Get-DevNpmCmd
+if (-not $npm) {
+    Write-Error "npm.cmd not found. Install Node.js LTS (https://nodejs.org)."
+}
+
+if (-not (Test-Path (Join-Path $SpaDir "node_modules"))) {
+    Push-Location $SpaDir
+    & $npm install
+    Pop-Location
+}
+
+Write-Host "Frontend SPA: http://127.0.0.1:$SpaPort  (管理后台: /admin/ingest)"
+Push-Location $SpaDir
+try {
+    & $npm run dev
+} finally {
+    Pop-Location
+    Stop-PortListeners -Port $SpaPort -Label "Frontend SPA"
 }

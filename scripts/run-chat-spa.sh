@@ -5,20 +5,20 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 . "$SCRIPT_DIR/_port_utils.sh"
 
-CHAT_DIR="$ROOT/frontend/chat"
+SPA_DIR="$ROOT/frontend/app"
 
 if ! command -v npm >/dev/null 2>&1; then
   echo "npm not found. Install Node.js LTS (https://nodejs.org)." >&2
   exit 1
 fi
 
-stop_port_listeners "$DEV_CHAT_SPA_PORT" "Jnao Chat"
-trap 'stop_port_listeners "$DEV_CHAT_SPA_PORT" "Jnao Chat"' EXIT INT TERM
+stop_port_listeners "$DEV_SPA_PORT" "Frontend SPA"
+trap 'stop_port_listeners "$DEV_SPA_PORT" "Frontend SPA"' EXIT INT TERM
 
-if [[ ! -d "$CHAT_DIR/node_modules" ]]; then
-  (cd "$CHAT_DIR" && npm install)
+if [[ ! -d "$SPA_DIR/node_modules" ]]; then
+  (cd "$SPA_DIR" && npm install)
 fi
 
-echo "Jnao Chat: http://127.0.0.1:${DEV_CHAT_SPA_PORT}"
-cd "$CHAT_DIR"
+echo "Frontend SPA: http://127.0.0.1:${DEV_SPA_PORT}  (管理后台: /admin/)"
+cd "$SPA_DIR"
 exec npm run dev

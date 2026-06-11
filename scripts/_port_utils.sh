@@ -3,8 +3,7 @@
 # Compatible with macOS default Bash 3.2.
 
 DEV_API_PORT=8010
-DEV_FRONTEND_PORT=8501
-DEV_CHAT_SPA_PORT=8502
+DEV_SPA_PORT=8502
 
 _UTILS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -60,25 +59,24 @@ EOF
 
 stop_dev_ports() {
   stop_port_listeners "$DEV_API_PORT" "API"
-  stop_port_listeners "$DEV_FRONTEND_PORT" "Streamlit admin"
-  stop_port_listeners "$DEV_CHAT_SPA_PORT" "Jnao Chat"
+  stop_port_listeners "$DEV_SPA_PORT" "Frontend SPA"
 }
 
-start_dev_chat_spa() {
-  local chat_dir="$1"
-  local port="${2:-$DEV_CHAT_SPA_PORT}"
+start_dev_spa() {
+  local spa_dir="$1"
+  local port="${2:-$DEV_SPA_PORT}"
   if ! command -v npm >/dev/null 2>&1; then
-    echo "WARN: npm not found — skip Jnao Chat. Install Node.js LTS." >&2
+    echo "WARN: npm not found — skip Frontend SPA. Install Node.js LTS." >&2
     return 1
   fi
-  if [[ ! -d "$chat_dir/node_modules" ]]; then
-    echo "Installing Jnao Chat dependencies..." >&2
-    (cd "$chat_dir" && npm install) || {
+  if [[ ! -d "$spa_dir/node_modules" ]]; then
+    echo "Installing Frontend SPA dependencies..." >&2
+    (cd "$spa_dir" && npm install) || {
       echo "WARN: npm install failed." >&2
       return 1
     }
   fi
-  echo "Starting Jnao Chat on port ${port}..." >&2
-  (cd "$chat_dir" && npm run dev) &
+  echo "Starting Frontend SPA on port ${port}..." >&2
+  (cd "$spa_dir" && npm run dev) &
   echo $!
 }
