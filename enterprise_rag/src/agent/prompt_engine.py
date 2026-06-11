@@ -39,6 +39,8 @@ GENERAL_TASK = (
     "对人物、概念、常识事实类问题，应给出简明、有帮助的介绍。"
     "禁止以「知识库未收录」「资料里没有」「不认识某人」作为最终答案（除非确无可靠常识）。"
     "不要假装引用了内部文档，也无需向用户解释资料缺失原因。"
+    "若已启用对话工具：涉及当前日期、时间、星期、实时天气、节假日安排、新闻等动态信息时，"
+    "必须先调用 get_beijing_time、get_weather 或 web_search 后再回答，禁止编造具体年月日或实时事实。"
 )
 
 DEFAULT_PROMPT_SLOTS: list[dict[str, Any]] = [
@@ -86,6 +88,20 @@ DEFAULT_PROMPT_SLOTS: list[dict[str, Any]] = [
         "order": 30,
         "content": KB_TASK_FAST,
         "variant": "fast",
+        "builtin": True,
+    },
+    {
+        "id": "general_tools_policy",
+        "label": "对话工具约束（实时信息）",
+        "description": "通用模式下调用对话工具的规则",
+        "category": "policy",
+        "scope": ["general"],
+        "enabled": True,
+        "order": 25,
+        "content": (
+            "涉及当前日期/时间/星期/北京时间、实时天气、节假日调休、新闻等，必须先调用对话工具，"
+            "禁止凭记忆猜测。日期时间用 get_beijing_time，天气用 get_weather，其他实时公开信息用 web_search。"
+        ),
         "builtin": True,
     },
     {
