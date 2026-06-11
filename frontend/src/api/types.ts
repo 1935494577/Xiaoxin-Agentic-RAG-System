@@ -55,13 +55,23 @@ export type ChatMessage = {
     answer_mode?: string;
     verified?: boolean;
     trace_id?: string;
+    tool_trace?: ToolTraceItem[];
   };
+};
+
+export type ToolTraceItem = {
+  tool: string;
+  arguments?: Record<string, unknown>;
+  output?: string;
+  ok?: boolean;
 };
 
 export type StreamEvent =
   | { type: "status"; phase: string; answer_mode?: string; trace_id?: string }
   | { type: "stream_reset" }
   | { type: "token"; content: string }
+  | { type: "tool_call"; tool: string; arguments: Record<string, unknown> }
+  | { type: "tool_result"; tool: string; output: string; ok: boolean }
   | { type: "error"; message: string; trace_id?: string }
   | {
       type: "done";
@@ -72,6 +82,7 @@ export type StreamEvent =
       answer_mode?: string;
       verified?: boolean;
       trace_id?: string;
+      tool_trace?: ToolTraceItem[];
     };
 
 export type StreamPayload = {
@@ -110,7 +121,31 @@ export type ProcessingTool = {
 
 export type ProcessingToolsData = {
   tools: ProcessingTool[];
-  use_hybrid_expert_router: boolean;
+  use_llm_router: boolean;
+  extension_map?: Record<string, string>;
+};
+
+export type ProcessingToolsSave = {
+  use_llm_router: boolean;
+  tools: Record<string, { enabled: boolean }>;
+};
+
+// ===== Agent Chat Tools =====
+export type AgentChatTool = {
+  id: string;
+  label: string;
+  description: string;
+  enabled: boolean;
+};
+
+export type AgentToolsData = {
+  chat_tools_enabled: boolean;
+  tools: AgentChatTool[];
+};
+
+export type AgentToolsSave = {
+  chat_tools_enabled: boolean;
+  tools: Record<string, { enabled: boolean }>;
 };
 
 // ===== Vector Stores =====

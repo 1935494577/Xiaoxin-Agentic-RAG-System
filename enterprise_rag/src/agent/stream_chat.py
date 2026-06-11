@@ -17,6 +17,7 @@ from agent.context_format import build_source_citations
 from agent.conversation_context import build_llm_messages
 from agent.nodes import retrieve_node
 from agent.stream_verifier import run_stream_verifier
+from agent.tools.runtime.stream import is_tools_active, stream_general_answer
 from config import settings
 from evaluation.stream_langsmith import new_stream_tracer
 from openai import OpenAI
@@ -133,27 +134,63 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
                 "stream": True,
             },
         ) as draft_out:
+            tool_trace: list[dict[str, Any]] = []
             if answer_mode == "kb":
                 system = kb_system_prompt(fast=fast, slots=prompt_slots)
                 user_content = kb_user_content(ctx, state["question"])
+                messages = build_llm_messages(system=system, history=history, user_content=user_content)
+                kw = _gen_kw(model, messages, temp, mt)
+                try:
+                    if may_post_fallback:
+                        for _ in _stream_tokens(client, kw, parts, emit=False):
+                            pass
+                    else:
+                        yield from _stream_tokens(client, kw, parts, emit=True)
+                except Exception as e:
+                    trace_err = str(e)
+                    raise
+            elif is_tools_active():
+                try:
+                    yield from stream_general_answer(
+                        state=state,
+                        client=client,
+                        model=model,
+                        temperature=temp,
+                        max_tokens=mt,
+                        history=history,
+                        prompt_slots=prompt_slots,
+                        parts=parts,
+                        tool_trace_out=tool_trace,
+                        emit_event=_evt,
+                        replay_tokens=_replay_tokens,
+                        emit_tokens=not may_post_fallback,
+                    )
+                except Exception as e:
+                    trace_err = str(e)
+                    raise
             else:
                 system = general_system_prompt(slots=prompt_slots)
                 user_content = general_user_content(state["question"])
-
-            messages = build_llm_messages(system=system, history=history, user_content=user_content)
-            kw = _gen_kw(model, messages, temp, mt)
-
-            try:
-                if may_post_fallback:
-                    for _ in _stream_tokens(client, kw, parts, emit=False):
-                        pass
-                else:
-                    yield from _stream_tokens(client, kw, parts, emit=True)
-            except Exception as e:
-                trace_err = str(e)
-                raise
+                messages = build_llm_messages(system=system, history=history, user_content=user_content)
+                kw = _gen_kw(model, messages, temp, mt)
+                try:
+                    if may_post_fallback:
+                        for _ in _stream_tokens(client, kw, parts, emit=False):
+                            pass
+                    else:
+                        yield from _stream_tokens(client, kw, parts, emit=True)
+                except Exception as e:
+                    trace_err = str(e)
+                    raise
             answer = "".join(parts).strip()
-            draft_out.update({"answer_preview": answer[:400], "answer_len": len(answer)})
+            draft_out.update(
+                {
+                    "answer_preview": answer[:400],
+                    "answer_len": len(answer),
+                    "tool_trace": tool_trace[:5],
+                }
+            )
+            state["_tool_trace"] = tool_trace
     except Exception as e:
         trace.finish({"answer_mode": answer_mode}, error=str(e))
         yield _evt({"type": "error", "message": str(e)[:400], "trace_id": trace.trace_id})
@@ -168,15 +205,33 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
         meta = []
         ctx = []
         parts = []
-        system = general_system_prompt(slots=prompt_slots)
-        user_content = general_user_content(state["question"])
-        messages = build_llm_messages(system=system, history=history, user_content=user_content)
-        gen_kw = _gen_kw(model, messages, temp, mt)
+        tool_trace = []
         with trace.span("fallback", "llm", inputs={"model": model, "stream": True}) as fb_out:
             try:
-                yield from _stream_tokens(client, gen_kw, parts, emit=True)
+                if is_tools_active():
+                    yield from stream_general_answer(
+                        state=state,
+                        client=client,
+                        model=model,
+                        temperature=temp,
+                        max_tokens=mt,
+                        history=history,
+                        prompt_slots=prompt_slots,
+                        parts=parts,
+                        tool_trace_out=tool_trace,
+                        emit_event=_evt,
+                        replay_tokens=_replay_tokens,
+                        emit_tokens=True,
+                    )
+                else:
+                    system = general_system_prompt(slots=prompt_slots)
+                    user_content = general_user_content(state["question"])
+                    messages = build_llm_messages(system=system, history=history, user_content=user_content)
+                    gen_kw = _gen_kw(model, messages, temp, mt)
+                    yield from _stream_tokens(client, gen_kw, parts, emit=True)
                 answer = "".join(parts).strip()
-                fb_out.update({"answer_len": len(answer)})
+                fb_out.update({"answer_len": len(answer), "tool_trace": tool_trace[:5]})
+                state["_tool_trace"] = tool_trace
             except Exception:
                 pass
     elif may_post_fallback:
@@ -224,6 +279,7 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
         "answer_mode": answer_mode,
         "verified": verified,
         "trace_id": trace.trace_id,
+        "tool_trace": state.get("_tool_trace") or [],
     }
     trace.finish(
         {

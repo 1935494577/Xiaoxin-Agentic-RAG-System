@@ -12,7 +12,8 @@ import {
 import { HYBRID_MODE_KEY, USER_DEPT_KEY } from "../lib/constants";
 import { useAuth } from "../hooks/useAuth";
 import { useLocalStorage } from "../hooks/useLocalStorage";
-import type { ChatMessage, ChatSession, StreamEvent } from "../api/types";
+import type { ChatMessage, ChatSession, StreamEvent, ToolTraceItem } from "../api/types";
+import { applyToolStreamEvent } from "../lib/streamTools";
 import { ChatInput } from "../components/chat/ChatInput";
 import { SessionList } from "../components/chat/SessionList";
 import { HybridToggle } from "../components/chat/HybridToggle";
@@ -35,6 +36,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState("");
+  const [streamTools, setStreamTools] = useState<ToolTraceItem[]>([]);
   const [error, setError] = useState("");
 
   const abortRef = useRef<AbortController | null>(null);
@@ -142,12 +144,14 @@ export default function ChatPage() {
     // 2. Start streaming
     setStreaming(true);
     setStreamText("");
+    setStreamTools([]);
 
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
     let assistant = "";
     let meta: ChatMessage["meta"] = {};
+    let toolTrace: ToolTraceItem[] = [];
     const priorHistory = messages.map((m) => ({ role: m.role, content: m.content }));
 
     await streamChat(
@@ -164,6 +168,9 @@ export default function ChatPage() {
         if (evt.type === "token") {
           assistant += evt.content;
           setStreamText(assistant);
+        } else if (evt.type === "tool_call" || evt.type === "tool_result") {
+          toolTrace = applyToolStreamEvent(toolTrace, evt);
+          setStreamTools(toolTrace);
         } else if (evt.type === "error") {
           setError(evt.message);
         } else if (evt.type === "done") {
@@ -174,6 +181,7 @@ export default function ChatPage() {
             answer_mode: evt.answer_mode,
             verified: evt.verified,
             trace_id: evt.trace_id,
+            tool_trace: evt.tool_trace?.length ? evt.tool_trace : toolTrace,
           };
         }
       },
@@ -183,6 +191,7 @@ export default function ChatPage() {
     // 3. Stream finished
     setStreaming(false);
     setStreamText("");
+    setStreamTools([]);
     abortRef.current = null;
 
     const finalContent = assistant || error || "（无回复）";
@@ -268,6 +277,11 @@ export default function ChatPage() {
                 key={m.id || i}
                 message={m}
                 hideModeTag
+                liveTools={
+                  streaming && i === displayMessages.length - 1 && m.role === "assistant"
+                    ? streamTools
+                    : undefined
+                }
                 streaming={streaming && i === displayMessages.length - 1 && m.role === "assistant"}
               />
             ))}
