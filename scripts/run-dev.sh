@@ -24,7 +24,7 @@ ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 PY="$(get_dev_python)"
 SRC="$ROOT/enterprise_rag/src"
-SPA_DIR="$ROOT/frontend/app"
+SPA_DIR="$ROOT/frontend"
 PIDS=""
 
 cleanup() {

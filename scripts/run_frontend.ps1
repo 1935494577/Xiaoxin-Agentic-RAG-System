@@ -4,7 +4,7 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "_port_utils.ps1")
 
-$SpaDir = Join-Path $Root "frontend\app"
+$SpaDir = Join-Path $Root "frontend"
 $SpaPort = $script:DevSpaPort
 
 $npm = Get-DevNpmCmd

@@ -26,7 +26,7 @@ export function Sidebar() {
     <aside className="w-[240px] bg-surface-muted border-r border-border flex flex-col shrink-0">
       <div className="px-4 py-4 border-b border-border">
         <div className="flex items-center gap-2">
-          <img src="/company_logo.png" alt="Logo" className="h-7 w-7 rounded" />
+          <img src="/company_logo.png" alt="Logo" className="h-7 w-auto" />
           <h1 className="text-base font-semibold text-brand">知识库</h1>
         </div>
       </div>

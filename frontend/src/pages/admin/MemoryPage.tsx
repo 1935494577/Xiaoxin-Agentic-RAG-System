@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchUiConfig, saveUiConfig } from "../../api/client";
 import { PageHeader } from "../../components/admin/PageHeader";
@@ -18,29 +18,29 @@ export default function MemoryPage() {
   });
 
   const [form, setForm] = useState<Record<string, unknown>>({});
-  const [init, setInit] = useState(false);
 
-  if (!init && ui) {
-    const raw = ui as Record<string, unknown>;
-    setForm({
-      max_history_turns: raw.max_history_turns ?? 6,
-      max_history_chars: raw.max_history_chars ?? 6000,
-      kb_min_score: raw.kb_min_score ?? 0.55,
-      kb_min_rerank_score: raw.kb_min_rerank_score ?? 0.0,
-      stream_fast_mode: raw.stream_fast_mode ?? true,
-      long_term_memory_enabled: raw.long_term_memory_enabled ?? true,
-      general_fallback_enabled: raw.general_fallback_enabled ?? false,
-      kb_llm_judge: raw.kb_llm_judge ?? true,
-      kb_post_stream_fallback: raw.kb_post_stream_fallback ?? false,
-      hybrid_expert_mode: raw.hybrid_expert_mode ?? false,
-      stream_verifier_enabled: raw.stream_verifier_enabled ?? false,
-      graph_verifier_enabled: raw.graph_verifier_enabled ?? false,
-      suggested_questions: Array.isArray(raw.suggested_questions)
-        ? (raw.suggested_questions as string[]).join("\n")
-        : "",
-    });
-    setInit(true);
-  }
+  useEffect(() => {
+    if (ui) {
+      const raw = ui as Record<string, unknown>;
+      setForm({
+        max_history_turns: raw.max_history_turns ?? 6,
+        max_history_chars: raw.max_history_chars ?? 6000,
+        kb_min_score: raw.kb_min_score ?? 0.55,
+        kb_min_rerank_score: raw.kb_min_rerank_score ?? 0.0,
+        stream_fast_mode: raw.stream_fast_mode ?? true,
+        long_term_memory_enabled: raw.long_term_memory_enabled ?? true,
+        general_fallback_enabled: raw.general_fallback_enabled ?? false,
+        kb_llm_judge: raw.kb_llm_judge ?? true,
+        kb_post_stream_fallback: raw.kb_post_stream_fallback ?? false,
+        hybrid_expert_mode: raw.hybrid_expert_mode ?? false,
+        stream_verifier_enabled: raw.stream_verifier_enabled ?? false,
+        graph_verifier_enabled: raw.graph_verifier_enabled ?? false,
+        suggested_questions: Array.isArray(raw.suggested_questions)
+          ? (raw.suggested_questions as string[]).join("\n")
+          : "",
+      });
+    }
+  }, [ui]);
 
   const saveMutation = useMutation({
     mutationFn: (patch: Record<string, unknown>) => saveUiConfig(patch),
