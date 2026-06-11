@@ -1,18 +1,16 @@
 #!/usr/bin/env bash
-# Start API + Chat SPA + Streamlit admin (macOS / Linux).
+# Start API + Frontend SPA (macOS / Linux).
 set -e
 
 NO_RELOAD=0
-NO_CHAT_SPA=0
-NO_ADMIN=0
+NO_SPA=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --no-reload) NO_RELOAD=1; shift ;;
-    --no-chat-spa) NO_CHAT_SPA=1; shift ;;
-    --no-admin) NO_ADMIN=1; shift ;;
+    --no-spa) NO_SPA=1; shift ;;
     -h|--help)
-      echo "Usage: $0 [--no-reload] [--no-chat-spa] [--no-admin]"
+      echo "Usage: $0 [--no-reload] [--no-spa]"
       exit 0
       ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
@@ -26,7 +24,7 @@ ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 PY="$(get_dev_python)"
 SRC="$ROOT/enterprise_rag/src"
-CHAT_DIR="$ROOT/frontend/chat"
+SPA_DIR="$ROOT/frontend/app"
 PIDS=""
 
 cleanup() {
@@ -47,6 +45,21 @@ trap cleanup INT TERM
 
 stop_dev_ports
 
+wait_for_api() {
+  local url="http://127.0.0.1:${DEV_API_PORT}/health"
+  local max=30
+  local i=0
+  while [[ $i -lt $max ]]; do
+    if curl -sf -o /dev/null "$url" 2>/dev/null; then
+      echo "  API ready (${url})"
+      return 0
+    fi
+    sleep 1
+    ((i++))
+  done
+  echo "WARN: API not reachable after ${max}s — continuing anyway" >&2
+}
+
 if [[ "$NO_RELOAD" -eq 0 ]]; then
   echo "Starting API on port ${DEV_API_PORT} (hot reload)..."
   (cd "$SRC" && "$PY" -m uvicorn api.main:app --host 127.0.0.1 --port "$DEV_API_PORT" \
@@ -58,30 +71,20 @@ else
   (cd "$SRC" && "$PY" -m uvicorn api.main:app --host 127.0.0.1 --port "$DEV_API_PORT") &
 fi
 PIDS="$PIDS $!"
-sleep 2
+wait_for_api
 
-if [[ "$NO_CHAT_SPA" -eq 0 ]]; then
-  chat_pid="$(start_dev_chat_spa "$CHAT_DIR" "$DEV_CHAT_SPA_PORT" || true)"
-  if [[ -n "$chat_pid" ]]; then
-    PIDS="$PIDS $chat_pid"
+if [[ "$NO_SPA" -eq 0 ]]; then
+  spa_pid="$(start_dev_spa "$SPA_DIR" "$DEV_SPA_PORT" || true)"
+  if [[ -n "$spa_pid" ]]; then
+    PIDS="$PIDS $spa_pid"
     sleep 2
   fi
 fi
 
-if [[ "$NO_ADMIN" -eq 0 ]]; then
-  echo "Starting Streamlit admin on port ${DEV_FRONTEND_PORT}..."
-  (cd "$ROOT" && "$PY" -m streamlit run frontend/admin/streamlit_app.py \
-    --server.port "$DEV_FRONTEND_PORT" \
-    --server.runOnSave true) &
-  PIDS="$PIDS $!"
-fi
-
 echo ""
-echo "  >>> Jnao Chat:      http://127.0.0.1:${DEV_CHAT_SPA_PORT}"
-echo "  API:              http://127.0.0.1:${DEV_API_PORT}"
-if [[ "$NO_ADMIN" -eq 0 ]]; then
-  echo "  管理后台:         http://127.0.0.1:${DEV_FRONTEND_PORT}"
-fi
+echo "  >>> Frontend:  http://127.0.0.1:${DEV_SPA_PORT}"
+echo "  >>> 管理后台:  http://127.0.0.1:${DEV_SPA_PORT}/admin/"
+echo "  API:           http://127.0.0.1:${DEV_API_PORT}"
 echo ""
 echo "Press Ctrl+C here to stop all services."
 

@@ -1,8 +1,7 @@
-# Start API + Chat SPA + Streamlit admin
+# Start API + Frontend SPA
 param(
     [switch]$NoReload,
-    [switch]$NoChatSpa,
-    [switch]$NoAdmin
+    [switch]$NoSpa
 )
 
 $ErrorActionPreference = "Stop"
@@ -11,12 +10,27 @@ $Root = Split-Path -Parent $PSScriptRoot
 
 $Py = Get-DevPython
 $ApiPort = $script:DevApiPort
-$AdminPort = $script:DevFrontendPort
-$ChatPort = $script:DevChatSpaPort
+$SpaPort = $script:DevSpaPort
 $Src = Join-Path $Root "enterprise_rag\src"
-$ChatDir = Join-Path $Root "frontend\chat"
+$SpaDir = Join-Path $Root "frontend\app"
 
 Stop-DevPorts
+
+function Wait-Api {
+    $url = "http://127.0.0.1:$ApiPort/health"
+    $max = 30
+    for ($i = 0; $i -lt $max; $i++) {
+        try {
+            $r = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
+            if ($r.StatusCode -eq 200) {
+                Write-Host "  API ready ($url)"
+                return
+            }
+        } catch {}
+        Start-Sleep -Seconds 1
+    }
+    Write-Host "WARN: API not reachable after ${max}s — continuing anyway"
+}
 
 $apiArgs = @(
     "-m", "uvicorn", "api.main:app",
@@ -29,27 +43,17 @@ if (-not $NoReload) {
 Write-Host "Starting API on port $ApiPort..."
 $apiProc = Start-Process -FilePath $Py -ArgumentList $apiArgs -WorkingDirectory $Src -PassThru -WindowStyle Normal
 
-Start-Sleep -Seconds 2
+Wait-Api
 
-$chatProc = $null
-if (-not $NoChatSpa) {
-    $chatProc = Start-DevChatSpa -ChatDir $ChatDir -Port $ChatPort
-}
-
-$adminProc = $null
-if (-not $NoAdmin) {
-    Write-Host "Starting Streamlit admin on port $AdminPort..."
-    $adminProc = Start-Process -FilePath $Py -ArgumentList @(
-        "-m", "streamlit", "run", "frontend/admin/streamlit_app.py",
-        "--server.port", "$AdminPort",
-        "--server.runOnSave", "true"
-    ) -WorkingDirectory $Root -PassThru -WindowStyle Normal
+$spaProc = $null
+if (-not $NoSpa) {
+    $spaProc = Start-DevSpa -SpaDir $SpaDir -Port $SpaPort
 }
 
 Write-Host ""
-Write-Host "  >>> Jnao Chat:      http://127.0.0.1:$ChatPort"
-Write-Host "  API:              http://127.0.0.1:$ApiPort"
-if ($adminProc) { Write-Host "  管理后台:         http://127.0.0.1:$AdminPort" }
+Write-Host "  >>> Frontend:  http://127.0.0.1:$SpaPort"
+Write-Host "  >>> 管理后台:  http://127.0.0.1:$SpaPort/admin/"
+Write-Host "  API:           http://127.0.0.1:$ApiPort"
 Write-Host ""
 Write-Host "Press Ctrl+C here to stop all services."
 
@@ -61,12 +65,12 @@ Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action {
 
 try {
     while ($true) {
-        $alive = @($apiProc, $chatProc, $adminProc) | Where-Object { $_ -and -not $_.HasExited }
+        $alive = @($apiProc, $spaProc) | Where-Object { $_ -and -not $_.HasExited }
         if (-not $alive) { break }
         Start-Sleep -Seconds 1
     }
 } finally {
-    foreach ($p in @($apiProc, $chatProc, $adminProc)) {
+    foreach ($p in @($apiProc, $spaProc)) {
         if ($p -and -not $p.HasExited) {
             Stop-ProcessTree -ProcessId $p.Id
         }
