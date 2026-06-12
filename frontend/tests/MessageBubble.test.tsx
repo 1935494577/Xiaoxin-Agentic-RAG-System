@@ -16,6 +16,14 @@ vi.mock("../src/api/client", () => ({
   submitFeedback: (...args: unknown[]) => mockSubmitFeedback(...args),
 }));
 
+// Mock LottiePlayer to avoid lottie-web canvas probe in jsdom
+vi.mock("../src/components/chat/LottiePlayer", () => ({
+  default: ({ className }: { className?: string }) => {
+    const React = require("react");
+    return React.createElement("div", { className, "data-testid": "lottie-player" });
+  },
+}));
+
 import MessageBubble from "../src/components/chat/MessageBubble";
 
 describe("MessageBubble", () => {
@@ -191,11 +199,12 @@ describe("MessageBubble", () => {
     expect(screen.getByText("正在输入")).toBeTruthy();
   });
 
-  it("shows '…' thinking indicator for assistant with no content while streaming", () => {
+  it("shows LottiePlayer + '思考中' for empty content while streaming", () => {
     const msg = { role: "assistant" as const, content: "" };
     render(React.createElement(MessageBubble, { message: msg, streaming: true }));
-    // Streaming + empty => show "…" to indicate AI is thinking
-    expect(screen.getByText("…")).toBeTruthy();
+    // Streaming + empty => Lottie animation + 思考中 text
+    expect(screen.getByText("思考中")).toBeTruthy();
+    expect(screen.getByTestId("lottie-player")).toBeTruthy();
   });
 
   it("shows ellipsis for assistant with no content and not streaming", () => {
