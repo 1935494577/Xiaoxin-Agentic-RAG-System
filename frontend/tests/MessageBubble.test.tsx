@@ -115,33 +115,61 @@ describe("MessageBubble", () => {
     };
     render(React.createElement(MessageBubble, { message: msg }));
     fireEvent.click(screen.getByText("👍"));
-    expect(mockSubmitFeedback).toHaveBeenCalledWith({
-      user_id: "test_user_id",
-      rating: 1,
-      message_id: "trace_123",
-    });
+    expect(mockSubmitFeedback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        user_id: "test_user_id",
+        rating: 1,
+        trace_id: "trace_123",
+        message_id: "trace_123",
+      })
+    );
   });
 
-  it("calls submitFeedback on thumbs down", async () => {
+  it("shows correction form on thumbs down and submits on skip", async () => {
     mockSubmitFeedback.mockResolvedValue(undefined);
     const msg = { role: "assistant" as const, content: "回答" };
     render(React.createElement(MessageBubble, { message: msg }));
     fireEvent.click(screen.getByText("👎"));
-    expect(mockSubmitFeedback).toHaveBeenCalledWith({
-      user_id: "test_user_id",
-      rating: 0,
-      message_id: undefined,
+    expect(screen.getByPlaceholderText(/例如/)).toBeTruthy();
+    fireEvent.click(screen.getByText("跳过"));
+    await waitFor(() => {
+      expect(mockSubmitFeedback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          user_id: "test_user_id",
+          rating: 0,
+        })
+      );
     });
   });
 
-  it("prevents duplicate feedback (buttons disabled after click)", () => {
+  it("submits correction text with negative feedback", async () => {
+    mockSubmitFeedback.mockResolvedValue(undefined);
+    const msg = { role: "assistant" as const, content: "回答" };
+    render(React.createElement(MessageBubble, { message: msg }));
+    fireEvent.click(screen.getByText("👎"));
+    fireEvent.change(screen.getByPlaceholderText(/例如/), {
+      target: { value: "制度已过期" },
+    });
+    fireEvent.click(screen.getByText("提交反馈"));
+    await waitFor(() => {
+      expect(mockSubmitFeedback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          rating: 0,
+          correction: "制度已过期",
+        })
+      );
+    });
+  });
+
+  it("prevents duplicate feedback (buttons disabled after click)", async () => {
+    mockSubmitFeedback.mockResolvedValue(undefined);
     const msg = { role: "assistant" as const, content: "回答" };
     render(React.createElement(MessageBubble, { message: msg }));
     fireEvent.click(screen.getByText("👍"));
-    // Buttons should be disabled after feedback
-    expect((screen.getByText("👍") as HTMLButtonElement).disabled).toBe(true);
+    await waitFor(() => {
+      expect((screen.getByText("👍") as HTMLButtonElement).disabled).toBe(true);
+    });
     expect((screen.getByText("👎") as HTMLButtonElement).disabled).toBe(true);
-    // Only called once even if clicked again
     fireEvent.click(screen.getByText("👍"));
     expect(mockSubmitFeedback).toHaveBeenCalledTimes(1);
   });
