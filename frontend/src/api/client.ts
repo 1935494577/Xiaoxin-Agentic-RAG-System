@@ -86,18 +86,22 @@ export async function streamChat(
   onEvent: (evt: StreamEvent) => void,
   signal?: AbortSignal
 ): Promise<void> {
+  console.log("[streamChat] fetch start", payload.message.slice(0, 20));
   const r = await fetch("/chat/stream", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
     signal,
   });
+  console.log("[streamChat] response ok:", r.ok, "status:", r.status);
   if (!r.ok) {
     const text = await r.text();
+    console.log("[streamChat] error body:", text);
     onEvent({ type: "error", message: text || "请求失败" });
     return;
   }
   const reader = r.body?.getReader();
+  console.log("[streamChat] reader:", !!reader);
   if (!reader) return;
   const dec = new TextDecoder();
   let buf = "";
@@ -110,12 +114,15 @@ export async function streamChat(
     for (const line of lines) {
       if (!line.startsWith("data: ")) continue;
       try {
-        onEvent(JSON.parse(line.slice(6)) as StreamEvent);
+        const evt = JSON.parse(line.slice(6)) as StreamEvent;
+        console.log("[streamChat] event:", evt.type, evt.type === "token" ? evt.content : "");
+        onEvent(evt);
       } catch {
         /* ignore malformed */
       }
     }
   }
+  console.log("[streamChat] done");
 }
 
 // ===== Feedback =====

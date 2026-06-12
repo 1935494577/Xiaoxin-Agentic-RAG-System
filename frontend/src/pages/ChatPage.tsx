@@ -14,6 +14,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import type { ChatMessage, ChatSession, StreamEvent, ToolTraceItem } from "../api/types";
 import { applyToolStreamEvent } from "../lib/streamTools";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { ChatInput } from "../components/chat/ChatInput";
 import { SessionList } from "../components/chat/SessionList";
 import { HybridToggle } from "../components/chat/HybridToggle";
@@ -27,6 +28,8 @@ const SUGGESTIONS_FALLBACK = [
 
 export default function ChatPage() {
   const { userId } = useAuth();
+
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // ---- session state ----
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -154,6 +157,7 @@ export default function ChatPage() {
     let toolTrace: ToolTraceItem[] = [];
     const priorHistory = messages.map((m) => ({ role: m.role, content: m.content }));
 
+    console.log("[handleSend] calling streamChat");
     await streamChat(
       {
         message: text,
@@ -168,12 +172,15 @@ export default function ChatPage() {
         if (evt.type === "token") {
           assistant += evt.content;
           setStreamText(assistant);
+          console.log("[handleSend] token, streamText length:", assistant.length);
         } else if (evt.type === "tool_call" || evt.type === "tool_result") {
           toolTrace = applyToolStreamEvent(toolTrace, evt);
           setStreamTools(toolTrace);
         } else if (evt.type === "error") {
+          console.log("[handleSend] error:", evt.message);
           setError(evt.message);
         } else if (evt.type === "done") {
+          console.log("[handleSend] done, answer length:", evt.answer?.length);
           assistant = evt.answer;
           meta = {
             sources: evt.sources,
@@ -187,6 +194,7 @@ export default function ChatPage() {
       },
       ctrl.signal
     );
+    console.log("[handleSend] streamChat returned, assistant length:", assistant.length);
 
     // 3. Stream finished
     setStreaming(false);
@@ -235,15 +243,45 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-full">
-      <SessionList
-        sessions={sessions}
-        activeId={sessionId}
-        onSelect={setSessionId}
-        onNew={handleNew}
-        onDelete={handleDelete}
-        department={department}
-        onDepartment={setDepartment}
-      />
+      <div
+        className={
+          "shrink-0 overflow-hidden transition-all duration-300 ease-in-out " +
+          (sidebarOpen ? "w-[260px]" : "w-[40px]")
+        }
+      >
+        {sidebarOpen ? (
+          <div className="relative h-full">
+            <SessionList
+              sessions={sessions}
+              activeId={sessionId}
+              onSelect={setSessionId}
+              onNew={handleNew}
+              onDelete={handleDelete}
+              department={department}
+              onDepartment={setDepartment}
+            />
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(false)}
+              className="absolute right-2 top-4 z-10 p-1 rounded-lg text-text-muted hover:text-text hover:bg-border/50 transition-colors cursor-pointer"
+              title="收起侧边栏"
+            >
+              <PanelLeftClose size={18} />
+            </button>
+          </div>
+        ) : (
+          <div className="h-full flex flex-col items-center pt-4 bg-surface-muted border-r border-border">
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              className="p-1 rounded-lg text-text-muted hover:text-text hover:bg-border/50 transition-colors cursor-pointer"
+              title="展开侧边栏"
+            >
+              <PanelLeftOpen size={18} />
+            </button>
+          </div>
+        )}
+      </div>
 
       <div className="flex-1 flex flex-col min-w-0">
         {error && (

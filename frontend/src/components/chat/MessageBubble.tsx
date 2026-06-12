@@ -1,6 +1,14 @@
 import { memo, useCallback, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import LottiePlayer from "./LottiePlayer";
+// 动画切换：改这里即可
+//   dots-wave.json    — 三点波浪渐入渐出
+//   dots-bounce.json  — 三点上下弹跳
+//   dots-pulse.json   — 单圆脉冲呼吸
+//   dots-typing.json  — 三点依次闪现（打字光标风）
+//   dots-spin.json    — 圆环旋转
+import thinkingAnim from "../../assets/dots-typing.json";
 import { submitFeedback } from "../../api/client";
 import { useAuth } from "../../hooks/useAuth";
 import type { ChatMessage, ToolTraceItem } from "../../api/types";
@@ -164,11 +172,20 @@ function MessageBubble({
             "text-[15px] leading-relaxed " +
             (isUser
               ? "bg-brand text-white rounded-2xl rounded-br-md px-4 py-2.5 whitespace-pre-wrap break-words shadow-sm"
-              : "text-text py-0.5 " + (streaming ? "after:content-['▋'] after:text-brand after:animate-pulse after:ml-0.5" : "markdown-body"))
+              : "text-text py-0.5 " + (streaming && body ? "after:content-['▋'] after:text-brand after:animate-pulse after:ml-0.5" : !streaming ? "markdown-body" : ""))
           }
         >
           {isUser ? (
             body
+          ) : streaming && !body ? (
+            <div className="flex items-center gap-1.5 py-1">
+              <LottiePlayer
+                animationData={JSON.stringify(thinkingAnim)}
+                loop
+                className="w-[72px] h-[20px]"
+              />
+              <span className="text-xs text-text-muted">思考中</span>
+            </div>
           ) : (
             <ReactMarkdown
               remarkPlugins={[[remarkGfm, { singleTilde: false }]]}

@@ -16,7 +16,7 @@ export default defineConfig({
       "/health": { target: apiTarget, changeOrigin: true },
       "/ingest": { target: apiTarget, changeOrigin: true, timeout: 300_000 },
       "/debug": { target: apiTarget, changeOrigin: true },
-      "/admin": { target: apiTarget, changeOrigin: true },
+      "/admin/feedback": { target: apiTarget, changeOrigin: true },
     },
   },
   build: {
