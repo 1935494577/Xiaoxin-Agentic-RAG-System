@@ -24,6 +24,7 @@ from api.prompt_config_store import public_prompt_config, save_prompt_config
 from api.routing_mode import apply_hybrid_expert_memory, resolve_hybrid_expert_mode
 from api.stream_retrieval import build_stream_retrieval_state, resolve_stream_fast_mode
 from api.auth_middleware import APIAuthMiddleware, SecurityHeadersMiddleware
+from api.feedback_router import router as feedback_router
 from api.chat_session_store import (
     append_messages,
     create_session,
@@ -55,7 +56,6 @@ from api.schemas import (
     ChatSessionCreate,
     ChatSessionPublic,
     ChatSessionUpdate,
-    FeedbackRequest,
     IngestDedupStatsResponse,
     IngestResponse,
     IngestTextRequest,
@@ -108,6 +108,7 @@ from document_loader.processing.registry import save_config as save_processing_c
 from agent.tools.api.router import router as agent_tools_router
 from api.nav_config import build_nav_config
 from evaluation.langsmith_trace import configure_tracing, get_trace_status
+from feedback_loop.store import init_feedback_db
 from indexing.dedup_text import content_hash
 from indexing.embeddings import embed_texts
 from indexing.es_indexer import delete_parents_by_source, index_parent_documents
@@ -128,6 +129,7 @@ async def lifespan(app: FastAPI):
     configure_tracing()
     init_vector_db()
     init_chat_session_db()
+    init_feedback_db()
     ensure_default_registry()
     reload_all_indexes()
 
@@ -177,6 +179,7 @@ if _hosts:
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=_hosts)
 
 app.include_router(agent_tools_router)
+app.include_router(feedback_router)
 
 
 @app.get("/", include_in_schema=False)
@@ -620,16 +623,6 @@ def chat_stream(req: ChatRequest):
         yield from stream_rag_chat(state)
 
     return StreamingResponse(_gen(), media_type="text/event-stream")
-
-
-@app.post("/feedback")
-def feedback(req: FeedbackRequest):
-    """步骤7：用户反馈落盘（JSONL）。"""
-    settings.data_feedback_path.parent.mkdir(parents=True, exist_ok=True)
-    row = {"ts": datetime.now(timezone.utc).isoformat(), **req.model_dump()}
-    with settings.data_feedback_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(row, ensure_ascii=False) + "\n")
-    return {"ok": True}
 
 
 @app.get("/chat/sessions", response_model=list[ChatSessionPublic])

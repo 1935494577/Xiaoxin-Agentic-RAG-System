@@ -31,6 +31,7 @@ const router = createBrowserRouter([
           { path: "prompts", lazy: lazyPage(() => import("./pages/admin/PromptPage")) },
           { path: "models", lazy: lazyPage(() => import("./pages/admin/ModelPage")) },
           { path: "trace", lazy: lazyPage(() => import("./pages/admin/TracePage")) },
+          { path: "feedback", lazy: lazyPage(() => import("./pages/admin/FeedbackInboxPage")) },
           { path: "tutorial", lazy: lazyPage(() => import("./pages/admin/TutorialPage")) },
         ],
       },
