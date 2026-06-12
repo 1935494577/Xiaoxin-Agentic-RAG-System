@@ -210,7 +210,12 @@ def citer_node(state: AgentState) -> dict[str, Any]:
         return {"sources": [], "source_refs": [], "answer": ans}
 
     meta = state.get("contexts_meta") or []
-    sources, source_refs = build_source_citations(meta)
+    mem = state.get("memory_config") or {}
+    cite_kw = {
+        "max_sources": int(mem.get("citation_max_sources") or 2),
+        "min_relative_score": float(mem.get("citation_min_relative_score") or 0.75),
+    }
+    sources, source_refs = build_source_citations(meta, **cite_kw)
     ans = state.get("answer") or ""
     from agent.kb_judge import should_attach_citations
 

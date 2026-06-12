@@ -271,7 +271,11 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
         answer=answer,
         contexts_meta=meta,
     )
-    sources, source_refs = build_source_citations(meta) if attach else ([], [])
+    cite_kw = {
+        "max_sources": int(mem.get("citation_max_sources") or 2),
+        "min_relative_score": float(mem.get("citation_min_relative_score") or 0.75),
+    }
+    sources, source_refs = build_source_citations(meta, **cite_kw) if attach else ([], [])
     full_answer = answer
 
     done_payload = {

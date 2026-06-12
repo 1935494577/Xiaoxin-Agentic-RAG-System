@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import time
 
 import pytest
 
 from retrieval.search_cache import (
+    MemorySearchCache,
     NullSearchCache,
     RedisSearchCache,
     build_search_cache_key,
@@ -81,13 +83,40 @@ def test_null_search_cache_is_noop():
     assert cache.get(key) is None
 
 
-def test_get_search_cache_returns_null_without_url(monkeypatch):
+def test_get_search_cache_returns_memory_without_url(monkeypatch):
     monkeypatch.setattr("retrieval.search_cache._cached_client", None)
     monkeypatch.setattr("retrieval.search_cache._cached_impl", None)
     from config import settings
 
     monkeypatch.setattr(settings, "redis_url", "")
     monkeypatch.setattr(settings, "redis_search_cache_enabled", True)
+    impl = get_search_cache()
+    assert isinstance(impl, MemorySearchCache)
+
+
+def test_memory_search_cache_roundtrip_and_ttl():
+    cache = MemorySearchCache(ttl_seconds=1, max_entries=10)
+    key = build_search_cache_key("q", "general")
+    parents = [{"parent_id": "p1", "text": "制度 A", "hybrid_score": 0.9}]
+
+    assert cache.get(key) is None
+    cache.set(key, "rewritten q", parents)
+    hit = cache.get(key)
+    assert hit is not None
+    assert hit[0] == "rewritten q"
+    assert hit[1][0]["parent_id"] == "p1"
+
+    time.sleep(1.05)
+    assert cache.get(key) is None
+
+
+def test_get_search_cache_returns_null_when_disabled(monkeypatch):
+    monkeypatch.setattr("retrieval.search_cache._cached_client", None)
+    monkeypatch.setattr("retrieval.search_cache._cached_impl", None)
+    from config import settings
+
+    monkeypatch.setattr(settings, "redis_url", "")
+    monkeypatch.setattr(settings, "redis_search_cache_enabled", False)
     assert isinstance(get_search_cache(), NullSearchCache)
 
 

@@ -38,6 +38,8 @@ python scripts/download_rag_models.py
 
 缓存的是 **混合检索结果**（改写 + 向量 + BM25 + 重排），不是 LLM 最终回答。
 
+**无 Redis 时**：若 `REDIS_SEARCH_CACHE_ENABLED=true` 且未配置 `REDIS_URL`，API 自动使用**进程内 TTL 缓存**（单 worker 开发/小规模可用）。生产多 worker 仍建议 Redis。
+
 ### Linux 服务器（推荐）
 
 ```bash
