@@ -188,4 +188,46 @@ export type FeedbackPayload = {
   user_id: string;
   rating: number;
   message_id?: string;
+  trace_id?: string;
+  session_id?: string;
+  question?: string;
+  answer_preview?: string;
+  answer_mode?: string;
+  correction?: string;
+};
+
+export type FeedbackSuggestedAction = {
+  action: string;
+  confidence?: number | null;
+  detail?: string | null;
+};
+
+export type FeedbackItem = {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  rating: number;
+  trace_id?: string | null;
+  session_id?: string | null;
+  question?: string | null;
+  answer_preview?: string | null;
+  answer_mode?: string | null;
+  correction?: string | null;
+  context_count?: number | null;
+  sources: string[];
+  status?: string;
+  issue_type?: string | null;
+  severity?: string | null;
+  human_review_required?: boolean | null;
+  triage_summary?: string | null;
+  suggested_actions?: FeedbackSuggestedAction[];
+  created_at: string;
+  updated_at?: string | null;
+};
+
+export type FeedbackListResponse = {
+  items: FeedbackItem[];
+  total: number;
+  limit: number;
+  offset: number;
 };

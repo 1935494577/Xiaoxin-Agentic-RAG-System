@@ -11,6 +11,8 @@ type Props = {
   streaming?: boolean;
   hideModeTag?: boolean;
   liveTools?: ToolTraceItem[];
+  sessionId?: string;
+  questionForFeedback?: string;
 };
 
 function stripFootnotes(text: string): string {
@@ -50,9 +52,19 @@ function resolveAnswerMode(message: ChatMessage): "kb" | "general" | null {
   return null;
 }
 
-function MessageBubble({ message, streaming, hideModeTag = false, liveTools }: Props) {
+function MessageBubble({
+  message,
+  streaming,
+  hideModeTag = false,
+  liveTools,
+  sessionId,
+  questionForFeedback,
+}: Props) {
   const { userId } = useAuth();
   const [feedback, setFeedback] = useState<number | null>(null);
+  const [showCorrection, setShowCorrection] = useState(false);
+  const [correctionText, setCorrectionText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const isUser = message.role === "user";
   const body = isUser ? message.content : stripFootnotes(message.content);
@@ -60,22 +72,59 @@ function MessageBubble({ message, streaming, hideModeTag = false, liveTools }: P
   const answerMode = !isUser && !hideModeTag ? resolveAnswerMode(message) : null;
   const toolTrace = liveTools?.length ? liveTools : message.meta?.tool_trace;
 
-  const handleFeedback = useCallback(
-    async (rating: number) => {
-      if (feedback !== null) return; // already submitted
+  const sendFeedback = useCallback(
+    async (rating: number, correction?: string) => {
+      if (feedback !== null || submitting) return;
+      setSubmitting(true);
       setFeedback(rating);
+      setShowCorrection(false);
       try {
         await submitFeedback({
           user_id: userId,
           rating,
+          trace_id: message.meta?.trace_id,
           message_id: message.meta?.trace_id,
+          session_id: sessionId,
+          question: questionForFeedback,
+          answer_preview: body.slice(0, 500),
+          answer_mode: answerMode ?? message.meta?.answer_mode,
+          correction: correction?.trim() || undefined,
         });
       } catch {
-        setFeedback(null); // revert on failure
+        setFeedback(null);
+      } finally {
+        setSubmitting(false);
       }
     },
-    [feedback, userId, message.meta?.trace_id]
+    [
+      feedback,
+      submitting,
+      userId,
+      message.meta?.trace_id,
+      sessionId,
+      questionForFeedback,
+      body,
+      answerMode,
+      message.meta?.answer_mode,
+    ]
   );
+
+  const handleThumbsUp = useCallback(() => sendFeedback(1), [sendFeedback]);
+
+  const handleThumbsDown = useCallback(() => {
+    if (feedback !== null) return;
+    setShowCorrection(true);
+  }, [feedback]);
+
+  const handleSubmitNegative = useCallback(() => {
+    sendFeedback(0, correctionText);
+    setCorrectionText("");
+  }, [sendFeedback, correctionText]);
+
+  const handleSkipNegative = useCallback(() => {
+    setCorrectionText("");
+    sendFeedback(0);
+  }, [sendFeedback]);
 
   return (
     <div
@@ -139,12 +188,51 @@ function MessageBubble({ message, streaming, hideModeTag = false, liveTools }: P
           </div>
         )}
 
+        {!isUser && !streaming && showCorrection && feedback === null && (
+          <div className="mt-3 p-3 rounded-lg border border-border bg-surface-muted space-y-2">
+            <p className="text-xs text-text-muted">哪里不对？可选填一句话，便于我们改进（可跳过）</p>
+            <textarea
+              className="w-full text-sm border border-border rounded-md px-2.5 py-2 bg-white resize-none"
+              rows={2}
+              maxLength={500}
+              placeholder="例如：引用的制度已过期 / 答案与资料不符"
+              value={correctionText}
+              onChange={(e) => setCorrectionText(e.target.value)}
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleSubmitNegative}
+                disabled={submitting}
+                className="text-xs px-2.5 py-1 rounded-md bg-brand text-white hover:bg-brand-dark cursor-pointer disabled:opacity-50"
+              >
+                提交反馈
+              </button>
+              <button
+                type="button"
+                onClick={handleSkipNegative}
+                disabled={submitting}
+                className="text-xs px-2.5 py-1 rounded-md bg-surface-muted text-text-muted hover:bg-border cursor-pointer disabled:opacity-50"
+              >
+                跳过
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCorrection(false)}
+                className="text-xs px-2.5 py-1 rounded-md text-text-muted hover:text-text cursor-pointer"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        )}
+
         {!isUser && !streaming && (
-          <div className="flex gap-1 mt-2 opacity-0 hover:opacity-100 transition-opacity">
+          <div className="flex gap-1 mt-2 opacity-0 hover:opacity-100 transition-opacity group-focus-within:opacity-100">
             <button
               type="button"
-              onClick={() => handleFeedback(1)}
-              disabled={feedback !== null}
+              onClick={handleThumbsUp}
+              disabled={feedback !== null || submitting}
               className={"text-xs px-2.5 py-1 rounded-md cursor-pointer " + (feedback === 1 ? "bg-success-bg text-success" : "bg-surface-muted text-text-muted hover:bg-border hover:text-text")}
               title="有帮助"
             >
@@ -152,8 +240,8 @@ function MessageBubble({ message, streaming, hideModeTag = false, liveTools }: P
             </button>
             <button
               type="button"
-              onClick={() => handleFeedback(0)}
-              disabled={feedback !== null}
+              onClick={handleThumbsDown}
+              disabled={feedback !== null || submitting || showCorrection}
               className={"text-xs px-2.5 py-1 rounded-md cursor-pointer " + (feedback === 0 ? "bg-warning-bg text-warning" : "bg-surface-muted text-text-muted hover:bg-border hover:text-text")}
               title="没帮助"
             >

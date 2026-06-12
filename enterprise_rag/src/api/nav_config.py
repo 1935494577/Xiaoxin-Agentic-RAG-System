@@ -22,6 +22,7 @@ ADMIN_PAGES: list[AdminPageSpec] = [
     {"id": "memory", "label": "对话记忆", "url_path": "memory", "module": "pages/chat_memory_config.py"},
     {"id": "prompts", "label": "提示词", "url_path": "prompts", "module": "pages/prompt_config.py"},
     {"id": "models", "label": "模型", "url_path": "models", "module": "pages/model_config.py"},
+    {"id": "feedback", "label": "用户反馈", "url_path": "feedback", "module": "pages/feedback_inbox.py"},
     {"id": "trace", "label": "链路 Trace", "url_path": "trace", "module": "pages/trace_config.py"},
     {"id": "tutorial", "label": "教程", "url_path": "tutorial", "module": "pages/tutorial.py"},
 ]

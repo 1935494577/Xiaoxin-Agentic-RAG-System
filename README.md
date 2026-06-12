@@ -17,6 +17,7 @@
 | **HTTP API** | FastAPI：健康检查、入库（含 dedup 统计）、检索调试、流式对话、会话记忆、可插拔提示词、模型/向量库/UI 配置（`api`） |
 | **安全** | 可选 `RAG_API_SECRET`、CORS、可信 Host、安全头；注入检测；**部门 + 可见范围 ACL**（内部仅本部门、公开全员可见，向量/BM25 检索层过滤） |
 | **前端** | **Jnao Chat** React SPA（8502）：流式对话、工具调用展示；**React 管理后台**（`/admin`）：入库、**入库工具 / 对话工具** 分 Tab、提示词、模型、记忆、Trace 等 |
+| **用户反馈（Sprint A/B）** | 👍 一键反馈；👎 可选纠错说明；SQLite + trace 关联；**规则/LLM Triage** 分类（`issue_type` / `severity`）；Admin Inbox 采纳/驳回；JSONL 导出 |
 | **评测与追踪** | 可选 LangSmith / 本地 JSONL trace；`scripts/eval_ingest_dedup.py` 检索去重 A/B 评估 |
 | **容器与脚本** | `Dockerfile`、`docker-compose.yml`、`Makefile`；Windows `.ps1` 与 **macOS/Linux `.sh`** 一键启停；**生产启动** `run-api-prod.ps1` / `run-api-prod.sh` |
 

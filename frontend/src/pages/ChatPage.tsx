@@ -272,19 +272,32 @@ export default function ChatPage() {
               </div>
             )}
 
-            {displayMessages.map((m, i) => (
-              <MessageBubble
-                key={m.id || i}
-                message={m}
-                hideModeTag
-                liveTools={
-                  streaming && i === displayMessages.length - 1 && m.role === "assistant"
-                    ? streamTools
-                    : undefined
+            {displayMessages.map((m, i) => {
+              let questionForFeedback: string | undefined;
+              if (m.role === "assistant") {
+                for (let j = i - 1; j >= 0; j--) {
+                  if (displayMessages[j].role === "user") {
+                    questionForFeedback = displayMessages[j].content;
+                    break;
+                  }
                 }
-                streaming={streaming && i === displayMessages.length - 1 && m.role === "assistant"}
-              />
-            ))}
+              }
+              return (
+                <MessageBubble
+                  key={m.id || i}
+                  message={m}
+                  hideModeTag
+                  sessionId={sessionId ?? undefined}
+                  questionForFeedback={questionForFeedback}
+                  liveTools={
+                    streaming && i === displayMessages.length - 1 && m.role === "assistant"
+                      ? streamTools
+                      : undefined
+                  }
+                  streaming={streaming && i === displayMessages.length - 1 && m.role === "assistant"}
+                />
+              );
+            })}
             <div ref={messagesEndRef} />
           </div>
         </div>

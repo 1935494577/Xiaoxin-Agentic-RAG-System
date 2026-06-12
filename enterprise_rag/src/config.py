@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     data_processed_dir: Path = _REPO_ROOT / "enterprise_rag" / "data" / "processed"
     data_chunks_dir: Path = _REPO_ROOT / "enterprise_rag" / "data" / "chunks"
     data_feedback_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "feedback.jsonl"
+    feedback_triage_batch_size: int = 20
     chat_sessions_db_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "chat_sessions.db"
     chat_trace_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "chat_trace.jsonl"
     model_profiles_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "model_profiles.json"

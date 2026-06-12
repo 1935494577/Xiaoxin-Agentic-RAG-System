@@ -1,6 +1,6 @@
 import { useLocation } from "react-router-dom";
 import { NavLink } from "react-router-dom";
-import { MessageSquare, Database, Wrench, HardDrive, Brain, FileText, Cpu, Activity, BookOpen } from "lucide-react";
+import { MessageSquare, Database, Wrench, HardDrive, Brain, FileText, Cpu, Activity, BookOpen, ThumbsUp } from "lucide-react";
 
 const NAV_ITEMS = [
   { id: "chat", label: "Jnao Chat", href: "/", icon: MessageSquare, primary: true },
@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { id: "memory", label: "对话记忆", href: "/admin/memory", icon: Brain },
   { id: "prompts", label: "提示词", href: "/admin/prompts", icon: FileText },
   { id: "models", label: "模型", href: "/admin/models", icon: Cpu },
+  { id: "feedback", label: "用户反馈", href: "/admin/feedback", icon: ThumbsUp },
   { id: "trace", label: "链路 Trace", href: "/admin/trace", icon: Activity },
   { id: "tutorial", label: "教程", href: "/admin/tutorial", icon: BookOpen },
 ];

@@ -83,9 +83,71 @@ class RetrieveResponse(BaseModel):
 
 class FeedbackRequest(BaseModel):
     user_id: str = Field(..., min_length=1, max_length=128)
-    message_id: str | None = None
+    message_id: str | None = Field(default=None, max_length=128, description="兼容旧客户端，等同 trace_id")
+    trace_id: str | None = Field(default=None, max_length=128)
+    session_id: str | None = Field(default=None, max_length=64)
+    question: str | None = Field(default=None, max_length=8000)
+    answer_preview: str | None = Field(default=None, max_length=4000)
+    answer_mode: str | None = Field(default=None, max_length=64)
     rating: int = Field(..., ge=-1, le=1)
+    correction: str | None = Field(default=None, max_length=4000)
+
+
+class FeedbackSuggestedAction(BaseModel):
+    action: str = ""
+    confidence: float | None = None
+    detail: str | None = None
+
+
+class FeedbackPublic(BaseModel):
+    id: str
+    tenant_id: str = "internal"
+    user_id: str
+    rating: int
+    trace_id: str | None = None
+    session_id: str | None = None
+    message_id: str | None = None
+    question: str | None = None
+    answer_preview: str | None = None
+    answer_mode: str | None = None
     correction: str | None = None
+    context_count: int | None = None
+    sources: list[str] = Field(default_factory=list)
+    status: str = "pending"
+    issue_type: str | None = None
+    severity: str | None = None
+    human_review_required: bool | None = None
+    triage_summary: str | None = None
+    suggested_actions: list[FeedbackSuggestedAction] = Field(default_factory=list)
+    created_at: str
+    updated_at: str | None = None
+
+
+class FeedbackListResponse(BaseModel):
+    items: list[FeedbackPublic]
+    total: int
+    limit: int
+    offset: int
+
+
+class FeedbackTriageRequest(BaseModel):
+    limit: int = Field(default=20, ge=1, le=50)
+    use_llm: bool = True
+    rating: int | None = Field(default=None, ge=-1, le=1)
+
+
+class FeedbackTriageResponse(BaseModel):
+    processed: int
+    failed: int
+    queued: int
+
+
+class FeedbackStatusResponse(BaseModel):
+    id: str
+    status: str
+    issue_type: str | None = None
+    severity: str | None = None
+    triage_summary: str | None = None
 
 
 class IngestDedupStatsResponse(BaseModel):
