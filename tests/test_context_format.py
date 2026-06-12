@@ -45,7 +45,22 @@ def test_dedupe_citation_metas_same_file():
     deduped = dedupe_citation_metas(metas)
     assert len(deduped) == 2
     assert deduped[0]["parent_id"] == "p1"
-    sources, refs = build_source_citations(metas)
+    sources, refs = build_source_citations(metas, max_sources=2)
     assert len(sources) == 2
     assert len(refs) == 2
     assert all(r["source"] in ("1-9.txt", "1-3.txt") for r in refs)
+
+
+def test_citation_max_sources_and_relative_score():
+    from agent.context_format import build_source_citations
+
+    metas = [
+        {"source": "思者解说.txt", "parent_id": "p1", "rerank_score": 0.95},
+        {"source": "天赋特征.txt", "parent_id": "p2", "rerank_score": 0.85},
+        {"source": "各年级要求.txt", "parent_id": "p3", "rerank_score": 0.40},
+        {"source": "天赋基础知识.txt", "parent_id": "p4", "rerank_score": 0.35},
+    ]
+    sources, refs = build_source_citations(metas, max_sources=2, min_relative_score=0.75)
+    assert len(sources) == 2
+    assert refs[0]["source"] == "思者解说.txt"
+    assert refs[1]["source"] == "天赋特征.txt"

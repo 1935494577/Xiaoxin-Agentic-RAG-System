@@ -17,6 +17,8 @@ def chat_memory_settings() -> dict[str, Any]:
         "kb_min_score": float(ui.get("kb_min_score") or 0.55),
         "kb_min_rerank_score": float(ui.get("kb_min_rerank_score") or 0.0),
         "kb_llm_judge": bool(ui.get("kb_llm_judge", True)),
+        "citation_max_sources": int(ui.get("citation_max_sources") or 2),
+        "citation_min_relative_score": float(ui.get("citation_min_relative_score") or 0.75),
         "general_fallback_enabled": bool(ui.get("general_fallback_enabled", True)),
         "kb_post_stream_fallback": bool(ui.get("kb_post_stream_fallback", False)),
         "stream_verifier_enabled": bool(ui.get("stream_verifier_enabled", False)),

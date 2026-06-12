@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import time
+from collections import OrderedDict
 from typing import Any, Protocol
 
 from config import settings
@@ -32,6 +34,37 @@ class NullSearchCache:
 
     def invalidate_all(self) -> None:
         return None
+
+
+class MemorySearchCache:
+    """In-process TTL cache when Redis is unavailable (dev/single-worker)."""
+
+    def __init__(self, *, ttl_seconds: int, max_entries: int = 256) -> None:
+        self.ttl_seconds = ttl_seconds
+        self.max_entries = max(16, max_entries)
+        self._store: OrderedDict[str, tuple[float, str, list[dict[str, Any]]]] = OrderedDict()
+
+    def get(self, key: str) -> tuple[str, list[dict[str, Any]]] | None:
+        row = self._store.get(key)
+        if row is None:
+            return None
+        expires_at, rewritten, parents = row
+        if expires_at <= time.monotonic():
+            self._store.pop(key, None)
+            return None
+        self._store.move_to_end(key)
+        return rewritten, parents
+
+    def set(self, key: str, rewritten_query: str, parents: list[dict[str, Any]]) -> None:
+        expires_at = time.monotonic() + self.ttl_seconds
+        if key in self._store:
+            self._store.move_to_end(key)
+        self._store[key] = (expires_at, rewritten_query, parents)
+        while len(self._store) > self.max_entries:
+            self._store.popitem(last=False)
+
+    def invalidate_all(self) -> None:
+        self._store.clear()
 
 
 class RedisSearchCache:
@@ -129,14 +162,21 @@ def get_search_cache() -> SearchCache:
     global _cached_impl
     if _cached_impl is not None:
         return _cached_impl
-    if not settings.redis_search_cache_enabled or not (settings.redis_url or "").strip():
+    if not settings.redis_search_cache_enabled:
         _cached_impl = NullSearchCache()
         return _cached_impl
-    client = _redis_client()
-    if client is None:
-        _cached_impl = NullSearchCache()
-        return _cached_impl
-    _cached_impl = RedisSearchCache(client, ttl_seconds=int(settings.redis_search_cache_ttl_seconds))
+    ttl = int(settings.redis_search_cache_ttl_seconds)
+    url = (settings.redis_url or "").strip()
+    if url:
+        client = _redis_client()
+        if client is not None:
+            _cached_impl = RedisSearchCache(client, ttl_seconds=ttl)
+            return _cached_impl
+        logger.warning("Redis unavailable; falling back to in-process search cache")
+    _cached_impl = MemorySearchCache(
+        ttl_seconds=ttl,
+        max_entries=int(getattr(settings, "memory_search_cache_max_entries", 256)),
+    )
     return _cached_impl
 
 
