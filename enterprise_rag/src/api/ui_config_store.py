@@ -25,6 +25,8 @@ DEFAULT_UI_CONFIG: dict[str, Any] = {
     "kb_min_score": 0.55,
     "kb_min_rerank_score": 0.0,
     "kb_llm_judge": True,
+    "citation_max_sources": 2,
+    "citation_min_relative_score": 0.75,
     "general_fallback_enabled": False,
     "kb_post_stream_fallback": False,
     "hybrid_expert_mode": False,

@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     redis_url: str = ""
     redis_search_cache_enabled: bool = True
     redis_search_cache_ttl_seconds: int = 300
+    memory_search_cache_max_entries: int = 256
 
     openai_api_base: str = "https://api.openai.com/v1"
     openai_api_key: str = ""

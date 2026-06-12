@@ -42,12 +42,27 @@ def dedupe_citation_metas(metas: list[dict[str, Any]]) -> list[dict[str, Any]]:
             continue
         if _meta_score(meta) > _meta_score(best[key]):
             best[key] = meta
-    return [best[k] for k in order]
+    ranked = [best[k] for k in order]
+    ranked.sort(key=_meta_score, reverse=True)
+    return ranked
 
 
-def build_source_citations(metas: list[dict[str, Any]]) -> tuple[list[str], list[dict[str, str]]]:
-    """Dedupe by source file, then format for API/SSE payloads."""
+def build_source_citations(
+    metas: list[dict[str, Any]],
+    *,
+    max_sources: int = 2,
+    min_relative_score: float = 0.75,
+) -> tuple[list[str], list[dict[str, str]]]:
+    """Dedupe by source file, rank by score, keep top-N relevant citations only."""
     refs = dedupe_citation_metas([m for m in metas if m.get("parent_id") or m.get("source")])
+    if not refs:
+        return [], []
+    best = _meta_score(refs[0])
+    if min_relative_score > 0 and best > 0:
+        floor = best * min_relative_score
+        refs = [r for r in refs if _meta_score(r) >= floor]
+    if max_sources > 0:
+        refs = refs[:max_sources]
     sources = [format_source_citation(m) for m in refs]
     source_refs = [source_ref_dict(m) for m in refs]
     return sources, source_refs
