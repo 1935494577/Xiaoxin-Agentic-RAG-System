@@ -13,7 +13,9 @@ from agent.answer_prompts import (
     kb_system_prompt,
     kb_user_content,
 )
+from agent.conversation.rolling_summary import augment_system_with_summary
 from agent.conversation_context import build_llm_messages
+from agent.llm_routing import routing_llm_runtime
 from security.guard import scan_prompt_injection
 from security.permissions import filter_by_sources
 
@@ -45,6 +47,10 @@ class AgentState(TypedDict, total=False):
     retry_count: int
     history: list[dict[str, Any]]
     memory_config: dict[str, Any]
+    retrieval_query: str
+    topic_shift: bool
+    skip_retrieval_rewrite: bool
+    rolling_summary: str
 
 
 def router_node(state: AgentState) -> dict[str, Any]:
@@ -61,10 +67,13 @@ def retrieve_node(state: AgentState) -> dict[str, Any]:
 
     dept = state.get("user_department") or settings.default_department
     skip_rw = state.get("skip_query_rewrite")
+    if state.get("skip_retrieval_rewrite"):
+        skip_rw = True
+    search_q = (state.get("retrieval_query") or state["question"]).strip()
     rk = state.get("retrieve_top_k")
     rerank_k = state.get("rerank_top_k")
     rw, parents = hybrid_search(
-        state["question"],
+        search_q,
         dept,
         top_k=int(rerank_k) if rerank_k is not None else settings.rerank_top_k,
         chat_model=state.get("chat_model"),
@@ -107,12 +116,17 @@ def answer_node(state: AgentState) -> dict[str, Any]:
         kb_min_rerank_score=float(mem.get("kb_min_rerank_score", 0.0)),
         kb_llm_judge=bool(mem.get("kb_llm_judge", True)),
         general_fallback_enabled=bool(mem.get("general_fallback_enabled", True)),
-        llm_runtime={
-            "llm_api_key": state.get("llm_api_key"),
-            "llm_api_base": state.get("llm_api_base"),
-            "chat_model": state.get("chat_model"),
-            "llm_extra_headers": state.get("llm_extra_headers"),
-        },
+        topic_shift=bool(state.get("topic_shift")),
+        kb_llm_judge_always=bool(mem.get("kb_llm_judge_always", False)),
+        llm_runtime=routing_llm_runtime(
+            {
+                "llm_api_key": state.get("llm_api_key"),
+                "llm_api_base": state.get("llm_api_base"),
+                "chat_model": state.get("chat_model"),
+                "routing_model": state.get("routing_model"),
+                "llm_extra_headers": state.get("llm_extra_headers"),
+            }
+        ),
     )
 
     api_key = (state.get("llm_api_key") or "").strip() or settings.openai_api_key
@@ -142,8 +156,12 @@ def answer_node(state: AgentState) -> dict[str, Any]:
         user_content = retry_note + kb_user_content(ctx, state["question"])
     else:
         system = general_system_prompt(slots=prompt_slots)
-        user_content = retry_note + general_user_content(state["question"])
+        user_content = retry_note + general_user_content(
+            state["question"],
+            contexts=ctx if bool(mem.get("general_fallback_enabled")) and ctx else None,
+        )
 
+    system = augment_system_with_summary(system, state.get("rolling_summary"))
     messages = build_llm_messages(system=system, history=history, user_content=user_content)
     model = state.get("chat_model") or settings.openai_chat_model
     temp = float(state.get("llm_temperature_answer") if state.get("llm_temperature_answer") is not None else 0.2)

@@ -1,18 +1,11 @@
 import { memo, useCallback, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import LottiePlayer from "./LottiePlayer";
-// 动画切换：改这里即可
-//   dots-wave.json    — 三点波浪渐入渐出
-//   dots-bounce.json  — 三点上下弹跳
-//   dots-pulse.json   — 单圆脉冲呼吸
-//   dots-typing.json  — 三点依次闪现（打字光标风）
-//   dots-spin.json    — 圆环旋转
 import thinkingAnim from "../../assets/dots-typing.json";
 import { submitFeedback } from "../../api/client";
 import { useAuth } from "../../hooks/useAuth";
 import type { ChatMessage, ToolTraceItem } from "../../api/types";
 import { ToolTracePanel } from "./ToolTracePanel";
+import { MarkdownContent, StreamingPlainText } from "./MarkdownContent";
 
 type Props = {
   message: ChatMessage;
@@ -137,17 +130,17 @@ function MessageBubble({
   return (
     <div
       className={
-        "flex gap-3 py-5 w-full max-w-[820px] mx-auto " +
+        "flex gap-3.5 py-4 w-full max-w-[768px] mx-auto " +
         (isUser ? "justify-end" : "justify-start")
       }
     >
       {!isUser && (
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand to-brand-dark flex items-center justify-center text-xs text-white font-semibold shrink-0 mt-0.5">
+        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand to-brand-dark flex items-center justify-center text-[11px] text-white font-semibold shrink-0 mt-1">
           AI
         </div>
       )}
 
-      <div className={isUser ? "max-w-[72%]" : "flex-1 min-w-0 max-w-[calc(100%-44px)]"}>
+      <div className={isUser ? "max-w-[85%] sm:max-w-[72%]" : "flex-1 min-w-0"}>
         {!isUser && answerMode && (
           <div className="mb-2">
             <span
@@ -167,39 +160,33 @@ function MessageBubble({
           <ToolTracePanel items={toolTrace} live={Boolean(streaming && liveTools?.length)} />
         ) : null}
 
-        <div
-          className={
-            "text-[15px] leading-relaxed " +
-            (isUser
-              ? "bg-brand text-white rounded-2xl rounded-br-md px-4 py-2.5 whitespace-pre-wrap break-words shadow-sm"
-              : "text-text py-0.5 " + (streaming && body ? "after:content-['▋'] after:text-brand after:animate-pulse after:ml-0.5" : !streaming ? "markdown-body" : ""))
-          }
-        >
-          {isUser ? (
-            body
-          ) : streaming && !body ? (
-            <div className="flex items-center gap-1.5 py-1">
-              <LottiePlayer
-                animationData={JSON.stringify(thinkingAnim)}
-                loop
-                className="w-[72px] h-[20px]"
-              />
-              <span className="text-xs text-text-muted">思考中</span>
-            </div>
-          ) : (
-            <ReactMarkdown
-              remarkPlugins={[[remarkGfm, { singleTilde: false }]]}
-              components={{
-                del: ({ children }) => <span className="line-through">{children}</span>,
-              }}
-            >
-              {body || "…"}
-            </ReactMarkdown>
-          )}
-        </div>
+        {isUser ? (
+          <div className="text-[15px] leading-relaxed bg-brand text-white rounded-2xl rounded-br-md px-4 py-2.5 whitespace-pre-wrap break-words shadow-sm">
+            {body}
+          </div>
+        ) : (
+          <div className="assistant-answer">
+            {streaming && !body ? (
+              <div className="flex items-center gap-1.5 py-1">
+                <LottiePlayer
+                  animationData={JSON.stringify(thinkingAnim)}
+                  loop
+                  className="w-[72px] h-[20px]"
+                />
+                <span className="text-xs text-text-muted">思考中</span>
+              </div>
+            ) : streaming ? (
+              <StreamingPlainText content={body} />
+            ) : body ? (
+              <MarkdownContent content={body} />
+            ) : (
+              <p className="text-text-muted text-sm">…</p>
+            )}
+          </div>
+        )}
 
         {!isUser && sources.length > 0 && (
-          <div className="flex flex-wrap gap-x-2.5 gap-y-1.5 mt-3 pt-2.5 border-t border-border-light text-xs text-text-muted">
+          <div className="flex flex-wrap gap-x-2.5 gap-y-1.5 mt-4 pt-3 border-t border-border-light text-xs text-text-muted">
             <span className="text-text-muted shrink-0">引用</span>
             <span className="break-all">{sources.join(" · ")}</span>
           </div>
@@ -245,12 +232,17 @@ function MessageBubble({
         )}
 
         {!isUser && !streaming && (
-          <div className="flex gap-1 mt-2 opacity-0 hover:opacity-100 transition-opacity group-focus-within:opacity-100">
+          <div className="flex gap-1 mt-2.5 opacity-0 hover:opacity-100 focus-within:opacity-100 transition-opacity">
             <button
               type="button"
               onClick={handleThumbsUp}
               disabled={feedback !== null || submitting}
-              className={"text-xs px-2.5 py-1 rounded-md cursor-pointer " + (feedback === 1 ? "bg-success-bg text-success" : "bg-surface-muted text-text-muted hover:bg-border hover:text-text")}
+              className={
+                "text-xs px-2.5 py-1 rounded-md cursor-pointer " +
+                (feedback === 1
+                  ? "bg-success-bg text-success"
+                  : "bg-surface-muted text-text-muted hover:bg-border hover:text-text")
+              }
               title="有帮助"
             >
               👍
@@ -259,7 +251,12 @@ function MessageBubble({
               type="button"
               onClick={handleThumbsDown}
               disabled={feedback !== null || submitting || showCorrection}
-              className={"text-xs px-2.5 py-1 rounded-md cursor-pointer " + (feedback === 0 ? "bg-warning-bg text-warning" : "bg-surface-muted text-text-muted hover:bg-border hover:text-text")}
+              className={
+                "text-xs px-2.5 py-1 rounded-md cursor-pointer " +
+                (feedback === 0
+                  ? "bg-warning-bg text-warning"
+                  : "bg-surface-muted text-text-muted hover:bg-border hover:text-text")
+              }
               title="没帮助"
             >
               👎
@@ -276,7 +273,7 @@ function MessageBubble({
       </div>
 
       {isUser && (
-        <div className="w-8 h-8 rounded-full bg-surface-muted flex items-center justify-center text-xs text-text-muted font-semibold shrink-0 mt-0.5 order-1">
+        <div className="w-8 h-8 rounded-full bg-surface-muted flex items-center justify-center text-[11px] text-text-muted font-semibold shrink-0 mt-1">
           你
         </div>
       )}
@@ -284,4 +281,14 @@ function MessageBubble({
   );
 }
 
-export default memo(MessageBubble);
+export default memo(MessageBubble, (prev, next) => {
+  if (prev.streaming || next.streaming) return false;
+  return (
+    prev.message.content === next.message.content &&
+    prev.message.role === next.message.role &&
+    prev.hideModeTag === next.hideModeTag &&
+    prev.sessionId === next.sessionId &&
+    prev.questionForFeedback === next.questionForFeedback &&
+    prev.liveTools === next.liveTools
+  );
+});

@@ -81,6 +81,7 @@ def to_public_dict(p: dict[str, Any]) -> dict[str, Any]:
     row["has_api_key"] = has_key
     row["api_key_hint"] = hint if has_key else ""
     row.setdefault("combined_base", effective_api_base(p))
+    row.setdefault("routing_model", "")
     return row
 
 
@@ -106,6 +107,7 @@ def upsert_profile(
     default_model: str,
     api_key: str | None,
     extra_headers: dict[str, str] | None = None,
+    routing_model: str | None = None,
 ) -> dict[str, Any]:
     data = load_store()
     profiles: list[dict[str, Any]] = list(data.get("profiles") or [])
@@ -114,6 +116,7 @@ def upsert_profile(
     if path_suffix and not path_suffix.startswith("/"):
         path_suffix = "/" + path_suffix
     combined_base = _combine_base(api_base_norm, path_suffix if path_suffix else None)
+    routing = (routing_model or "").strip()
 
     if profile_id:
         found = False
@@ -128,6 +131,7 @@ def upsert_profile(
                         "api_path": path_suffix or None,
                         "combined_base": combined_base,
                         "default_model": default_model,
+                        "routing_model": routing,
                         "extra_headers": extra_headers or {},
                     }
                 )
@@ -149,6 +153,7 @@ def upsert_profile(
             "api_path": path_suffix or None,
             "combined_base": combined_base,
             "default_model": default_model,
+            "routing_model": routing,
             "api_key": (api_key or "").strip(),
             "extra_headers": extra_headers or {},
         }

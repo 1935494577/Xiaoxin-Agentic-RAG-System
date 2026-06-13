@@ -79,7 +79,12 @@ def rule_based_triage(row: dict[str, Any]) -> dict[str, Any]:
             "human_review_required": True,
             "summary": "检索上下文为空，可能漏召回或阈值过高",
             "suggested_actions": [
-                {"action": "propose_reingest", "confidence": 0.55, "detail": "确认知识库是否覆盖该主题"}
+                {"action": "propose_reingest", "confidence": 0.55, "detail": "确认知识库是否覆盖该主题"},
+                {
+                    "action": "apply_config_patch",
+                    "confidence": 0.6,
+                    "detail": "采纳后自动略降 kb_min_score 以扩大召回",
+                },
             ],
             "mode": "rule",
         }

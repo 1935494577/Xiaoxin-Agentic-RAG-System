@@ -77,5 +77,35 @@ body {
   background: var(--color-brand);
   animation: dot-wave 1.2s ease-in-out infinite;
 }
-.dot-wave-fallback span:nth-child(2) { animation-delay: 0.15s; }
-.dot-wave-fallback span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes stream-cursor-blink {
+  0%, 45% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.stream-cursor::after {
+  content: "▋";
+  display: inline-block;
+  margin-left: 1px;
+  color: var(--color-brand);
+  animation: stream-cursor-blink 1s step-end infinite;
+  font-weight: 400;
+}
+
+/* Markdown answer typography (DeepSeek-inspired) */
+.markdown-body > :first-child {
+  margin-top: 0 !important;
+}
+.markdown-body > :last-child {
+  margin-bottom: 0 !important;
+}
+.markdown-stream > p {
+  margin: 0;
+}
+
+.assistant-answer {
+  color: var(--color-text);
+}
+
+/* Chat scroll area */
+.chat-scroll-area {
+  scroll-behavior: smooth;
+}

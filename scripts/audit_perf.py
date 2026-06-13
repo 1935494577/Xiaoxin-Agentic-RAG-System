@@ -1,4 +1,4 @@
-"""One-shot performance audit; writes NDJSON to debug-178feb.log."""
+"""One-shot performance audit; writes NDJSON to debug-audit.log."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
-LOG = ROOT / "debug-178feb.log"
+LOG = ROOT / "debug-audit.log"
 sys.path.insert(0, str(ROOT / "enterprise_rag" / "src"))
 
 from config import settings  # noqa: E402

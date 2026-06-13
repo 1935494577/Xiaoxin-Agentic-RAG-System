@@ -86,8 +86,12 @@ export default function TutorialPage() {
         </section>
 
         <section>
-          <h3 className="text-base font-semibold mb-2">5. 对话记忆（管理员）</h3>
-          <p className="text-sm text-text-muted"><strong>对话记忆</strong>页：长期记忆开关、短期记忆轮数与 Token 上限、检索阈值、混合专家默认开关、Jnao Chat <strong>推荐问题</strong>等。</p>
+          <h3 className="text-base font-semibold mb-2">5. 对话设置（管理员）</h3>
+          <p className="text-sm text-text-muted">
+            <strong>对话设置</strong>页按标签分组：<strong>基础</strong>（记忆轮数、混合专家默认、推荐问题）、
+            <strong>检索与 KB</strong>（阈值与 LLM 判断）、<strong>多轮上下文</strong>（condense / 剪枝 / 滚动摘要）、
+            <strong>性能路由</strong>（fast / balanced / quality）。预处理模型在 <strong>模型</strong> 页配置。
+          </p>
         </section>
 
         <section>

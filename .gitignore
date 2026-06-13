@@ -61,3 +61,10 @@ enterprise_rag/data/chunk_dedup_index.json
 enterprise_rag/data/raw/*
 !enterprise_rag/data/raw/.gitkeep
 !enterprise_rag/data/raw/sample.txt
+
+# Debug / audit / bench artifacts (local only)
+debug-*.log
+.codegraph/
+enterprise_rag/data/_audit_tmp/
+enterprise_rag/data/_bench_tmp/
+enterprise_rag/data/eval/eval_reports.jsonl

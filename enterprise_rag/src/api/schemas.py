@@ -18,6 +18,10 @@ class ChatRequest(BaseModel):
         default=None,
         description="可选：客户端提供的短期历史；未提供时从 session_id 加载",
     )
+    reset_context: bool = Field(
+        default=False,
+        description="为 true 时视为新话题：忽略 history、清空会话滚动摘要",
+    )
     # 已保存的模型配置 id；与 force_env_llm 互斥优先级：force_env_llm 为真时仅用 .env
     model_profile_id: str | None = Field(default=None, max_length=64)
     force_env_llm: bool = False
@@ -31,6 +35,11 @@ class ChatRequest(BaseModel):
     skip_query_rewrite: bool | None = Field(
         default=None,
         description="为 true 时跳过 LLM 查询改写；None 时使用服务端 query_rewrite_enabled 配置",
+    )
+    routing_model: str | None = Field(
+        default=None,
+        max_length=128,
+        description="预处理专用模型（condense/kb judge/摘要）；None 时用 UI/配置默认值",
     )
     stream_fast_mode: bool | None = Field(
         default=None,
@@ -142,12 +151,80 @@ class FeedbackTriageResponse(BaseModel):
     queued: int
 
 
+class FeedbackActionResult(BaseModel):
+    action: str = ""
+    ok: bool = False
+    skipped: bool | None = None
+    reason: str | None = None
+    error: str | None = None
+    revision_id: str | None = None
+    proposal_id: str | None = None
+    golden_path: str | None = None
+
+
 class FeedbackStatusResponse(BaseModel):
     id: str
     status: str
     issue_type: str | None = None
     severity: str | None = None
     triage_summary: str | None = None
+    action_results: list[FeedbackActionResult] = Field(default_factory=list)
+
+
+class ConfigRevisionPublic(BaseModel):
+    id: str
+    created_at: str
+    feedback_id: str
+    tenant_id: str = "internal"
+    action: str
+    patch: dict[str, Any] = Field(default_factory=dict)
+    rolled_back: bool = False
+    rolled_back_at: str | None = None
+    diff: dict[str, Any] = Field(default_factory=dict)
+
+
+class ConfigRevisionListResponse(BaseModel):
+    items: list[ConfigRevisionPublic]
+    total: int
+    limit: int
+    offset: int
+
+
+class FeedbackEvaluateRequest(BaseModel):
+    feedback_id: str | None = Field(default=None, max_length=64)
+    revision_id: str | None = Field(default=None, max_length=64)
+
+
+class FeedbackEvaluateResponse(BaseModel):
+    ok: bool
+    report_id: str | None = None
+    feedback_id: str | None = None
+    revision_id: str | None = None
+    golden_rows: int = 0
+    mode: str | None = None
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    delta: dict[str, Any] = Field(default_factory=dict)
+    error: str | None = None
+    created_at: str | None = None
+
+
+class EvalReportPublic(BaseModel):
+    id: str
+    created_at: str
+    feedback_id: str | None = None
+    revision_id: str | None = None
+    golden_rows: int = 0
+    mode: str = "fallback_naive"
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    baseline_metrics: dict[str, Any] = Field(default_factory=dict)
+    delta: dict[str, Any] = Field(default_factory=dict)
+
+
+class EvalReportListResponse(BaseModel):
+    items: list[EvalReportPublic]
+    total: int
+    limit: int
+    offset: int
 
 
 class IngestDedupStatsResponse(BaseModel):
@@ -204,6 +281,11 @@ class ModelProfileCreate(BaseModel):
     api_base: str = Field(..., min_length=1, max_length=512, description="如 https://api.deepseek.com")
     api_path: str | None = Field(default=None, max_length=256, description="可选，如 /compatible-mode/v1")
     default_model: str = Field(..., min_length=1, max_length=128)
+    routing_model: str | None = Field(
+        default=None,
+        max_length=128,
+        description="预处理用小模型；留空则与 default_model 相同",
+    )
     api_key: str = Field(default="", max_length=2048)
     extra_headers: dict[str, str] | None = None
 
@@ -214,6 +296,7 @@ class ModelProfileUpdate(BaseModel):
     api_base: str | None = Field(default=None, max_length=512)
     api_path: str | None = Field(default=None, max_length=256)
     default_model: str | None = Field(default=None, max_length=128)
+    routing_model: str | None = Field(default=None, max_length=128)
     api_key: str | None = Field(default=None, max_length=2048)
     extra_headers: dict[str, str] | None = None
 
@@ -228,6 +311,7 @@ class ModelProfilePublic(BaseModel):
     api_path: str | None = None
     combined_base: str = ""
     default_model: str
+    routing_model: str = ""
     has_api_key: bool
     api_key_hint: str = ""
     extra_headers: dict[str, str] = Field(default_factory=dict)
@@ -273,6 +357,10 @@ class UiConfigPublic(BaseModel):
     stream_verifier_enabled: bool = False
     graph_verifier_enabled: bool = False
     long_term_memory_enabled: bool = True
+    routing_model: str = ""
+    chat_routing_tier: str = "balanced"
+    condense_llm_enabled: bool = True
+    kb_llm_judge_always: bool = False
     ingest_tag_presets: list[str] = Field(default_factory=list)
 
 
@@ -295,6 +383,18 @@ class UiConfigUpdate(BaseModel):
     stream_verifier_enabled: bool | None = None
     graph_verifier_enabled: bool | None = None
     long_term_memory_enabled: bool | None = None
+    routing_model: str | None = Field(default=None, max_length=128)
+    chat_routing_tier: str | None = Field(default=None, pattern="^(fast|balanced|quality)$")
+    condense_llm_enabled: bool | None = None
+    kb_llm_judge_always: bool | None = None
+    conversation_condense_enabled: bool | None = None
+    history_prune_enabled: bool | None = None
+    history_prune_min_similarity: float | None = Field(default=None, ge=0.0, le=1.0)
+    history_prune_max_turns: int | None = Field(default=None, ge=1, le=20)
+    history_assistant_max_chars: int | None = Field(default=None, ge=100, le=8000)
+    rolling_summary_enabled: bool | None = None
+    rolling_summary_every_n_turns: int | None = Field(default=None, ge=2, le=30)
+    rolling_summary_min_chars: int | None = Field(default=None, ge=500, le=100000)
     ingest_tag_presets: list[str] | None = None
 
 

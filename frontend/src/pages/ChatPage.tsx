@@ -16,8 +16,8 @@ import type { ChatMessage, ChatSession, StreamEvent, ToolTraceItem } from "../ap
 import { applyToolStreamEvent } from "../lib/streamTools";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { ChatInput } from "../components/chat/ChatInput";
+import { ChatToolbar } from "../components/chat/ChatToolbar";
 import { SessionList } from "../components/chat/SessionList";
-import { HybridToggle } from "../components/chat/HybridToggle";
 import MessageBubble from "../components/chat/MessageBubble";
 
 const SUGGESTIONS_FALLBACK = [
@@ -47,6 +47,7 @@ export default function ChatPage() {
   const initDone = useRef(false);
 
   const [input, setInput] = useState("");
+  const [newTopicPending, setNewTopicPending] = useState(false);
   const [department, setDepartment] = useLocalStorage<string>(USER_DEPT_KEY, "技术部");
   const [hybridExpert, setHybridExpert] = useLocalStorage<boolean>(HYBRID_MODE_KEY, false);
 
@@ -155,9 +156,11 @@ export default function ChatPage() {
     let assistant = "";
     let meta: ChatMessage["meta"] = {};
     let toolTrace: ToolTraceItem[] = [];
-    const priorHistory = messages.map((m) => ({ role: m.role, content: m.content }));
+    const priorHistory = newTopicPending
+      ? []
+      : messages.map((m) => ({ role: m.role, content: m.content }));
+    const resetContext = newTopicPending;
 
-    console.log("[handleSend] calling streamChat");
     await streamChat(
       {
         message: text,
@@ -167,20 +170,18 @@ export default function ChatPage() {
         skip_query_rewrite: true,
         session_id: sid,
         history: priorHistory,
+        reset_context: resetContext,
       },
       (evt: StreamEvent) => {
         if (evt.type === "token") {
           assistant += evt.content;
           setStreamText(assistant);
-          console.log("[handleSend] token, streamText length:", assistant.length);
         } else if (evt.type === "tool_call" || evt.type === "tool_result") {
           toolTrace = applyToolStreamEvent(toolTrace, evt);
           setStreamTools(toolTrace);
         } else if (evt.type === "error") {
-          console.log("[handleSend] error:", evt.message);
           setError(evt.message);
         } else if (evt.type === "done") {
-          console.log("[handleSend] done, answer length:", evt.answer?.length);
           assistant = evt.answer;
           meta = {
             sources: evt.sources,
@@ -194,13 +195,13 @@ export default function ChatPage() {
       },
       ctrl.signal
     );
-    console.log("[handleSend] streamChat returned, assistant length:", assistant.length);
 
     // 3. Stream finished
     setStreaming(false);
     setStreamText("");
     setStreamTools([]);
     abortRef.current = null;
+    setNewTopicPending(false);
 
     const finalContent = assistant || error || "（无回复）";
     const assistantMsg: ChatMessage = {
@@ -288,7 +289,7 @@ export default function ChatPage() {
           <div className="bg-error-bg text-error text-sm text-center py-2">{error}</div>
         )}
 
-        <div className="flex-1 overflow-y-auto bg-surface-muted px-5 pt-20 pb-4">
+        <div className="flex-1 overflow-y-auto bg-white chat-scroll-area px-4 sm:px-6 pt-16 pb-4">
           <div className="min-h-full flex flex-col pb-2">
             {!displayMessages.length && !streaming && (
               <div className="max-w-[480px] mx-auto my-auto text-center py-12">
@@ -341,8 +342,14 @@ export default function ChatPage() {
         </div>
 
         <div className="border-t border-border bg-white px-5 pt-3 pb-5">
-          <div className="max-w-[820px] mx-auto mb-2.5 flex items-center gap-3 flex-wrap">
-            <HybridToggle enabled={hybridExpert} onChange={setHybridExpert} disabled={streaming} />
+          <div className="mb-2.5">
+            <ChatToolbar
+              hybridExpert={hybridExpert}
+              onHybridChange={setHybridExpert}
+              newTopicPending={newTopicPending}
+              onNewTopicToggle={() => setNewTopicPending((v) => !v)}
+              streaming={streaming}
+            />
           </div>
           <ChatInput
             value={input}
@@ -352,7 +359,7 @@ export default function ChatPage() {
             onStop={abort}
             placeholder={inputPlaceholder}
           />
-          <p className="max-w-[820px] mx-auto mt-2 text-xs text-center text-text-muted">
+          <p className="max-w-[768px] mx-auto mt-2 text-xs text-center text-text-muted">
             Enter 发送 · Shift+Enter 换行
           </p>
         </div>

@@ -192,11 +192,11 @@ describe("MessageBubble", () => {
     });
   });
 
-  it("renders streaming cursor indicator", () => {
-    const msg = { role: "assistant" as const, content: "正在输入" };
+  it("renders streaming as plain text (not markdown parse)", () => {
+    const msg = { role: "assistant" as const, content: "正在输入**未解析**" };
     render(React.createElement(MessageBubble, { message: msg, streaming: true }));
-    // Cursor is CSS-only (after:content['▋']) — just verify no crash
-    expect(screen.getByText("正在输入")).toBeTruthy();
+    expect(screen.getByText(/正在输入\*\*未解析\*\*/)).toBeTruthy();
+    expect(document.querySelector("strong")).toBeNull();
   });
 
   it("shows LottiePlayer + '思考中' for empty content while streaming", () => {

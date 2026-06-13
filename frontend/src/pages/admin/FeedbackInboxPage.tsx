@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   approveFeedback,
@@ -23,6 +24,27 @@ const ISSUE_LABELS: Record<string, string> = {
   prompt: "提示词 / 生成",
   tone: "语气 / 表达",
   ok: "无问题",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  pending: "待研判",
+  triaged: "已分类",
+  approved: "已采纳",
+  rejected: "已驳回",
+  applied: "已执行",
+  evaluated: "已评测",
+};
+
+const SEVERITY_LABELS: Record<string, string> = {
+  high: "高",
+  medium: "中",
+  low: "低",
+};
+
+const ACTION_LABELS: Record<string, string> = {
+  add_to_golden: "加入评测集",
+  propose_reingest: "建议重入库",
+  apply_config_patch: "调整配置",
 };
 
 function ratingLabel(rating: number): { text: string; variant: "success" | "warning" | "default" } {
@@ -84,7 +106,7 @@ export default function FeedbackInboxPage() {
 
   const openTrace = async (item: FeedbackItem) => {
     if (!item.trace_id) {
-      toast.message("该反馈未关联 trace_id");
+      toast.message("该反馈未关联链路 ID");
       return;
     }
     setTraceLoading(true);
@@ -92,7 +114,7 @@ export default function FeedbackInboxPage() {
       const trace = await fetchFeedbackTrace(item.trace_id);
       setTraceDetail(trace);
     } catch {
-      toast.error("无法加载 Trace，请确认 LOCAL_TRACE_ENABLED 且存在对应记录");
+      toast.error("无法加载链路详情，请确认已开启本地追踪且存在对应记录");
     } finally {
       setTraceLoading(false);
     }
@@ -110,18 +132,25 @@ export default function FeedbackInboxPage() {
   const handleTriage = async (useLlm: boolean) => {
     try {
       const res = await runFeedbackTriage({ limit: 30, use_llm: useLlm, rating: 0 });
-      toast.success(`Triage 完成：处理 ${res.processed} 条，队列 ${res.queued} 条`);
+      toast.success(`研判完成：处理 ${res.processed} 条，队列 ${res.queued} 条`);
       invalidate();
     } catch {
-      toast.error("Triage 失败");
+      toast.error("研判失败");
     }
   };
 
   const handleApprove = async (id: string) => {
     setActionId(id);
     try {
-      await approveFeedback(id);
-      toast.success("已采纳建议（待 Sprint C Actuator 执行）");
+      const res = await approveFeedback(id);
+      const okCount = (res.action_results || []).filter((a) => a.ok).length;
+      if (res.status === "applied" && okCount > 0) {
+        toast.success(`已采纳并执行 ${okCount} 项改进动作；golden 评测将在后台运行`);
+      } else if (res.status === "approved") {
+        toast.success("已采纳建议（无可执行动作）");
+      } else {
+        toast.success("已采纳建议");
+      }
       invalidate();
     } catch {
       toast.error("操作失败");
@@ -147,7 +176,7 @@ export default function FeedbackInboxPage() {
     <div className="p-6 max-w-[1100px]">
       <PageHeader
         title="用户反馈"
-        description="Chat 点赞/点踩与可选纠错 → 规则或 LLM Triage 分类 → 运营采纳/驳回。负反馈优先按严重度排序。"
+        description="对话点赞/点踩与可选纠错 → 规则或大模型研判分类 → 运营采纳/驳回。负反馈优先按严重度排序。"
       />
 
       <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -192,9 +221,11 @@ export default function FeedbackInboxPage() {
             }}
           >
             <option value="">全部</option>
-            <option value="pending">待 Triage</option>
+            <option value="pending">待研判</option>
             <option value="triaged">已分类</option>
             <option value="approved">已采纳</option>
+            <option value="applied">已执行</option>
+            <option value="evaluated">已评测</option>
             <option value="rejected">已驳回</option>
           </select>
         </label>
@@ -210,10 +241,10 @@ export default function FeedbackInboxPage() {
           </select>
         </label>
         <Button type="button" variant="primary" onClick={() => handleTriage(false)}>
-          规则 Triage
+          规则研判
         </Button>
         <Button type="button" variant="default" onClick={() => handleTriage(true)}>
-          LLM Triage
+          大模型研判
         </Button>
         <Button type="button" variant="default" onClick={() => refetch()}>
           刷新
@@ -221,6 +252,12 @@ export default function FeedbackInboxPage() {
         <Button type="button" variant="default" onClick={handleExport}>
           导出 JSONL
         </Button>
+        <Link
+          to="/admin/eval-reports"
+          className="text-sm text-brand hover:underline px-2 py-1"
+        >
+          评测报告 →
+        </Link>
         <span className="text-xs text-text-muted ml-auto">
           共 {total} 条 · 第 {page}/{totalPages} 页
         </span>
@@ -247,7 +284,7 @@ export default function FeedbackInboxPage() {
               <div className="flex flex-wrap items-center gap-2 mb-2">
                 <Badge variant={badge.variant}>{badge.text}</Badge>
                 {item.status && item.status !== "pending" && (
-                  <Badge variant="default">{item.status}</Badge>
+                  <Badge variant="default">{STATUS_LABELS[item.status] || item.status}</Badge>
                 )}
                 {issueLabel && (
                   <Badge variant={item.issue_type === "ok" ? "success" : "warning"}>
@@ -255,7 +292,9 @@ export default function FeedbackInboxPage() {
                   </Badge>
                 )}
                 {item.severity && (
-                  <Badge variant={severityVariant(item.severity)}>{item.severity}</Badge>
+                  <Badge variant={severityVariant(item.severity)}>
+                    {SEVERITY_LABELS[item.severity] || item.severity}
+                  </Badge>
                 )}
                 {item.answer_mode && (
                   <Badge variant={item.answer_mode === "kb" ? "success" : "warning"}>
@@ -291,7 +330,7 @@ export default function FeedbackInboxPage() {
                 <ul className="text-xs text-text-muted mb-2 list-disc pl-4">
                   {item.suggested_actions.map((a, i) => (
                     <li key={i}>
-                      {a.action}
+                      {ACTION_LABELS[a.action] || a.action}
                       {a.confidence != null ? ` (${Math.round(a.confidence * 100)}%)` : ""}
                       {a.detail ? ` — ${a.detail}` : ""}
                     </li>
@@ -334,7 +373,7 @@ export default function FeedbackInboxPage() {
                     disabled={traceLoading}
                     onClick={() => openTrace(item)}
                   >
-                    查看 Trace
+                    查看链路
                   </Button>
                 )}
                 <code className="text-[11px] text-text-muted bg-surface-muted px-2 py-1 rounded">
@@ -371,7 +410,7 @@ export default function FeedbackInboxPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-xl max-w-3xl w-full max-h-[80vh] overflow-hidden flex flex-col shadow-xl">
             <div className="px-4 py-3 border-b border-border flex justify-between items-center">
-              <h3 className="font-semibold text-sm">Trace 详情</h3>
+              <h3 className="font-semibold text-sm">链路详情</h3>
               <Button type="button" variant="default" onClick={() => setTraceDetail(null)}>
                 关闭
               </Button>

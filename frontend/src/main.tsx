@@ -32,6 +32,7 @@ const router = createBrowserRouter([
           { path: "models", lazy: lazyPage(() => import("./pages/admin/ModelPage")) },
           { path: "trace", lazy: lazyPage(() => import("./pages/admin/TracePage")) },
           { path: "feedback", lazy: lazyPage(() => import("./pages/admin/FeedbackInboxPage")) },
+          { path: "eval-reports", lazy: lazyPage(() => import("./pages/admin/EvalReportsPage")) },
           { path: "tutorial", lazy: lazyPage(() => import("./pages/admin/TutorialPage")) },
         ],
       },

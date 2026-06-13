@@ -86,22 +86,18 @@ export async function streamChat(
   onEvent: (evt: StreamEvent) => void,
   signal?: AbortSignal
 ): Promise<void> {
-  console.log("[streamChat] fetch start", payload.message.slice(0, 20));
   const r = await fetch("/chat/stream", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
     signal,
   });
-  console.log("[streamChat] response ok:", r.ok, "status:", r.status);
   if (!r.ok) {
     const text = await r.text();
-    console.log("[streamChat] error body:", text);
     onEvent({ type: "error", message: text || "请求失败" });
     return;
   }
   const reader = r.body?.getReader();
-  console.log("[streamChat] reader:", !!reader);
   if (!reader) return;
   const dec = new TextDecoder();
   let buf = "";
@@ -115,14 +111,12 @@ export async function streamChat(
       if (!line.startsWith("data: ")) continue;
       try {
         const evt = JSON.parse(line.slice(6)) as StreamEvent;
-        console.log("[streamChat] event:", evt.type, evt.type === "token" ? evt.content : "");
         onEvent(evt);
       } catch {
         /* ignore malformed */
       }
     }
   }
-  console.log("[streamChat] done");
 }
 
 // ===== Feedback =====
@@ -183,7 +177,20 @@ export function runFeedbackTriage(opts?: {
   });
 }
 
-export function approveFeedback(id: string): Promise<{ id: string; status: string }> {
+export type FeedbackActionResult = {
+  action: string;
+  ok: boolean;
+  skipped?: boolean;
+  reason?: string;
+  error?: string;
+  revision_id?: string;
+  proposal_id?: string;
+  golden_path?: string;
+};
+
+export function approveFeedback(
+  id: string,
+): Promise<{ id: string; status: string; action_results?: FeedbackActionResult[] }> {
   return request(`/admin/feedback/${encodeURIComponent(id)}/approve`, { method: "POST" });
 }
 
@@ -197,6 +204,61 @@ export function fetchFeedbackTrace(traceId: string): Promise<Record<string, unkn
 
 export function exportFeedbackJsonl(): Promise<{ ok: boolean; exported: number }> {
   return request("/admin/feedback/export-jsonl", { method: "POST" });
+}
+
+export type EvalReportItem = {
+  id: string;
+  created_at: string;
+  feedback_id?: string | null;
+  revision_id?: string | null;
+  golden_rows: number;
+  mode: string;
+  metrics: Record<string, unknown>;
+  baseline_metrics: Record<string, unknown>;
+  delta: Record<string, number>;
+};
+
+export function runFeedbackEvaluate(opts?: {
+  feedback_id?: string;
+  revision_id?: string;
+}): Promise<{
+  ok: boolean;
+  report_id?: string;
+  golden_rows?: number;
+  mode?: string;
+  metrics?: Record<string, unknown>;
+  delta?: Record<string, number>;
+  error?: string;
+}> {
+  return request("/admin/feedback/evaluate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      feedback_id: opts?.feedback_id,
+      revision_id: opts?.revision_id,
+    }),
+  });
+}
+
+export function fetchEvalReports(params?: {
+  feedback_id?: string;
+  offset?: number;
+  limit?: number;
+}): Promise<{ items: EvalReportItem[]; total: number; limit: number; offset: number }> {
+  const q = new URLSearchParams();
+  if (params?.feedback_id) q.set("feedback_id", params.feedback_id);
+  if (params?.offset !== undefined) q.set("offset", String(params.offset));
+  if (params?.limit !== undefined) q.set("limit", String(params.limit));
+  const qs = q.toString();
+  return request(`/admin/feedback/eval-reports${qs ? `?${qs}` : ""}`);
+}
+
+export function exportEvalReports(): Promise<{
+  ok: boolean;
+  exported: number;
+  items: EvalReportItem[];
+}> {
+  return request("/admin/feedback/eval-reports/export", { method: "POST" });
 }
 
 // ===== Model Profiles =====
