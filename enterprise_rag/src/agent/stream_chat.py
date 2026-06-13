@@ -15,6 +15,8 @@ from agent.kb_judge import answer_indicates_kb_miss, should_attach_citations
 from agent.answer_router import resolve_answer_mode
 from agent.context_format import build_source_citations
 from agent.conversation_context import build_llm_messages
+from agent.conversation.rolling_summary import augment_system_with_summary
+from agent.llm_routing import routing_llm_runtime
 from agent.nodes import retrieve_node
 from agent.stream_verifier import run_stream_verifier
 from agent.tools.runtime.stream import is_tools_active, stream_general_answer
@@ -35,16 +37,20 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
     init_state.update(state)
 
     history: list[dict[str, Any]] = list(state.get("history") or [])
+    rolling_summary = str(state.get("rolling_summary") or "")
     mem = state.get("memory_config") or {}
     fast = bool(state.get("stream_fast_mode"))
     prompt_slots = mem.get("prompt_slots")
     hybrid = bool(state.get("hybrid_expert_mode"))
-    llm_runtime = {
-        "llm_api_key": state.get("llm_api_key"),
-        "llm_api_base": state.get("llm_api_base"),
-        "chat_model": state.get("chat_model"),
-        "llm_extra_headers": state.get("llm_extra_headers"),
-    }
+    llm_runtime = routing_llm_runtime(
+        {
+            "llm_api_key": state.get("llm_api_key"),
+            "llm_api_base": state.get("llm_api_base"),
+            "chat_model": state.get("chat_model"),
+            "routing_model": state.get("routing_model"),
+            "llm_extra_headers": state.get("llm_extra_headers"),
+        }
+    )
 
     trace = new_stream_tracer(state)
     trace_err: str | None = None
@@ -92,6 +98,8 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
             kb_min_rerank_score=float(mem.get("kb_min_rerank_score", 0.0)),
             kb_llm_judge=bool(mem.get("kb_llm_judge", True)),
             general_fallback_enabled=bool(mem.get("general_fallback_enabled", True)),
+            topic_shift=bool(state.get("topic_shift")),
+            kb_llm_judge_always=bool(mem.get("kb_llm_judge_always", False)),
             llm_runtime=llm_runtime,
         )
         if is_tools_active() and question_needs_agent_tools(state["question"]):
@@ -140,7 +148,10 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
         ) as draft_out:
             tool_trace: list[dict[str, Any]] = []
             if answer_mode == "kb":
-                system = kb_system_prompt(fast=fast, slots=prompt_slots)
+                system = augment_system_with_summary(
+                    kb_system_prompt(fast=fast, slots=prompt_slots),
+                    rolling_summary,
+                )
                 user_content = kb_user_content(ctx, state["question"])
                 messages = build_llm_messages(system=system, history=history, user_content=user_content)
                 kw = _gen_kw(model, messages, temp, mt)
@@ -173,8 +184,14 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
                     trace_err = str(e)
                     raise
             else:
-                system = general_system_prompt(slots=prompt_slots)
-                user_content = general_user_content(state["question"])
+                system = augment_system_with_summary(
+                    general_system_prompt(slots=prompt_slots),
+                    rolling_summary,
+                )
+                user_content = general_user_content(
+                    state["question"],
+                    contexts=ctx if hybrid and ctx else None,
+                )
                 messages = build_llm_messages(system=system, history=history, user_content=user_content)
                 kw = _gen_kw(model, messages, temp, mt)
                 try:
@@ -228,8 +245,14 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
                         emit_tokens=True,
                     )
                 else:
-                    system = general_system_prompt(slots=prompt_slots)
-                    user_content = general_user_content(state["question"])
+                    system = augment_system_with_summary(
+                        general_system_prompt(slots=prompt_slots),
+                        rolling_summary,
+                    )
+                    user_content = general_user_content(
+                        state["question"],
+                        contexts=ctx if hybrid and ctx else None,
+                    )
                     messages = build_llm_messages(system=system, history=history, user_content=user_content)
                     gen_kw = _gen_kw(model, messages, temp, mt)
                     yield from _stream_tokens(client, gen_kw, parts, emit=True)
@@ -288,6 +311,11 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
         "verified": verified,
         "trace_id": trace.trace_id,
         "tool_trace": state.get("_tool_trace") or [],
+        "topic_shift": bool(state.get("topic_shift")),
+        "retrieval_query": state.get("retrieval_query") or state["question"],
+        "routing_model": state.get("routing_model"),
+        "chat_routing_tier": (mem.get("chat_routing_tier") if mem else "balanced"),
+        "condense_used_llm": bool((state.get("turn_meta") or {}).get("condense_used_llm")),
     }
     trace.finish(
         {

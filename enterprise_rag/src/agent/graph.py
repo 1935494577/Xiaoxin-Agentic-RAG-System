@@ -65,6 +65,10 @@ def run_agent(
     llm_runtime: dict[str, Any] | None = None,
     history: list[dict[str, Any]] | None = None,
     memory_config: dict[str, Any] | None = None,
+    retrieval_query: str | None = None,
+    topic_shift: bool = False,
+    skip_retrieval_rewrite: bool = False,
+    rolling_summary: str | None = None,
 ) -> dict[str, Any]:
     app = get_agent_app()
     init: AgentState = {
@@ -75,6 +79,10 @@ def run_agent(
         "retry_count": 0,
         "history": history or [],
         "memory_config": memory_config or {},
+        "retrieval_query": (retrieval_query or question).strip(),
+        "topic_shift": bool(topic_shift),
+        "skip_retrieval_rewrite": bool(skip_retrieval_rewrite),
+        "rolling_summary": (rolling_summary or "").strip(),
     }
     if llm_runtime:
         init.update(llm_runtime)

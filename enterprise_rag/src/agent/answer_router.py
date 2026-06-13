@@ -31,6 +31,8 @@ def resolve_answer_mode(
     kb_min_rerank_score: float = 0.0,
     kb_llm_judge: bool = True,
     llm_runtime: dict[str, Any] | None = None,
+    topic_shift: bool = False,
+    kb_llm_judge_always: bool = False,
 ) -> str:
     return _resolve(
         question,
@@ -41,4 +43,6 @@ def resolve_answer_mode(
         kb_llm_judge=kb_llm_judge,
         general_fallback_enabled=general_fallback_enabled,
         llm_runtime=llm_runtime,
+        topic_shift=topic_shift,
+        kb_llm_judge_always=kb_llm_judge_always,
     )

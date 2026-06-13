@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     openai_api_base: str = "https://api.openai.com/v1"
     openai_api_key: str = ""
     openai_chat_model: str = "gpt-4o-mini"
+    # 预处理（condense / kb judge / 摘要）专用；留空则与 openai_chat_model 相同
+    openai_routing_model: str = ""
 
     embedding_model: str = "BAAI/bge-m3"
     # embedding_backend=auto 且 Flag 加载失败时，sentence-transformers 回退用（勿填 bge-m3，ST 无法按单塔加载）
@@ -49,7 +51,14 @@ class Settings(BaseSettings):
     data_processed_dir: Path = _REPO_ROOT / "enterprise_rag" / "data" / "processed"
     data_chunks_dir: Path = _REPO_ROOT / "enterprise_rag" / "data" / "chunks"
     data_feedback_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "feedback.jsonl"
+    golden_jsonl_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "eval" / "golden.jsonl"
+    eval_reports_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "eval" / "eval_reports.jsonl"
+    config_revisions_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "config_revisions.jsonl"
+    ingest_proposals_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "ingest_proposals.jsonl"
+    retrieval_tuning_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "retrieval_tuning.json"
     feedback_triage_batch_size: int = 20
+    feedback_auto_add_to_golden: bool = True
+    feedback_auto_add_to_golden_min_confidence: float = 0.85
     chat_sessions_db_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "chat_sessions.db"
     chat_trace_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "chat_trace.jsonl"
     model_profiles_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "model_profiles.json"
@@ -94,6 +103,16 @@ class Settings(BaseSettings):
     stream_context_max_chars: int = 700
     # 为 false 时跳过 LLM 查询改写，显著降低首 token 延迟
     query_rewrite_enabled: bool = False
+    # 多轮：L1 condense + 换题检测（见 docs/conversation-context.md）
+    conversation_condense_enabled: bool = True
+    history_prune_enabled: bool = True
+    history_prune_min_similarity: float = 0.35
+    history_prune_max_turns: int = 4
+    history_assistant_max_chars: int = 600
+    rolling_summary_enabled: bool = True
+    rolling_summary_every_n_turns: int = 6
+    rolling_summary_min_chars: int = 3500
+    rolling_summary_max_tokens: int = 400
 
     use_presidio: bool = True
     default_department: str = "技术部"

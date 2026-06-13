@@ -33,6 +33,16 @@ export type UiConfig = {
   stream_verifier_enabled?: boolean;
   graph_verifier_enabled?: boolean;
   long_term_memory_enabled?: boolean;
+  conversation_condense_enabled?: boolean;
+  history_prune_enabled?: boolean;
+  history_prune_min_similarity?: number;
+  history_prune_max_turns?: number;
+  history_assistant_max_chars?: number;
+  chat_routing_tier?: string;
+  routing_model?: string;
+  condense_llm_enabled?: boolean;
+  rolling_summary_every_n_turns?: number;
+  rolling_summary_min_chars?: number;
   ingest_tag_presets?: string[];
   supported_upload_extensions?: string[];
   supported_upload_label?: string;
@@ -83,6 +93,11 @@ export type StreamEvent =
       verified?: boolean;
       trace_id?: string;
       tool_trace?: ToolTraceItem[];
+      topic_shift?: boolean;
+      retrieval_query?: string;
+      routing_model?: string;
+      chat_routing_tier?: string;
+      condense_used_llm?: boolean;
     };
 
 export type StreamPayload = {
@@ -93,6 +108,7 @@ export type StreamPayload = {
   skip_query_rewrite?: boolean;
   session_id?: string;
   history?: Array<{ role: string; content: string }>;
+  reset_context?: boolean;
 };
 
 // ===== Model Profiles =====
@@ -103,6 +119,7 @@ export type ModelProfile = {
   api_base?: string;
   api_path?: string;
   default_model?: string;
+  routing_model?: string;
   has_api_key?: boolean;
 };
 

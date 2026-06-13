@@ -115,7 +115,9 @@ def hybrid_search(
 
     all_pids = set(v_n) | set(e_n)
     combined: dict[str, float] = {}
-    wv, wb = settings.hybrid_vector_weight, settings.hybrid_bm25_weight
+    from retrieval.retrieval_tuning_store import get_hybrid_weights
+
+    wv, wb = get_hybrid_weights()
     for pid in all_pids:
         combined[pid] = wv * v_n.get(pid, 0.0) + wb * e_n.get(pid, 0.0)
 

@@ -37,7 +37,7 @@ def test_admin_approve_feedback(client: TestClient):
     fid = client.get("/admin/feedback").json()["items"][0]["id"]
     r = client.post(f"/admin/feedback/{fid}/approve")
     assert r.status_code == 200
-    assert r.json()["status"] == "approved"
+    assert r.json()["status"] in ("approved", "applied")
 
 
 def test_feedback_with_correction(client: TestClient):

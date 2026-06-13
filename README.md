@@ -13,11 +13,11 @@
 | **嵌入与重排** | FlagEmbedding / sentence-transformers、CrossEncoder 重排；可选 **ModelScope** 下载到 `enterprise_rag/data/models` |
 | **检索** | 查询改写、向量 + BM25 混合检索、重排；**L3 检索去重**（文本相似度 + MMR）；**检索结果缓存**（Redis 或进程内 TTL 回退） |
 | **入库去重** | **L1** 文档 content_hash 别名跳过重复嵌入；**L2** 父块 simhash 近似去重（`indexing/ingest_dedup`） |
-| **对话智能体** | LangGraph 与非流式 `/chat`；**SSE 流式** `/chat/stream`；**混合专家模式**（KB 优先、未命中静默通用兜底）；引文按文件去重并 **Top-N + 相对分数过滤**（默认最多 2 条）；**对话工具**（`agent/tools/`：`get_beijing_time` 北京时间、**天气实况+数小时预报与建议**、Tavily `web_search`；实时类问题强制走工具、禁止编造日期） |
-| **HTTP API** | FastAPI：健康检查、入库（含 dedup 统计）、检索调试、流式对话、会话记忆、可插拔提示词、模型/向量库/UI 配置（`api`） |
+| **对话智能体** | LangGraph / SSE；混合专家；**多轮上下文** L1–L4（见 `docs/conversation-context.md`）；**routing_model** 预处理与生成模型分离；**chat_routing_tier**（fast/balanced/quality）；开放性问题 KB 过滤；`reset_context` / 滚动摘要 |
+| **HTTP API** | FastAPI：健康检查、入库、检索调试、流式对话、会话记忆、可插拔提示词、模型/向量库/UI 配置（`api`） |
 | **安全** | 可选 `RAG_API_SECRET`、CORS、可信 Host、安全头；注入检测；**部门 + 可见范围 ACL**（内部仅本部门、公开全员可见，向量/BM25 检索层过滤） |
-| **前端** | **Jnao Chat** React SPA（8502）：流式对话、工具调用展示；**React 管理后台**（`/admin`）：入库、**入库工具 / 对话工具** 分 Tab、提示词、模型、记忆、Trace 等 |
-| **用户反馈（Sprint A/B）** | 👍 一键反馈；👎 可选纠错说明；SQLite + trace 关联；**规则/LLM Triage** 分类（`issue_type` / `severity`）；Admin Inbox 采纳/驳回；JSONL 导出 |
+| **前端** | **Jnao Chat** React SPA（8502）：流式对话（纯文本逐字 + 完成后 Markdown 排版）、**新话题** / 混合专家工具栏、工具调用展示；**React 管理后台**（`/admin`）：入库、工具、提示词、模型、**对话设置**（Tab：基础/检索/KB/多轮/性能路由）、**评测报告**、Trace 等 |
+| **用户反馈（Sprint A–D）** | 👍👎 反馈 → Triage → 采纳 → **Actuator**（golden / 重入库工单 / 配置补丁）→ **golden 评测**（RAGAS 或 naive 回退，对比上一份 Δ）；`config_revisions` 可回滚；Admin **评测报告**页 |
 | **评测与追踪** | 可选 LangSmith / 本地 JSONL trace；`scripts/eval_ingest_dedup.py` 检索去重 A/B 评估 |
 | **容器与脚本** | `Dockerfile`、`docker-compose.yml`、`Makefile`；Windows `.ps1` 与 **macOS/Linux `.sh`** 一键启停；**生产启动** `run-api-prod.ps1` / `run-api-prod.sh` |
 
@@ -31,6 +31,7 @@
 - **内部规划稿**：`PROJECT_PLAN.md`、`plan1.md`、`project.txt`
 - **虚拟环境与缓存**：`.venv/`、`__pycache__/`、`.pytest_cache/` 等
 - **运行期索引与数据产物**：`enterprise_rag/data/milvus_lite/`、`bm25_index.json`、`numpy_vectors.json`、`chunks_*.jsonl`、`processed/**`（除 `.gitkeep`）、`feedback.jsonl`、`golden.jsonl` 等
+- **本地调试/审计产物**：`debug-*.log`、`.codegraph/`、`enterprise_rag/data/_audit_tmp/`、`enterprise_rag/data/_bench_tmp/`
 
 **嵌入与重排模型**默认下载到 `enterprise_rag/data/models/`，**不纳入 Git**（由 `.gitignore` 排除）；克隆仓库后请在本地按上文「模型获取」方式自行下载权重。
 
@@ -51,6 +52,7 @@ xiaoxin_RAG/
 ├── requirements.txt             # 运行依赖（含可选 modelscope）
 ├── requirements-gpu.txt
 ├── docs/
+│   ├── conversation-context.md  # 多轮上下文 L1–L4 架构说明
 │   └── deploy_security.md       # 部署与安全建议
 ├── deploy/
 │   └── nginx-api.conf.example
@@ -229,7 +231,15 @@ cd <仓库根目录>
 | POST | `/chat/stream` | SSE 流式对话（Chat SPA 使用） |
 | POST | `/retrieve` | 混合检索 + 重排调试（不调用 LLM 生成） |
 | GET/POST | `/chat/sessions`… | 会话与历史消息 |
-| POST | `/feedback` | 反馈写入 JSONL |
+| POST | `/feedback` | 用户反馈（SQLite + 异步 trace 补全） |
+| GET | `/admin/feedback` | Admin 反馈列表（状态/严重度筛选） |
+| POST | `/admin/feedback/triage` | 批量规则/LLM 研判 |
+| POST | `/admin/feedback/{id}/approve` | 采纳并执行 Actuator 动作 |
+| GET | `/admin/feedback/config-revisions` | 配置变更版本列表 |
+| POST | `/admin/feedback/config-revisions/{id}/rollback` | 回滚配置补丁 |
+| POST | `/admin/feedback/evaluate` | 手动触发 golden 评测 |
+| GET | `/admin/feedback/eval-reports` | 评测报告列表（含指标 delta） |
+| POST | `/admin/feedback/eval-reports/export` | 导出评测报告 JSON |
 | POST | `/ingest/preview` | 清洗预览 |
 | POST | `/ingest/text` | 文本入库（响应含 `dedup` 去重统计） |
 | POST | `/ingest/path` | 按 `data/raw` 相对路径入库 |

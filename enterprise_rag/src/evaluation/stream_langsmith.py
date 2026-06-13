@@ -30,6 +30,9 @@ def _safe_meta(state: dict[str, Any]) -> dict[str, Any]:
         "user_department": state.get("user_department"),
         "stream_fast_mode": bool(state.get("stream_fast_mode")),
         "chat_model": state.get("chat_model"),
+        "routing_model": state.get("routing_model"),
+        "chat_routing_tier": (state.get("memory_config") or {}).get("chat_routing_tier"),
+        "condense_used_llm": (state.get("turn_meta") or {}).get("condense_used_llm"),
     }
 
 

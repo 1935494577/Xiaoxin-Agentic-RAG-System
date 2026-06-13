@@ -48,3 +48,19 @@ def approve_feedback(feedback_id: str) -> dict:
 
 def reject_feedback(feedback_id: str) -> dict:
     return transition_status(feedback_id, "rejected")
+
+
+def approve_and_apply(feedback_id: str) -> dict:
+    """采纳建议并执行 Actuator 白名单动作，成功则进入 applied。"""
+    from feedback_loop.actuator import execute_feedback_actions
+    from feedback_loop.store import get_feedback
+
+    row = approve_feedback(feedback_id)
+    results = execute_feedback_actions(row, manual=True)
+    out = dict(row)
+    out["action_results"] = results
+    if any(r.get("ok") for r in results):
+        applied = transition_status(feedback_id, "applied")
+        out = dict(applied)
+        out["action_results"] = results
+    return out

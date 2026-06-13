@@ -13,9 +13,21 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "enterprise_rag" / "src"))
 
 from config import settings  # noqa: E402
-from debug_session_log import write as session_log  # noqa: E402
 from indexing import numpy_vector_index as nvi  # noqa: E402
 from indexing.bm25_indexer import BM25Index  # noqa: E402
+
+BENCH_LOG = ROOT / "debug-bench.log"
+
+
+def _bench_log(message: str, data: dict) -> None:
+    payload = {
+        "location": "scripts/bench_index_perf.py",
+        "message": message,
+        "data": data,
+        "timestamp": int(time.time() * 1000),
+    }
+    with BENCH_LOG.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
 def main() -> None:
@@ -72,16 +84,13 @@ def main() -> None:
         idx.search("企业制度", 20)
     bm25_ms = (time.perf_counter() - t0) / 50 * 1000
 
-    session_log(
-        "VERIFY",
-        "scripts/bench_index_perf.py",
+    _bench_log(
         "bench_summary",
         {"vector_search_avg_ms": round(vec_ms, 2), "bm25_search_avg_ms": round(bm25_ms, 2), "n": n},
-        run_id="post-fix",
     )
     print(f"vector_search avg: {vec_ms:.2f} ms (n={n}, dim={dim}, x10)")
     print(f"bm25_search avg: {bm25_ms:.2f} ms (n={n}, x50)")
-    print(f"Log: {ROOT / 'debug-4d3f1c.log'}")
+    print(f"Log: {BENCH_LOG}")
 
 
 if __name__ == "__main__":

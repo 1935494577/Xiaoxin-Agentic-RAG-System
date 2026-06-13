@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, Response, StreamingResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -19,22 +19,27 @@ from config import settings
 from agent.graph import run_agent
 from agent.stream_chat import stream_rag_chat
 from agent.conversation_context import resolve_chat_history
+from agent.conversation.prepare import prepare_turn
 from api.chat_memory import chat_memory_settings
 from api.prompt_config_store import public_prompt_config, save_prompt_config
+from api.chat_routing import apply_routing_tier
 from api.routing_mode import apply_hybrid_expert_memory, resolve_hybrid_expert_mode
 from api.stream_retrieval import build_stream_retrieval_state, resolve_stream_fast_mode
 from api.auth_middleware import APIAuthMiddleware, SecurityHeadersMiddleware
 from api.feedback_router import router as feedback_router
 from api.chat_session_store import (
     append_messages,
+    clear_rolling_summary,
     create_session,
     delete_session,
+    get_rolling_summary,
     get_session,
     init_chat_session_db,
     list_messages,
     list_sessions,
     update_session_title,
 )
+from agent.conversation.rolling_summary import refresh_rolling_summary_for_session
 from api.connection_cache import get_cached_status, invalidate_status, set_cached_status
 from api.llm_resolve import resolve_llm_runtime
 from api.llm_test import test_llm_connection
@@ -450,6 +455,7 @@ def create_model_profile(body: ModelProfileCreate):
         default_model=body.default_model,
         api_key=body.api_key,
         extra_headers=body.extra_headers,
+        routing_model=body.routing_model,
     )
     return ModelProfilePublic.model_validate(to_public_dict(row))
 
@@ -473,6 +479,7 @@ def update_model_profile(profile_id: str, body: ModelProfileUpdate):
             default_model=body.default_model if body.default_model is not None else str(existing.get("default_model") or ""),
             api_key=body.api_key,
             extra_headers=body.extra_headers if body.extra_headers is not None else existing.get("extra_headers"),
+            routing_model=body.routing_model if body.routing_model is not None else existing.get("routing_model"),
         )
         return ModelProfilePublic.model_validate(to_public_dict(row))
     except KeyError:
@@ -553,8 +560,34 @@ def _resolve_request_history(req: ChatRequest, mem: dict[str, Any] | None = None
     )
 
 
+def _prepare_chat_turn(
+    req: ChatRequest,
+    mem: dict[str, Any],
+    runtime: dict[str, Any],
+):
+    raw_history: list[dict[str, Any]] = []
+    rolling_summary = ""
+    if req.reset_context:
+        if req.session_id:
+            clear_rolling_summary(req.session_id, req.user_id)
+    else:
+        raw_history = _resolve_request_history(req, mem)
+        if req.session_id and bool(mem.get("rolling_summary_enabled", True)):
+            rolling_summary = get_rolling_summary(req.session_id, req.user_id)
+
+    return prepare_turn(
+        message=req.message,
+        history=raw_history,
+        memory_config=mem,
+        llm_runtime=runtime,
+        max_tokens_condense=req.max_tokens_rewrite,
+        rolling_summary=rolling_summary,
+        reset_context=bool(req.reset_context),
+    )
+
+
 @app.post("/chat", response_model=ChatResponse)
-def chat(req: ChatRequest):
+def chat(req: ChatRequest, background_tasks: BackgroundTasks):
     """步骤7：对话入口。"""
     runtime = resolve_llm_runtime(req)
     if not (runtime.get("llm_api_key") or "").strip():
@@ -563,15 +596,29 @@ def chat(req: ChatRequest):
             detail="未配置 API Key：请在「模型配置」中保存密钥，或在 .env 中设置 OPENAI_API_KEY。",
         )
     mem = chat_memory_settings()
+    mem = apply_routing_tier(mem)
+    turn = _prepare_chat_turn(req, mem, runtime)
     out = run_agent(
         question=req.message,
         user_id=req.user_id,
         user_department=req.user_department,
         allowed_sources=req.allowed_sources,
         llm_runtime=runtime,
-        history=_resolve_request_history(req, mem),
+        history=turn.history_for_llm,
         memory_config=mem,
+        retrieval_query=turn.retrieval_query,
+        topic_shift=turn.topic_shift,
+        skip_retrieval_rewrite=turn.skip_retrieval_rewrite,
+        rolling_summary=turn.rolling_summary,
     )
+    if req.session_id and bool(mem.get("rolling_summary_enabled", True)):
+        background_tasks.add_task(
+            refresh_rolling_summary_for_session,
+            req.session_id,
+            req.user_id,
+            mem,
+            runtime,
+        )
     return ChatResponse(
         answer=out.get("answer") or "",
         sources=out.get("sources") or [],
@@ -594,8 +641,9 @@ def chat_stream(req: ChatRequest):
 
     fast = resolve_stream_fast_mode(req.stream_fast_mode)
     hybrid = resolve_hybrid_expert_mode(req.hybrid_expert_mode)
-    mem = apply_hybrid_expert_memory(chat_memory_settings(), hybrid)
-    history = _resolve_request_history(req, mem)
+    mem = apply_routing_tier(apply_hybrid_expert_memory(chat_memory_settings(), hybrid))
+    turn = _prepare_chat_turn(req, mem, runtime)
+    history = turn.history_for_llm
     state: dict[str, Any] = {
         "question": req.message,
         "user_id": req.user_id,
@@ -603,6 +651,13 @@ def chat_stream(req: ChatRequest):
         "allowed_sources": req.allowed_sources,
         "history": history,
         "memory_config": mem,
+        "retrieval_query": turn.retrieval_query,
+        "topic_shift": turn.topic_shift,
+        "skip_retrieval_rewrite": turn.skip_retrieval_rewrite,
+        "rolling_summary": turn.rolling_summary,
+        "turn_meta": turn.meta,
+        "routing_model": runtime.get("routing_model"),
+        "session_id": req.session_id,
         "quiet_routing": True,
         "hybrid_expert_mode": hybrid,
         "llm_temperature_answer": req.temperature if req.temperature is not None else 0.2,
@@ -622,7 +677,15 @@ def chat_stream(req: ChatRequest):
     def _gen():
         yield from stream_rag_chat(state)
 
-    return StreamingResponse(_gen(), media_type="text/event-stream")
+    return StreamingResponse(
+        _gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/chat/sessions", response_model=list[ChatSessionPublic])
@@ -648,7 +711,7 @@ def chat_session_messages(
 
 
 @app.post("/chat/sessions/{session_id}/messages", response_model=list[ChatMessagePublic])
-def chat_session_append(session_id: str, req: ChatMessagesAppend):
+def chat_session_append(session_id: str, req: ChatMessagesAppend, background_tasks: BackgroundTasks):
     if req.user_id.strip() != req.user_id:
         raise HTTPException(status_code=400, detail="invalid user_id")
     try:
@@ -660,6 +723,15 @@ def chat_session_append(session_id: str, req: ChatMessagesAppend):
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+    mem = chat_memory_settings()
+    if bool(mem.get("rolling_summary_enabled", True)):
+        background_tasks.add_task(
+            refresh_rolling_summary_for_session,
+            session_id,
+            req.user_id,
+            mem,
+            None,
+        )
     return [ChatMessagePublic.model_validate(m) for m in rows]
 
 

@@ -7,6 +7,7 @@ from typing import Any
 
 from agent.answer_prompts import general_system_prompt, general_user_content
 from agent.conversation_context import build_llm_messages
+from agent.conversation.rolling_summary import augment_system_with_summary
 from agent.tools.config.registry import enabled_tool_ids, load_tools_config
 from agent.tools.runtime.loop import run_tool_loop, stream_answer_after_tools
 from agent.tools.runtime.prompt import AGENT_TOOLS_REALTIME_POLICY
@@ -42,6 +43,7 @@ def stream_general_answer(
     system = general_system_prompt(slots=prompt_slots)
     if enabled:
         system = f"{system}\n\n{AGENT_TOOLS_REALTIME_POLICY}"
+    system = augment_system_with_summary(system, state.get("rolling_summary"))
     user_content = general_user_content(state["question"])
     messages = build_llm_messages(system=system, history=history, user_content=user_content)
 

@@ -1,16 +1,17 @@
 import { useLocation } from "react-router-dom";
 import { NavLink } from "react-router-dom";
-import { MessageSquare, Database, Wrench, HardDrive, Brain, FileText, Cpu, Activity, BookOpen, ThumbsUp } from "lucide-react";
+import { MessageSquare, Database, Wrench, HardDrive, Brain, FileText, Cpu, Activity, BookOpen, ThumbsUp, BarChart3 } from "lucide-react";
 
 const NAV_ITEMS = [
   { id: "chat", label: "Jnao Chat", href: "/", icon: MessageSquare, primary: true },
   { id: "ingest", label: "数据入库", href: "/admin/ingest", icon: Database },
   { id: "processing", label: "工具", href: "/admin/processing", icon: Wrench },
   { id: "vector_store", label: "向量库", href: "/admin/vector-store", icon: HardDrive },
-  { id: "memory", label: "对话记忆", href: "/admin/memory", icon: Brain },
+  { id: "memory", label: "对话设置", href: "/admin/memory", icon: Brain },
   { id: "prompts", label: "提示词", href: "/admin/prompts", icon: FileText },
   { id: "models", label: "模型", href: "/admin/models", icon: Cpu },
   { id: "feedback", label: "用户反馈", href: "/admin/feedback", icon: ThumbsUp },
+  { id: "eval_reports", label: "评测报告", href: "/admin/eval-reports", icon: BarChart3 },
   { id: "trace", label: "链路 Trace", href: "/admin/trace", icon: Activity },
   { id: "tutorial", label: "教程", href: "/admin/tutorial", icon: BookOpen },
 ];

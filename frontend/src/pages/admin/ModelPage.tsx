@@ -31,6 +31,7 @@ const EMPTY_FORM = {
   api_base: "",
   api_path: "",
   default_model: "",
+  routing_model: "",
   api_key: "",
 };
 
@@ -63,6 +64,7 @@ export default function ModelPage() {
       api_base: p.api_base ?? "",
       api_path: p.api_path ?? "",
       default_model: p.default_model ?? "",
+      routing_model: p.routing_model ?? "",
       api_key: "",
     });
     setTestResult(null);
@@ -80,6 +82,7 @@ export default function ModelPage() {
     api_base: form.api_base.trim(),
     api_path: form.api_path.trim() || undefined,
     default_model: form.default_model.trim(),
+    routing_model: form.routing_model.trim() || undefined,
     ...(form.api_key.trim() ? { api_key: form.api_key.trim() } : {}),
   });
 
@@ -253,7 +256,7 @@ export default function ModelPage() {
               />
             </label>
             <label className="block">
-              <span className="text-sm text-text">模型名称</span>
+              <span className="text-sm text-text">回答模型（生成答案）</span>
               <input
                 type="text"
                 value={form.default_model}
@@ -261,6 +264,19 @@ export default function ModelPage() {
                 placeholder="如 deepseek-chat、qwen-plus"
                 className="mt-1 flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
               />
+            </label>
+            <label className="block">
+              <span className="text-sm text-text">预处理模型（condense / KB 判断，可选）</span>
+              <input
+                type="text"
+                value={form.routing_model}
+                onChange={(e) => set("routing_model", e.target.value)}
+                placeholder="建议填更小模型，如 gpt-4o-mini；留空同回答模型"
+                className="mt-1 flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
+              />
+              <p className="text-xs text-text-muted mt-1">
+                延迟档位请在「对话设置 → 性能路由」配置。
+              </p>
             </label>
             <label className="block">
               <span className="text-sm text-text">

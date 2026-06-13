@@ -36,7 +36,8 @@ def init_chat_session_db() -> None:
                     user_id TEXT NOT NULL,
                     title TEXT NOT NULL DEFAULT '新对话',
                     created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
+                    updated_at TEXT NOT NULL,
+                    rolling_summary TEXT NOT NULL DEFAULT ''
                 );
                 CREATE TABLE IF NOT EXISTS chat_messages (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,6 +55,13 @@ def init_chat_session_db() -> None:
                 """
             )
             conn.commit()
+            try:
+                conn.execute(
+                    "ALTER TABLE chat_sessions ADD COLUMN rolling_summary TEXT NOT NULL DEFAULT ''"
+                )
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass
         finally:
             conn.close()
 
@@ -125,10 +133,14 @@ def get_session(session_id: str, user_id: str) -> dict[str, Any] | None:
         conn = _connect()
         try:
             row = conn.execute(
-                "SELECT id, user_id, title, created_at, updated_at FROM chat_sessions WHERE id = ? AND user_id = ?",
+                "SELECT id, user_id, title, created_at, updated_at, rolling_summary FROM chat_sessions WHERE id = ? AND user_id = ?",
                 (sid, uid),
             ).fetchone()
-            return dict(row) if row else None
+            if not row:
+                return None
+            data = dict(row)
+            data.setdefault("rolling_summary", "")
+            return data
         finally:
             conn.close()
 
@@ -253,3 +265,35 @@ def append_messages(
             conn.close()
 
     return list_messages(session_id, user_id)
+
+
+def get_rolling_summary(session_id: str, user_id: str) -> str:
+    sess = get_session(session_id, user_id)
+    if not sess:
+        return ""
+    return str(sess.get("rolling_summary") or "").strip()
+
+
+def set_rolling_summary(session_id: str, user_id: str, summary: str) -> bool:
+    sess = get_session(session_id, user_id)
+    if not sess:
+        return False
+    text = (summary or "").strip()[:4000]
+    now = _utc_now()
+    sid = session_id.strip()
+    uid = user_id.strip()
+    with _lock:
+        conn = _connect()
+        try:
+            conn.execute(
+                "UPDATE chat_sessions SET rolling_summary = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                (text, now, sid, uid),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    return True
+
+
+def clear_rolling_summary(session_id: str, user_id: str) -> bool:
+    return set_rolling_summary(session_id, user_id, "")
