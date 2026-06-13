@@ -6,8 +6,9 @@ from collections.abc import Callable, Iterator
 from typing import Any
 
 from agent.answer_prompts import general_system_prompt, general_user_content
-from agent.conversation_context import build_llm_messages
 from agent.conversation.rolling_summary import augment_system_with_summary
+from agent.conversation_context import build_llm_messages
+from agent.llm_routing import model_for_task, routing_llm_runtime
 from agent.tools.config.registry import enabled_tool_ids, load_tools_config
 from agent.tools.runtime.loop import run_tool_loop, stream_answer_after_tools
 from agent.tools.runtime.prompt import AGENT_TOOLS_REALTIME_POLICY
@@ -52,6 +53,17 @@ def stream_general_answer(
     def emit(payload: dict[str, Any]) -> None:
         pending.append(payload)
 
+    routing_rt = routing_llm_runtime(
+        {
+            "llm_api_key": state.get("llm_api_key"),
+            "llm_api_base": state.get("llm_api_base"),
+            "chat_model": model,
+            "routing_model": state.get("routing_model"),
+            "llm_extra_headers": state.get("llm_extra_headers"),
+        }
+    )
+    condense_model = model_for_task(routing_rt, task="routing")
+
     text, trace = run_tool_loop(
         client,
         model=model,
@@ -60,6 +72,8 @@ def stream_general_answer(
         max_tokens=max_tokens,
         enabled_ids=enabled,
         emit=emit,
+        user_question=str(state.get("question") or ""),
+        condense_model=condense_model,
     )
     tool_trace_out.extend(trace)
     for ev in pending:

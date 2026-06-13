@@ -50,3 +50,23 @@ def test_prune_keeps_relevant_turns(mock_embed):
 @patch("agent.conversation.history_prune.embed_texts", side_effect=_mock_embed)
 def test_prune_empty_history(mock_embed):
     assert prune_history_by_embedding("q", [], min_similarity=0.3, max_turns=3) == []
+
+
+@patch("agent.conversation.history_prune.embed_texts")
+def test_prune_accepts_numpy_embedding_matrix(mock_embed):
+    import numpy as np
+
+    history = [
+        {"role": "user", "content": "超脑阅读要求是什么？"},
+        {"role": "assistant", "content": "要求包括…"},
+    ]
+    mock_embed.return_value = np.array(
+        [
+            [0.0, 0.92, 0.08],
+            [0.0, 1.0, 0.0],
+        ],
+        dtype=np.float32,
+    )
+    out = prune_history_by_embedding("继续说说阅读训练", history, min_similarity=0.5, max_turns=4)
+    assert len(out) == 2
+    assert out[0]["role"] == "user"

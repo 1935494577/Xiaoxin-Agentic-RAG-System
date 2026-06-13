@@ -11,6 +11,7 @@ export default defineConfig({
     port: 8502,
     proxy: {
       "/chat": { target: apiTarget, changeOrigin: true },
+      "/users": { target: apiTarget, changeOrigin: true },
       "/config": { target: apiTarget, changeOrigin: true },
       "/feedback": { target: apiTarget, changeOrigin: true },
       "/health": { target: apiTarget, changeOrigin: true },

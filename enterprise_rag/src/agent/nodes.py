@@ -241,6 +241,9 @@ def citer_node(state: AgentState) -> dict[str, Any]:
         answer_mode="kb",
         answer=ans,
         contexts_meta=meta,
+        kb_min_score=float(mem.get("kb_min_score", 0.55)),
+        kb_min_rerank_score=float(mem.get("kb_min_rerank_score", 0.12)),
+        topic_shift=bool(state.get("topic_shift")),
     ):
         sources = []
         source_refs = []

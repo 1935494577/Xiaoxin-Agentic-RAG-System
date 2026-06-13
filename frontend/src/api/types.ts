@@ -55,6 +55,25 @@ export type ChatSession = {
   updated_at?: string;
 };
 
+export type UserProfile = {
+  user_id: string;
+  display_name: string;
+  avatar_url: string;
+  department: string;
+  ai_display_name: string;
+  ai_avatar_url: string;
+  updated_at?: string;
+};
+
+export type UserProfileUpdate = {
+  user_id: string;
+  display_name?: string;
+  avatar_url?: string;
+  department?: string;
+  ai_display_name?: string;
+  ai_avatar_url?: string;
+};
+
 export type ChatMessage = {
   id?: string;
   role: "user" | "assistant";

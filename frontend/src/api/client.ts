@@ -15,6 +15,8 @@ import type {
   StreamPayload,
   TraceStatus,
   UiConfig,
+  UserProfile,
+  UserProfileUpdate,
   VectorStore,
 } from "./types";
 
@@ -39,6 +41,19 @@ export function fetchNav(): Promise<NavConfig> {
     admin_url: window.location.origin,
     items: [],
   }));
+}
+
+// ===== User profile =====
+export function fetchUserProfile(userId: string): Promise<UserProfile> {
+  return request<UserProfile>(`/users/profile?user_id=${encodeURIComponent(userId)}`);
+}
+
+export function saveUserProfile(body: UserProfileUpdate): Promise<UserProfile> {
+  return request<UserProfile>("/users/profile", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 }
 
 // ===== Sessions =====

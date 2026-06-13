@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Literal
 
 from config import settings
 from openai import OpenAI
 
 from agent.llm_routing import model_for_task
+
+# hybrid_score 为候选集内 min-max 归一化，不能单独作为「命中」依据
+# rerank_score 为 cross-encoder 绝对相关分（越高越相关）
+ABSOLUTE_RERANK_MIN = 0.12
+RERANK_CONFIDENT_MIN = 0.45
+
+RetrievalConfidence = Literal["confident", "gray", "weak"]
 
 # 文本命中任一条即视为「知识库未答上」（触发混合模式通用兜底）
 KB_MISS_MARKERS = (
@@ -49,27 +56,6 @@ KB_MISS_PATTERNS = (
     re.compile(r"还是(不(认识|了解|知道)|没听说)"),
 )
 
-# 开放性 / 方法论类问题：主题可能与 KB 相近，但不应仅因检索命中就走 KB
-_OPEN_QUESTION_PATTERNS = (
-    re.compile(r"需要考虑(什么|哪些|哪些方面)"),
-    re.compile(r"需要关注(什么|哪些|哪些方面)"),
-    re.compile(r"如何(设计|做|规划|实现|开发)"),
-    re.compile(r"怎么(设计|做|规划|实现|开发)"),
-    re.compile(r"怎样(设计|做|规划|实现|开发)"),
-    re.compile(r"有哪些(原则|要点|因素|方面|建议|思路|方法|维度)"),
-    re.compile(r"应该注意(什么|哪些)"),
-    re.compile(r"(最好|合适|合理)的(做法|方式|方案|思路)"),
-    re.compile(r"(从哪些|从什么)(角度|维度|方面)"),
-)
-
-
-def is_open_general_question(question: str) -> bool:
-    """True when the user asks for general principles/methodology, not a specific KB fact."""
-    q = (question or "").strip()
-    if len(q) < 8:
-        return False
-    return any(p.search(q) for p in _OPEN_QUESTION_PATTERNS)
-
 
 def has_usable_context(contexts: list[str], contexts_meta: list[dict[str, Any]]) -> bool:
     if contexts and any(str(c).strip() for c in contexts):
@@ -103,6 +89,45 @@ def best_rerank_score(contexts_meta: list[dict[str, Any]]) -> float | None:
     return max(scores) if scores else None
 
 
+def effective_rerank_floor(kb_min_rerank_score: float, *, topic_shift: bool = False) -> float:
+    floor = max(float(kb_min_rerank_score), ABSOLUTE_RERANK_MIN)
+    if topic_shift:
+        floor = max(floor, ABSOLUTE_RERANK_MIN)
+    return floor
+
+
+def assess_retrieval_confidence(
+    contexts_meta: list[dict[str, Any]],
+    *,
+    kb_min_score: float,
+    kb_min_rerank_score: float,
+    topic_shift: bool = False,
+) -> RetrievalConfidence:
+    """
+    统一检索置信度评估（路由与引用门控共用）。
+
+    - confident: rerank 明确达标，可 KB + 可挂引用
+    - gray: 有候选但分数不确定；须 LLM 复核才能 KB，默认不挂引用
+    - weak: 无 rerank 或分数过低；走通用，不挂引用
+    """
+    rerank = best_rerank_score(contexts_meta)
+    rerank_floor = effective_rerank_floor(kb_min_rerank_score, topic_shift=topic_shift)
+
+    if rerank is not None:
+        if rerank < rerank_floor:
+            return "weak"
+        if rerank >= RERANK_CONFIDENT_MIN:
+            if topic_shift and rerank < 0.38:
+                return "gray"
+            return "confident"
+        return "gray"
+
+    # 无 rerank：hybrid 仅为候选集内相对排序，不能视为命中
+    if best_hybrid_score(contexts_meta) >= float(kb_min_score):
+        return "gray"
+    return "weak"
+
+
 def answer_indicates_kb_miss(text: str) -> bool:
     """Heuristic: assistant admitted KB materials cannot answer the question."""
     t = (text or "").strip()
@@ -124,15 +149,26 @@ def should_attach_citations(
     answer_mode: str,
     answer: str,
     contexts_meta: list[dict[str, Any]],
+    kb_min_score: float = 0.55,
+    kb_min_rerank_score: float = 0.0,
+    topic_shift: bool = False,
 ) -> bool:
-    """Only show citations when KB mode produced a substantive hit (not a miss apology)."""
+    """Only cite when KB mode, answer is substantive, and retrieval is confidently relevant."""
     if answer_mode != "kb":
         return False
     if not contexts_meta:
         return False
     if answer_indicates_kb_miss(answer):
         return False
-    return True
+    return (
+        assess_retrieval_confidence(
+            contexts_meta,
+            kb_min_score=kb_min_score,
+            kb_min_rerank_score=kb_min_rerank_score,
+            topic_shift=topic_shift,
+        )
+        == "confident"
+    )
 
 
 def _llm_kb_relevant(
@@ -163,7 +199,7 @@ def _llm_kb_relevant(
                     "YES=参考资料中有能直接、完整回答用户所问这一点的明确事实或规定；"
                     "用户问的是「某文档/制度/产品中的具体内容」且资料里确有答案。\n"
                     "NO=以下任一情况：资料仅主题/关键词相近；资料描述的是某一具体内部产品/方案，"
-                    "而用户问的是开放性的行业方法、设计原则、通用框架；"
+                    "而用户问的是开放性的行业方法、设计原则、通用框架或常识/闲聊；"
                     "或主要靠模型常识/公开知识才能答好。"
                 ),
             },
@@ -193,42 +229,28 @@ def should_use_knowledge_base(
 ) -> bool:
     """
     True → 走知识库回答；False → 走通用知识。
-    流程：检索有结果 → 看重排分/混合分 → 不确定时用 LLM 判断 YES/NO。
-    topic_shift=True 时提高 KB 门槛，避免换题后弱相关片段误走 KB。
+    仅依据检索置信度 + 可选 LLM 复核，不解析用户问法句式。
     """
     if not has_usable_context(contexts, contexts_meta):
         return False
 
-    if is_open_general_question(question):
-        if kb_llm_judge and llm_runtime:
-            return _llm_kb_relevant(question, contexts, llm_runtime)
+    confidence = assess_retrieval_confidence(
+        contexts_meta,
+        kb_min_score=kb_min_score,
+        kb_min_rerank_score=kb_min_rerank_score,
+        topic_shift=topic_shift,
+    )
+    if confidence == "weak":
         return False
-
-    score_floor = float(kb_min_score)
-    rerank_floor = float(kb_min_rerank_score)
-    if topic_shift:
-        score_floor = min(0.95, score_floor + 0.08)
-        rerank_floor = max(rerank_floor, 0.12)
-
-    rerank = best_rerank_score(contexts_meta)
-    if rerank is not None:
-        if rerank < rerank_floor:
-            return False
-        if kb_llm_judge and llm_runtime and (rerank < 0.45 or kb_llm_judge_always):
-            return _llm_kb_relevant(question, contexts, llm_runtime)
-        if topic_shift and rerank < 0.38:
-            return False
-        return True
-
-    hybrid_best = best_hybrid_score(contexts_meta)
-    if hybrid_best >= score_floor:
+    if confidence == "confident":
         if kb_llm_judge_always and kb_llm_judge and llm_runtime:
             return _llm_kb_relevant(question, contexts, llm_runtime)
         return True
 
+    # gray: 无 rerank 或 rerank 处于中间带 — 必须 LLM 确认，否则 fail-closed 走通用
     if kb_llm_judge and llm_runtime:
         return _llm_kb_relevant(question, contexts, llm_runtime)
-    return hybrid_best >= score_floor
+    return False
 
 
 def resolve_answer_mode(

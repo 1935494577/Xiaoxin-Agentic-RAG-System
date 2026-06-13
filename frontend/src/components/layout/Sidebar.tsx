@@ -1,6 +1,7 @@
 import { useLocation } from "react-router-dom";
 import { NavLink } from "react-router-dom";
 import { MessageSquare, Database, Wrench, HardDrive, Brain, FileText, Cpu, Activity, BookOpen, ThumbsUp, BarChart3 } from "lucide-react";
+import { SidebarUserProfile } from "./SidebarUserProfile";
 
 const NAV_ITEMS = [
   { id: "chat", label: "Jnao Chat", href: "/", icon: MessageSquare, primary: true },
@@ -53,7 +54,8 @@ export function Sidebar() {
           );
         })}
       </nav>
-      <div className="px-4 py-3 border-t border-border text-xs text-text-muted">
+      <SidebarUserProfile />
+      <div className="px-4 py-2 border-t border-border text-[10px] text-text-muted/80 text-center">
         Enterprise RAG
       </div>
     </aside>

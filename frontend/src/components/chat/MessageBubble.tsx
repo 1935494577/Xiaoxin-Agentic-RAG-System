@@ -6,6 +6,7 @@ import { useAuth } from "../../hooks/useAuth";
 import type { ChatMessage, ToolTraceItem } from "../../api/types";
 import { ToolTracePanel } from "./ToolTracePanel";
 import { MarkdownContent, StreamingPlainText } from "./MarkdownContent";
+import { ChatAvatar } from "./ChatAvatar";
 
 type Props = {
   message: ChatMessage;
@@ -14,6 +15,10 @@ type Props = {
   liveTools?: ToolTraceItem[];
   sessionId?: string;
   questionForFeedback?: string;
+  userAvatar?: string;
+  userDisplayName?: string;
+  aiAvatar?: string;
+  aiDisplayName?: string;
 };
 
 function stripFootnotes(text: string): string {
@@ -60,6 +65,10 @@ function MessageBubble({
   liveTools,
   sessionId,
   questionForFeedback,
+  userAvatar = "",
+  userDisplayName = "",
+  aiAvatar = "",
+  aiDisplayName = "",
 }: Props) {
   const { userId } = useAuth();
   const [feedback, setFeedback] = useState<number | null>(null);
@@ -130,14 +139,18 @@ function MessageBubble({
   return (
     <div
       className={
-        "flex gap-3.5 py-4 w-full max-w-[768px] mx-auto " +
+        "flex gap-4 py-4 w-full max-w-[768px] mx-auto " +
         (isUser ? "justify-end" : "justify-start")
       }
     >
       {!isUser && (
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand to-brand-dark flex items-center justify-center text-[11px] text-white font-semibold shrink-0 mt-1">
-          AI
-        </div>
+        <ChatAvatar
+          avatarUrl={aiAvatar}
+          label={aiDisplayName}
+          fallback="AI"
+          variant="ai"
+          size="chat"
+        />
       )}
 
       <div className={isUser ? "max-w-[85%] sm:max-w-[72%]" : "flex-1 min-w-0"}>
@@ -273,9 +286,13 @@ function MessageBubble({
       </div>
 
       {isUser && (
-        <div className="w-8 h-8 rounded-full bg-surface-muted flex items-center justify-center text-[11px] text-text-muted font-semibold shrink-0 mt-1">
-          你
-        </div>
+        <ChatAvatar
+          avatarUrl={userAvatar}
+          label={userDisplayName}
+          fallback="你"
+          variant="user"
+          size="chat"
+        />
       )}
     </div>
   );
@@ -289,6 +306,10 @@ export default memo(MessageBubble, (prev, next) => {
     prev.hideModeTag === next.hideModeTag &&
     prev.sessionId === next.sessionId &&
     prev.questionForFeedback === next.questionForFeedback &&
-    prev.liveTools === next.liveTools
+    prev.liveTools === next.liveTools &&
+    prev.userAvatar === next.userAvatar &&
+    prev.userDisplayName === next.userDisplayName &&
+    prev.aiAvatar === next.aiAvatar &&
+    prev.aiDisplayName === next.aiDisplayName
   );
 });

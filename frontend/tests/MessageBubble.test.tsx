@@ -32,18 +32,34 @@ describe("MessageBubble", () => {
     mockSubmitFeedback.mockResolvedValue(undefined);
   });
 
-  it("renders user message with '你' avatar", () => {
+  it("renders user message with avatar initial", () => {
     const msg = { role: "user" as const, content: "用户的问题" };
-    render(React.createElement(MessageBubble, { message: msg }));
-    expect(screen.getByText("你")).toBeTruthy();
+    render(
+      React.createElement(MessageBubble, {
+        message: msg,
+        userDisplayName: "小明",
+      })
+    );
+    expect(screen.getByText("小")).toBeTruthy();
     expect(screen.getByText("用户的问题")).toBeTruthy();
   });
 
-  it("renders assistant message with 'AI' avatar", () => {
+  it("renders assistant message with AI avatar", () => {
     const msg = { role: "assistant" as const, content: "助手的回答" };
     render(React.createElement(MessageBubble, { message: msg }));
     expect(screen.getByText("AI")).toBeTruthy();
     expect(screen.getByText("助手的回答")).toBeTruthy();
+  });
+
+  it("renders assistant with custom name initial", () => {
+    const msg = { role: "assistant" as const, content: "回答" };
+    render(
+      React.createElement(MessageBubble, {
+        message: msg,
+        aiDisplayName: "小脑",
+      })
+    );
+    expect(screen.getByText("小")).toBeTruthy();
   });
 
   it("renders markdown in assistant message", () => {

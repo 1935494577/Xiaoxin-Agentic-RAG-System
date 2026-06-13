@@ -9,7 +9,10 @@ from indexing.embeddings import embed_texts
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
-    if not a or not b or len(a) != len(b):
+    if a is None or b is None:
+        return 0.0
+    la, lb = len(a), len(b)
+    if la == 0 or lb == 0 or la != lb:
         return 0.0
     dot = sum(x * y for x, y in zip(a, b))
     na = math.sqrt(sum(x * x for x in a))
@@ -57,7 +60,8 @@ def prune_history_by_embedding(
 
     user_texts = [str(u.get("content") or "") for u, _ in pairs]
     vectors = embed_texts([standalone_query.strip()] + user_texts)
-    if not vectors or len(vectors) < 2:
+    n = len(vectors) if vectors is not None else 0
+    if n < 2:
         return history[-max(1, max_turns) * 2 :]
 
     q_vec = vectors[0]

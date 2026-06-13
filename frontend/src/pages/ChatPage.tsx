@@ -9,9 +9,10 @@ import {
   loadMessages,
   streamChat,
 } from "../api/client";
-import { HYBRID_MODE_KEY, USER_DEPT_KEY } from "../lib/constants";
+import { HYBRID_MODE_KEY } from "../lib/constants";
 import { useAuth } from "../hooks/useAuth";
 import { useLocalStorage } from "../hooks/useLocalStorage";
+import { useUserProfile } from "../context/UserProfileContext";
 import type { ChatMessage, ChatSession, StreamEvent, ToolTraceItem } from "../api/types";
 import { applyToolStreamEvent } from "../lib/streamTools";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
@@ -28,6 +29,7 @@ const SUGGESTIONS_FALLBACK = [
 
 export default function ChatPage() {
   const { userId } = useAuth();
+  const { department, displayName, avatarUrl, aiDisplayName, aiAvatarUrl } = useUserProfile();
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
@@ -48,7 +50,6 @@ export default function ChatPage() {
 
   const [input, setInput] = useState("");
   const [newTopicPending, setNewTopicPending] = useState(false);
-  const [department, setDepartment] = useLocalStorage<string>(USER_DEPT_KEY, "技术部");
   const [hybridExpert, setHybridExpert] = useLocalStorage<boolean>(HYBRID_MODE_KEY, false);
 
   const { data: uiConfig } = useQuery({
@@ -258,8 +259,6 @@ export default function ChatPage() {
               onSelect={setSessionId}
               onNew={handleNew}
               onDelete={handleDelete}
-              department={department}
-              onDepartment={setDepartment}
             />
             <button
               type="button"
@@ -328,6 +327,10 @@ export default function ChatPage() {
                   hideModeTag
                   sessionId={sessionId ?? undefined}
                   questionForFeedback={questionForFeedback}
+                  userAvatar={avatarUrl}
+                  userDisplayName={displayName}
+                  aiAvatar={aiAvatarUrl}
+                  aiDisplayName={aiDisplayName}
                   liveTools={
                     streaming && i === displayMessages.length - 1 && m.role === "assistant"
                       ? streamTools

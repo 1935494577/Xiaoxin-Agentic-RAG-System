@@ -72,6 +72,10 @@ class Settings(BaseSettings):
     tavily_api_key: str = ""
     web_search_max_results: int = 5
     web_search_timeout_seconds: int = 12
+    # 工具完整结果 → trace/SSE；注入回答模型前：结构化压缩 + routing 提炼（非粗暴截断）
+    tool_output_condense_enabled: bool = True
+    tool_llm_condense_min_chars: int = 800
+    tool_llm_context_max_chars: int = 2400
     chunk_dedup_index_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "chunk_dedup_index.json"
     ui_branding_dir: Path = _REPO_ROOT / "enterprise_rag" / "data" / "branding"
 
@@ -98,7 +102,7 @@ class Settings(BaseSettings):
     stream_standard_retrieve_top_k: int = 10
     stream_retrieve_top_k: int = 6
     stream_rerank_top_k: int = 3
-    stream_skip_rerank: bool = True
+    stream_skip_rerank: bool = False
     stream_pre_rerank_k: int = 6
     stream_context_max_chars: int = 700
     # 为 false 时跳过 LLM 查询改写，显著降低首 token 延迟
