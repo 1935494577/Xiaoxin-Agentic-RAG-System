@@ -1,4 +1,4 @@
-"""Tests for open-question KB routing."""
+"""Tests for retrieval-confidence KB routing."""
 
 import sys
 from pathlib import Path
@@ -9,17 +9,15 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from agent.kb_judge import (  # noqa: E402
-    is_open_general_question,
+    assess_retrieval_confidence,
     resolve_answer_mode,
     should_use_knowledge_base,
 )
 
 
-def test_is_open_general_question():
-    assert is_open_general_question("设计出家长和孩子舒服的交互产品需要考虑什么")
-    assert is_open_general_question("UX 设计有哪些原则？")
-    assert not is_open_general_question("扫描速记有哪些注意事项")
-    assert not is_open_general_question("1-3年级超脑阅读要求是什么")
+def test_high_hybrid_without_rerank_is_gray():
+    meta = [{"hybrid_score": 0.92, "text": "思者解说"}]
+    assert assess_retrieval_confidence(meta, kb_min_score=0.55, kb_min_rerank_score=0.0) == "gray"
 
 
 def test_open_question_high_hybrid_goes_general_without_llm():
@@ -55,11 +53,11 @@ def test_open_question_llm_no_routes_general(mock_openai):
     assert mode == "general"
 
 
-def test_specific_question_high_hybrid_still_kb():
+def test_specific_question_confident_rerank_still_kb():
     mode = resolve_answer_mode(
         "扫描速记有哪些注意事项",
         ["扫描速记晋级要求…"],
-        [{"hybrid_score": 0.9, "text": "扫描速记"}],
+        [{"hybrid_score": 0.9, "rerank_score": 0.85, "text": "扫描速记"}],
         kb_min_score=0.55,
         kb_min_rerank_score=0.0,
         kb_llm_judge=False,

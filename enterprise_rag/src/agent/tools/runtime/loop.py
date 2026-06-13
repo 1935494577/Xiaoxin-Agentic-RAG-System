@@ -8,6 +8,10 @@ from typing import Any
 
 from agent.tools.config.registry import TOOL_DEFINITIONS, enabled_tool_ids, execute_tool
 from agent.tools.protocol.openai import openai_tools_payload
+from agent.tools.runtime.tool_context import (
+    _last_user_question,
+    prepare_tool_content_for_llm,
+)
 
 EmitFn = Callable[[dict[str, Any]], None]
 
@@ -33,6 +37,9 @@ def run_tool_loop(
     max_tokens: int | None = None,
     enabled_ids: set[str] | None = None,
     emit: EmitFn | None = None,
+    user_question: str = "",
+    condense_model: str | None = None,
+    condense_enabled: bool | None = None,
 ) -> tuple[str, list[dict[str, Any]]]:
     """执行 tool_calls 直至模型返回文本。返回 (final_text, tool_trace)。"""
     enabled = enabled_ids if enabled_ids is not None else enabled_tool_ids()
@@ -42,6 +49,7 @@ def run_tool_loop(
     tools = openai_tools_payload(enabled, TOOL_DEFINITIONS)
     trace: list[dict[str, Any]] = []
     working = messages
+    question = user_question.strip() or _last_user_question(working)
 
     for _ in range(MAX_TOOL_TURNS):
         kw: dict[str, Any] = {
@@ -95,7 +103,14 @@ def run_tool_loop(
                     {
                         "role": "tool",
                         "tool_call_id": tc.id,
-                        "content": output,
+                        "content": prepare_tool_content_for_llm(
+                            output,
+                            tool_name=name,
+                            question=question,
+                            client=client,
+                            condense_model=condense_model,
+                            condense_enabled=condense_enabled,
+                        ),
                     }
                 )
             continue

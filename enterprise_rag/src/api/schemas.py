@@ -349,7 +349,7 @@ class UiConfigPublic(BaseModel):
     max_history_turns: int = 6
     max_history_chars: int = 6000
     kb_min_score: float = 0.55
-    kb_min_rerank_score: float = 0.0
+    kb_min_rerank_score: float = 0.12
     kb_llm_judge: bool = True
     general_fallback_enabled: bool = False
     kb_post_stream_fallback: bool = False
@@ -487,6 +487,25 @@ class ChatMessagesAppend(BaseModel):
     user_id: str = Field(..., min_length=1, max_length=128)
     messages: list[ChatMessagePublic] = Field(..., min_length=1, max_length=50)
     auto_title_from: str | None = Field(default=None, max_length=80)
+
+
+class UserProfilePublic(BaseModel):
+    user_id: str
+    display_name: str = ""
+    avatar_url: str = ""
+    department: str = "技术部"
+    ai_display_name: str = ""
+    ai_avatar_url: str = ""
+    updated_at: str | None = None
+
+
+class UserProfileUpdate(BaseModel):
+    user_id: str = Field(..., min_length=1, max_length=128)
+    display_name: str | None = Field(default=None, max_length=64)
+    avatar_url: str | None = Field(default=None, max_length=600_000)
+    department: str | None = Field(default=None, max_length=64)
+    ai_display_name: str | None = Field(default=None, max_length=64)
+    ai_avatar_url: str | None = Field(default=None, max_length=600_000)
 
 
 class VectorStorePublic(BaseModel):

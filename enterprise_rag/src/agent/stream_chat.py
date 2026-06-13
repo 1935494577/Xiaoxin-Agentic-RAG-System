@@ -293,6 +293,9 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
         answer_mode=answer_mode,
         answer=answer,
         contexts_meta=meta,
+        kb_min_score=float(mem.get("kb_min_score", 0.55)),
+        kb_min_rerank_score=float(mem.get("kb_min_rerank_score", 0.12)),
+        topic_shift=bool(state.get("topic_shift")),
     )
     cite_kw = {
         "max_sources": int(mem.get("citation_max_sources") or 2),

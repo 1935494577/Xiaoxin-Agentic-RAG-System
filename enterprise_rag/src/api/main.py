@@ -87,6 +87,8 @@ from api.schemas import (
     VectorStoreBackendOption,
     UiConfigPublic,
     UiConfigUpdate,
+    UserProfilePublic,
+    UserProfileUpdate,
 )
 from api.vector_store_registry import (
     activate_store,
@@ -123,7 +125,11 @@ from indexing.ingest_dedup import (
     finalize_document_registry,
     prepare_source_reingest,
 )
-from indexing.milvus_indexer import delete_by_source as milvus_delete_by_source
+from api.user_profile_store import (
+    get_profile as get_user_profile,
+    init_user_profile_db,
+    upsert_profile as upsert_user_profile,
+)
 from indexing.milvus_indexer import init_vector_db, insert_child_vectors
 
 
@@ -134,6 +140,7 @@ async def lifespan(app: FastAPI):
     configure_tracing()
     init_vector_db()
     init_chat_session_db()
+    init_user_profile_db()
     init_feedback_db()
     ensure_default_registry()
     reload_all_indexes()
@@ -751,6 +758,29 @@ def chat_session_delete(
     if not delete_session(session_id, user_id):
         raise HTTPException(status_code=404, detail="会话不存在")
     return {"ok": True}
+
+
+@app.get("/users/profile", response_model=UserProfilePublic)
+def users_profile_get(user_id: str = Query(..., min_length=1, max_length=128)):
+    """读取用户资料（头像、昵称、部门）；不存在则创建默认记录。"""
+    return UserProfilePublic.model_validate(get_user_profile(user_id))
+
+
+@app.put("/users/profile", response_model=UserProfilePublic)
+def users_profile_update(req: UserProfileUpdate):
+    """更新用户资料。"""
+    try:
+        row = upsert_user_profile(
+            req.user_id,
+            display_name=req.display_name,
+            avatar_url=req.avatar_url,
+            department=req.department,
+            ai_display_name=req.ai_display_name,
+            ai_avatar_url=req.ai_avatar_url,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return UserProfilePublic.model_validate(row)
 
 
 @app.post("/ingest/preview", response_model=PreviewResponse)

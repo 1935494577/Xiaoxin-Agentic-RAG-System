@@ -23,7 +23,7 @@ DEFAULT_UI_CONFIG: dict[str, Any] = {
     "max_history_turns": 6,
     "max_history_chars": 6000,
     "kb_min_score": 0.55,
-    "kb_min_rerank_score": 0.0,
+    "kb_min_rerank_score": 0.12,
     "kb_llm_judge": True,
     "citation_max_sources": 2,
     "citation_min_relative_score": 0.75,

@@ -19,8 +19,6 @@ describe("SessionList", () => {
     onSelect: vi.fn(),
     onNew: vi.fn(),
     onDelete: vi.fn(),
-    department: "技术部",
-    onDepartment: vi.fn(),
   };
 
   beforeEach(() => {
@@ -92,22 +90,6 @@ describe("SessionList", () => {
     const inactiveBtn = screen.getByText("对话二").closest("button");
     expect(activeBtn?.className).toContain("bg-brand-light");
     expect(inactiveBtn?.className).not.toContain("bg-brand-light");
-  });
-
-  it("renders department selector with all options", () => {
-    render(React.createElement(SessionList, baseProps));
-    const select = screen.getByRole("combobox") as HTMLSelectElement;
-    expect(select.value).toBe("技术部");
-    expect(screen.getByText("运营部")).toBeTruthy();
-    expect(screen.getByText("媒体部")).toBeTruthy();
-    expect(screen.getByText("剪辑部")).toBeTruthy();
-  });
-
-  it("calls onDepartment when department changed", () => {
-    const onDepartment = vi.fn();
-    render(React.createElement(SessionList, { ...baseProps, onDepartment }));
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "运营部" } });
-    expect(onDepartment).toHaveBeenCalledWith("运营部");
   });
 
   it("renders empty session list gracefully", () => {

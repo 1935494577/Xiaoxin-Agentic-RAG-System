@@ -13,10 +13,10 @@
 | **嵌入与重排** | FlagEmbedding / sentence-transformers、CrossEncoder 重排；可选 **ModelScope** 下载到 `enterprise_rag/data/models` |
 | **检索** | 查询改写、向量 + BM25 混合检索、重排；**L3 检索去重**（文本相似度 + MMR）；**检索结果缓存**（Redis 或进程内 TTL 回退） |
 | **入库去重** | **L1** 文档 content_hash 别名跳过重复嵌入；**L2** 父块 simhash 近似去重（`indexing/ingest_dedup`） |
-| **对话智能体** | LangGraph / SSE；混合专家；**多轮上下文** L1–L4（见 `docs/conversation-context.md`）；**routing_model** 预处理与生成模型分离；**chat_routing_tier**（fast/balanced/quality）；开放性问题 KB 过滤；`reset_context` / 滚动摘要 |
+| **对话智能体** | LangGraph / SSE；混合专家；**检索置信度路由**（rerank confident/gray/weak，引用仅 confident）；**多轮上下文** L1–L4（见 `docs/conversation-context.md`）；**routing_model** 预处理与生成模型分离；**chat_routing_tier**（fast/balanced/quality）；`reset_context` / 滚动摘要 |
 | **HTTP API** | FastAPI：健康检查、入库、检索调试、流式对话、会话记忆、可插拔提示词、模型/向量库/UI 配置（`api`） |
 | **安全** | 可选 `RAG_API_SECRET`、CORS、可信 Host、安全头；注入检测；**部门 + 可见范围 ACL**（内部仅本部门、公开全员可见，向量/BM25 检索层过滤） |
-| **前端** | **Jnao Chat** React SPA（8502）：流式对话（纯文本逐字 + 完成后 Markdown 排版）、**新话题** / 混合专家工具栏、工具调用展示；**React 管理后台**（`/admin`）：入库、工具、提示词、模型、**对话设置**（Tab：基础/检索/KB/多轮/性能路由）、**评测报告**、Trace 等 |
+| **前端** | **Jnao Chat** React SPA（8502）：流式对话、**用户资料**（昵称/头像）、**新话题** / 混合专家工具栏、**工具调用 Trace** 面板；**React 管理后台**（`/admin`）：入库、工具、提示词、模型、**对话设置**（Tab：基础/检索/KB/多轮/性能路由）、**评测报告**、Trace 等 |
 | **用户反馈（Sprint A–D）** | 👍👎 反馈 → Triage → 采纳 → **Actuator**（golden / 重入库工单 / 配置补丁）→ **golden 评测**（RAGAS 或 naive 回退，对比上一份 Δ）；`config_revisions` 可回滚；Admin **评测报告**页 |
 | **评测与追踪** | 可选 LangSmith / 本地 JSONL trace；`scripts/eval_ingest_dedup.py` 检索去重 A/B 评估 |
 | **容器与脚本** | `Dockerfile`、`docker-compose.yml`、`Makefile`；Windows `.ps1` 与 **macOS/Linux `.sh`** 一键启停；**生产启动** `run-api-prod.ps1` / `run-api-prod.sh` |
@@ -76,11 +76,12 @@ xiaoxin_RAG/
 │       ├── config.py
 │       └── runtime_device.py
 ├── frontend/
-│   ├── admin/                  # Streamlit 管理后台（pages/）
-│   └── chat/                   # Jnao Chat React SPA（Vite，端口 8502）
+│   └── src/                    # Jnao Chat React SPA（Vite，端口 8502）+ `/admin`
 ├── scripts/                     # 安装、启停 API/前端/Chat、评测与预下载
 └── tests/                       # pytest 用例
 ```
+
+> **天赋引导式测评**已拆至独立目录 `D:\天赋测试设计方案`（Assessment API 8020 + H5 8520），与本仓库无代码依赖。
 
 ---
 
@@ -127,7 +128,7 @@ cp .env.example .env
 source .venv/bin/activate
 ```
 
-编辑 **`.env`**：至少配置 OpenAI 兼容的 **`OPENAI_API_BASE`**、**`OPENAI_API_KEY`**、**`OPENAI_CHAT_MODEL`**；按需设置 **`USE_MODELSCOPE_DOWNLOAD`**、`EMBEDDING_MODEL`、`RERANKER_MODEL`、`HF_HUB_CACHE`、`TORCH_DEVICE` 等。修改后需重启 API。
+编辑 **`.env`**：至少配置 OpenAI 兼容的 **`OPENAI_API_BASE`**、**`OPENAI_API_KEY`**、**`OPENAI_CHAT_MODEL`**；按需设置 **`USE_MODELSCOPE_DOWNLOAD`**、`EMBEDDING_MODEL`、`RERANKER_MODEL`、`HF_HUB_CACHE`、`TORCH_DEVICE` 等。**流式对话建议 `STREAM_SKIP_RERANK=false`**（重排分用于 KB/通用路由与引用门控）。修改后需重启 API。
 
 ### 2. 启动 HTTP API
 
@@ -203,9 +204,9 @@ cd <仓库根目录>
 
 | 服务 | 端口 | 说明 |
 |------|------|------|
-| API | 8010 | FastAPI / Uvicorn |
+| API | 8010 | FastAPI / Uvicorn（Enterprise RAG） |
 | 管理后台 | 8501 | Streamlit |
-| Jnao Chat | 8502 | React SPA（`frontend/chat`） |
+| Jnao Chat | 8502 | React SPA（`frontend/`） |
 
 ### 8. Docker（可选）
 
@@ -231,6 +232,7 @@ cd <仓库根目录>
 | POST | `/chat/stream` | SSE 流式对话（Chat SPA 使用） |
 | POST | `/retrieve` | 混合检索 + 重排调试（不调用 LLM 生成） |
 | GET/POST | `/chat/sessions`… | 会话与历史消息 |
+| GET/PUT | `/users/profile` | 用户资料（昵称、头像、部门权限，SQLite） |
 | POST | `/feedback` | 用户反馈（SQLite + 异步 trace 补全） |
 | GET | `/admin/feedback` | Admin 反馈列表（状态/严重度筛选） |
 | POST | `/admin/feedback/triage` | 批量规则/LLM 研判 |
