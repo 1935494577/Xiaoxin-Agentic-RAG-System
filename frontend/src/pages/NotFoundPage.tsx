@@ -7,7 +7,7 @@ export default function NotFoundPage() {
         <h1 className="text-6xl font-bold text-text-muted mb-4">404</h1>
         <p className="text-text-muted mb-6">页面未找到</p>
         <Link
-          to="/"
+          to="/chat"
           className="inline-flex items-center px-4 py-2 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand-dark transition-colors"
         >
           返回对话

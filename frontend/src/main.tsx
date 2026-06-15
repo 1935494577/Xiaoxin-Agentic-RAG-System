@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import { AppShell } from "./components/layout/AppShell";
 import AdminLayout from "./components/layout/AdminLayout";
+import AuthEntryLayout from "./components/layout/AuthEntryLayout";
 import "./index.css";
 
 function lazyPage(importer: () => Promise<{ default: React.ComponentType }>) {
@@ -13,10 +14,16 @@ function lazyPage(importer: () => Promise<{ default: React.ComponentType }>) {
 
 const router = createBrowserRouter([
   {
+    element: <AuthEntryLayout />,
+    children: [
+      { index: true, lazy: lazyPage(() => import("./pages/WelcomePage")) },
+      { path: "login", lazy: lazyPage(() => import("./pages/LoginPage")) },
+    ],
+  },
+  {
     element: <AppShell />,
     children: [
-      // ---- Public: Chat ----
-      { index: true, lazy: lazyPage(() => import("./pages/ChatPage")) },
+      { path: "chat", lazy: lazyPage(() => import("./pages/ChatPage")) },
 
       // ---- Admin: Management pages ----
       {

@@ -8,6 +8,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from agent.persona_presets import DEFAULT_PERSONA_ID, list_persona_presets_public
 from agent.prompt_engine import CATEGORY_LABELS, default_prompt_slots
 from config import settings
 
@@ -67,7 +68,12 @@ def load_prompt_config() -> dict[str, Any]:
     path = _config_path()
     if not path.is_file():
         slots = _migrate_persona_from_ui(default_prompt_slots())
-        return {"version": 1, "slots": slots, "categories": CATEGORY_LABELS}
+        return {
+            "version": 1,
+            "active_persona_id": DEFAULT_PERSONA_ID,
+            "slots": slots,
+            "categories": CATEGORY_LABELS,
+        }
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
@@ -76,10 +82,24 @@ def load_prompt_config() -> dict[str, Any]:
         if not isinstance(raw_slots, list):
             raw_slots = []
         slots = _merge_builtin_defaults(raw_slots)
-        return {"version": int(data.get("version") or 1), "slots": slots, "categories": CATEGORY_LABELS}
+        return {
+            "version": int(data.get("version") or 1),
+            "active_persona_id": str(data.get("active_persona_id") or DEFAULT_PERSONA_ID),
+            "slots": slots,
+            "categories": CATEGORY_LABELS,
+        }
     except Exception:
         slots = _migrate_persona_from_ui(default_prompt_slots())
-        return {"version": 1, "slots": slots, "categories": CATEGORY_LABELS}
+        return {
+            "version": 1,
+            "active_persona_id": DEFAULT_PERSONA_ID,
+            "slots": slots,
+            "categories": CATEGORY_LABELS,
+        }
+
+
+def load_active_persona_id() -> str:
+    return str(load_prompt_config().get("active_persona_id") or DEFAULT_PERSONA_ID)
 
 
 def load_prompt_slots() -> list[dict[str, Any]]:
@@ -132,11 +152,14 @@ def save_prompt_config(
     *,
     slots: list[dict[str, Any]] | None = None,
     reset_defaults: bool = False,
+    active_persona_id: str | None = None,
 ) -> dict[str, Any]:
     if reset_defaults:
         merged = default_prompt_slots()
+        persona_id = DEFAULT_PERSONA_ID
     elif slots is None:
         merged = load_prompt_slots()
+        persona_id = load_active_persona_id()
     else:
         existing = {s["id"]: s for s in load_prompt_slots()}
         merged: list[dict[str, Any]] = []
@@ -164,8 +187,12 @@ def save_prompt_config(
             if sid not in seen:
                 merged.append(dict(existing.get(sid, base)))
         merged = _merge_builtin_defaults(merged)
+        persona_id = load_active_persona_id()
 
-    payload = {"version": 1, "slots": merged}
+    if active_persona_id is not None:
+        persona_id = str(active_persona_id).strip() or DEFAULT_PERSONA_ID
+
+    payload = {"version": 1, "active_persona_id": persona_id, "slots": merged}
     path = _config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -174,12 +201,19 @@ def save_prompt_config(
 
 def public_prompt_config(*, mode: str = "kb", fast: bool = False) -> dict[str, Any]:
     from agent.prompt_engine import compose_system_prompt, preview_layers
+    from agent.reasoning_modes import list_reasoning_modes_public
+    from api.ui_config_store import load_ui_config
 
     cfg = load_prompt_config()
     slots = cfg["slots"]
     m: str = mode if mode in ("kb", "general") else "kb"
+    ui = load_ui_config()
+    reasoning_mode = str(ui.get("agent_reasoning_mode") or "react")
     return {
         **cfg,
+        "persona_presets": list_persona_presets_public(include_content=True),
+        "agent_reasoning_mode": reasoning_mode,
+        "reasoning_modes": list_reasoning_modes_public(),
         "preview": {
             "mode": m,
             "fast": fast,

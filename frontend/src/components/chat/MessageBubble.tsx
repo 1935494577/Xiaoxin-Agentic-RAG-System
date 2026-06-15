@@ -3,8 +3,7 @@ import LottiePlayer from "./LottiePlayer";
 import thinkingAnim from "../../assets/dots-typing.json";
 import { submitFeedback } from "../../api/client";
 import { useAuth } from "../../hooks/useAuth";
-import type { ChatMessage, ToolTraceItem } from "../../api/types";
-import { ToolTracePanel } from "./ToolTracePanel";
+import type { ChatMessage } from "../../api/types";
 import { MarkdownContent, StreamingPlainText } from "./MarkdownContent";
 import { ChatAvatar } from "./ChatAvatar";
 
@@ -12,7 +11,6 @@ type Props = {
   message: ChatMessage;
   streaming?: boolean;
   hideModeTag?: boolean;
-  liveTools?: ToolTraceItem[];
   sessionId?: string;
   questionForFeedback?: string;
   userAvatar?: string;
@@ -62,7 +60,6 @@ function MessageBubble({
   message,
   streaming,
   hideModeTag = false,
-  liveTools,
   sessionId,
   questionForFeedback,
   userAvatar = "",
@@ -80,7 +77,6 @@ function MessageBubble({
   const body = isUser ? message.content : stripFootnotes(message.content);
   const sources = sourceLabels(message);
   const answerMode = !isUser && !hideModeTag ? resolveAnswerMode(message) : null;
-  const toolTrace = liveTools?.length ? liveTools : message.meta?.tool_trace;
 
   const sendFeedback = useCallback(
     async (rating: number, correction?: string) => {
@@ -168,10 +164,6 @@ function MessageBubble({
             </span>
           </div>
         )}
-
-        {!isUser && toolTrace?.length ? (
-          <ToolTracePanel items={toolTrace} live={Boolean(streaming && liveTools?.length)} />
-        ) : null}
 
         {isUser ? (
           <div className="text-[15px] leading-relaxed bg-brand text-white rounded-2xl rounded-br-md px-4 py-2.5 whitespace-pre-wrap break-words shadow-sm">
@@ -306,7 +298,6 @@ export default memo(MessageBubble, (prev, next) => {
     prev.hideModeTag === next.hideModeTag &&
     prev.sessionId === next.sessionId &&
     prev.questionForFeedback === next.questionForFeedback &&
-    prev.liveTools === next.liveTools &&
     prev.userAvatar === next.userAvatar &&
     prev.userDisplayName === next.userDisplayName &&
     prev.aiAvatar === next.aiAvatar &&

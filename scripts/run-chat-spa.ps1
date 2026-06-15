@@ -19,7 +19,7 @@ if (-not (Test-Path (Join-Path $SpaDir "node_modules"))) {
     Pop-Location
 }
 
-Write-Host "Frontend SPA: http://127.0.0.1:$SpaPort  (管理后台: /admin/)"
+Write-Host "Frontend SPA: http://127.0.0.1:$SpaPort  (Admin: /admin/)"
 Push-Location $SpaDir
 try {
     & $npm run dev

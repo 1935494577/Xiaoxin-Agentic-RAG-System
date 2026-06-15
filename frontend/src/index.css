@@ -109,3 +109,109 @@ body {
 .chat-scroll-area {
   scroll-behavior: smooth;
 }
+
+/* Welcome page: logo reveals center → sides as complete glyphs */
+@keyframes welcome-center-spread {
+  0% {
+    clip-path: inset(0 50% 0 50%);
+    opacity: 0;
+    filter: blur(6px) brightness(1.8);
+  }
+  45% {
+    opacity: 1;
+    filter: blur(0) brightness(1.35);
+    text-shadow:
+      0 0 20px rgba(130, 210, 255, 0.55),
+      0 0 40px rgba(255, 170, 90, 0.25);
+  }
+  100% {
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+    filter: blur(0) brightness(1);
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.12);
+  }
+}
+
+@keyframes welcome-title-glow {
+  0%,
+  100% {
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.12);
+  }
+  50% {
+    text-shadow:
+      0 0 14px rgba(130, 210, 255, 0.28),
+      0 0 28px rgba(255, 170, 90, 0.12);
+  }
+}
+
+.welcome-stream-title {
+  animation:
+    welcome-center-spread 2s cubic-bezier(0.22, 1, 0.36, 1) forwards,
+    welcome-title-glow 3.2s ease-in-out 2s infinite;
+  will-change: clip-path, opacity, filter;
+}
+
+/* Auth flow: welcome ↔ login */
+.auth-welcome-exit .auth-welcome-title {
+  animation: auth-welcome-title-exit 0.7s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.auth-welcome-exit .auth-welcome-cta {
+  opacity: 0 !important;
+  transform: translate(-50%, 12px) !important;
+  transition: opacity 0.45s ease, transform 0.45s ease !important;
+}
+
+@keyframes auth-welcome-title-exit {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% - 28px)) scale(0.94);
+    filter: blur(10px);
+  }
+}
+
+.auth-login-shell .auth-login-brand,
+.auth-login-shell .auth-login-mascots,
+.auth-login-shell .auth-login-footer {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 0.75s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.75s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.auth-login-shell .auth-login-form {
+  opacity: 0;
+  transform: translateX(28px);
+  transition:
+    opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.12s,
+    transform 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.12s;
+}
+
+.auth-login-entered .auth-login-brand {
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 0.08s;
+}
+
+.auth-login-entered .auth-login-mascots {
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 0.22s;
+}
+
+.auth-login-entered .auth-login-footer {
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 0.32s;
+}
+
+.auth-login-entered .auth-login-form {
+  opacity: 1;
+  transform: translateX(0);
+}

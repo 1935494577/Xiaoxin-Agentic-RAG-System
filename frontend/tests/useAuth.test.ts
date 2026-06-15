@@ -3,7 +3,7 @@
  * Verifies userId generation, persistence, and stability — critical for session survival.
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { renderHook } from "@testing-library/react";
+import { renderHook, act } from "@testing-library/react";
 
 const localStorageMock = (() => {
   let store: Record<string, string> = {};
@@ -63,5 +63,35 @@ describe("useAuth", () => {
   it("uses key rag_chat_user_id", () => {
     renderHook(() => useAuth());
     expect(localStorageMock.getItem).toHaveBeenCalledWith("rag_chat_user_id");
+  });
+
+  it("login stores session and marks authenticated", () => {
+    const { result } = renderHook(() => useAuth());
+
+    expect(result.current.isAuthenticated).toBe(false);
+
+    act(() => {
+      result.current.login("alice", "运营部", true);
+    });
+
+    expect(result.current.isAuthenticated).toBe(true);
+    expect(result.current.username).toBe("alice");
+    expect(result.current.department).toBe("运营部");
+    expect(localStorageMock.setItem).toHaveBeenCalledWith(
+      "jnao_auth_session",
+      expect.stringContaining('"username":"alice"')
+    );
+  });
+
+  it("logout clears session", () => {
+    const { result } = renderHook(() => useAuth());
+
+    act(() => {
+      result.current.login("bob", "技术部");
+      result.current.logout();
+    });
+
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(localStorageMock.removeItem).toHaveBeenCalledWith("jnao_auth_session");
   });
 });

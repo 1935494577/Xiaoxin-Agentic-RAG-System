@@ -41,7 +41,6 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState("");
-  const [streamTools, setStreamTools] = useState<ToolTraceItem[]>([]);
   const [error, setError] = useState("");
 
   const abortRef = useRef<AbortController | null>(null);
@@ -149,7 +148,6 @@ export default function ChatPage() {
     // 2. Start streaming
     setStreaming(true);
     setStreamText("");
-    setStreamTools([]);
 
     const ctrl = new AbortController();
     abortRef.current = ctrl;
@@ -179,7 +177,6 @@ export default function ChatPage() {
           setStreamText(assistant);
         } else if (evt.type === "tool_call" || evt.type === "tool_result") {
           toolTrace = applyToolStreamEvent(toolTrace, evt);
-          setStreamTools(toolTrace);
         } else if (evt.type === "error") {
           setError(evt.message);
         } else if (evt.type === "done") {
@@ -200,7 +197,6 @@ export default function ChatPage() {
     // 3. Stream finished
     setStreaming(false);
     setStreamText("");
-    setStreamTools([]);
     abortRef.current = null;
     setNewTopicPending(false);
 
@@ -331,11 +327,6 @@ export default function ChatPage() {
                   userDisplayName={displayName}
                   aiAvatar={aiAvatarUrl}
                   aiDisplayName={aiDisplayName}
-                  liveTools={
-                    streaming && i === displayMessages.length - 1 && m.role === "assistant"
-                      ? streamTools
-                      : undefined
-                  }
                   streaming={streaming && i === displayMessages.length - 1 && m.role === "assistant"}
                 />
               );

@@ -193,6 +193,19 @@ export type VectorStore = {
 };
 
 // ===== Prompts =====
+export type PersonaPreset = {
+  id: string;
+  label: string;
+  description: string;
+  content?: string;
+};
+
+export type ReasoningModeOption = {
+  id: string;
+  label: string;
+  description: string;
+};
+
 export type PromptSlot = {
   id: string;
   label: string;
@@ -202,12 +215,19 @@ export type PromptSlot = {
   enabled: boolean;
   order: number;
   template: string;
+  content?: string;
+  description?: string;
 };
 
 export type PromptData = {
-  mode: string;
+  mode?: string;
+  active_persona_id?: string;
+  persona_presets?: PersonaPreset[];
+  agent_reasoning_mode?: string;
+  reasoning_modes?: ReasoningModeOption[];
   slots: PromptSlot[];
-  composite: string;
+  composite?: string;
+  preview?: { composed?: string; layers?: Array<{ label: string; category: string; content: string }> };
 };
 
 // ===== Trace =====

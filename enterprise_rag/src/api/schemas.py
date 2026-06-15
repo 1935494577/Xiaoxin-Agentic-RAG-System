@@ -435,8 +435,25 @@ class PromptPreviewPublic(BaseModel):
     composed: str = ""
 
 
+class PersonaPresetPublic(BaseModel):
+    id: str
+    label: str
+    description: str = ""
+    content: str = ""
+
+
+class ReasoningModePublic(BaseModel):
+    id: str
+    label: str
+    description: str = ""
+
+
 class PromptConfigPublic(BaseModel):
     version: int = 1
+    active_persona_id: str = "knowledge_consultant"
+    persona_presets: list[PersonaPresetPublic] = Field(default_factory=list)
+    agent_reasoning_mode: str = "react"
+    reasoning_modes: list[ReasoningModePublic] = Field(default_factory=list)
     slots: list[PromptSlotPublic] = Field(default_factory=list)
     categories: dict[str, str] = Field(default_factory=dict)
     preview: PromptPreviewPublic | None = None
@@ -456,6 +473,8 @@ class PromptSlotUpdate(BaseModel):
 
 class PromptConfigUpdate(BaseModel):
     slots: list[PromptSlotUpdate] | None = None
+    active_persona_id: str | None = Field(default=None, max_length=64)
+    agent_reasoning_mode: str | None = Field(default=None, pattern="^(direct|react|plan_execute)$")
     reset_defaults: bool = False
 
 

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchPrompts, savePrompts } from "../../api/client";
-import type { PromptSlot } from "../../api/types";
+import type { PersonaPreset, PromptSlot } from "../../api/types";
 import { PageHeader } from "../../components/admin/PageHeader";
 import { Button } from "../../components/ui/Button";
 import { Switch } from "../../components/ui/Switch";
@@ -32,6 +32,8 @@ export default function PromptPage() {
 
   const [slots, setSlots] = useState<EditSlot[]>([]);
   const [initKey, setInitKey] = useState("");
+  const [activePersonaId, setActivePersonaId] = useState("knowledge_consultant");
+  const [reasoningMode, setReasoningMode] = useState("react");
 
   const dataKey = `${mode}-${fast}`;
   if (initKey !== dataKey && data?.slots) {
@@ -42,12 +44,30 @@ export default function PromptPage() {
         description: (s as Record<string, unknown>).description as string ?? "",
       }))
     );
+    setActivePersonaId(data.active_persona_id || "knowledge_consultant");
+    setReasoningMode(data.agent_reasoning_mode || "react");
     setInitKey(dataKey);
   }
 
   const saveMut = useMutation({
-    mutationFn: (body: { slots?: Record<string, unknown>[]; reset_defaults?: boolean }) =>
-      savePrompts(mode, body.slots ?? [], fast && mode === "kb"),
+    mutationFn: () => {
+      const payload = slots.map((s) => ({
+        id: s.id,
+        label: s.label,
+        description: s.description ?? "",
+        category: s.category,
+        scope: s.scope,
+        enabled: s.enabled,
+        order: s.order,
+        content: s.content ?? s.template ?? "",
+        builtin: s.builtin,
+        ...(s.variant ? { variant: s.variant } : {}),
+      }));
+      return savePrompts(mode, payload, fast && mode === "kb", {
+        active_persona_id: activePersonaId,
+        agent_reasoning_mode: reasoningMode,
+      });
+    },
     onSuccess: () => {
       toast.success("已保存");
       queryClient.invalidateQueries({ queryKey: ["prompts"] });
@@ -57,18 +77,7 @@ export default function PromptPage() {
 
   const resetMut = useMutation({
     mutationFn: () =>
-      savePrompts(mode, [], fast && mode === "kb").then(() => {
-        // Send reset_defaults in the raw request since savePrompts doesn't support it
-        const params = new URLSearchParams({ mode });
-        if (fast && mode === "kb") params.set("fast", "true");
-        return fetch(`/config/prompts?${params}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reset_defaults: true }),
-        }).then((r) => {
-          if (!r.ok) throw new Error("重置失败");
-        });
-      }),
+      savePrompts(mode, [], fast && mode === "kb", { reset_defaults: true }),
     onSuccess: () => {
       toast.success("已恢复默认");
       queryClient.invalidateQueries({ queryKey: ["prompts"] });
@@ -82,20 +91,15 @@ export default function PromptPage() {
     );
   };
 
+  const applyPersonaPreset = (preset: PersonaPreset) => {
+    setActivePersonaId(preset.id);
+    if (preset.content) {
+      updateSlot("persona", { content: preset.content });
+    }
+  };
+
   const handleSave = () => {
-    const payload = slots.map((s) => ({
-      id: s.id,
-      label: s.label,
-      description: s.description ?? "",
-      category: s.category,
-      scope: s.scope,
-      enabled: s.enabled,
-      order: s.order,
-      content: s.content ?? s.template ?? "",
-      builtin: s.builtin,
-      ...(s.variant ? { variant: s.variant } : {}),
-    }));
-    saveMut.mutate({ slots: payload });
+    saveMut.mutate();
   };
 
   // Group slots by category
@@ -136,6 +140,65 @@ export default function PromptPage() {
       />
 
       <div className="space-y-6">
+        {/* Persona presets */}
+        <div>
+          <h3 className="text-sm font-semibold text-text mb-2">角色人设（选项卡）</h3>
+          <p className="text-xs text-text-muted mb-3">
+            选择劲脑业务角色后，会自动填入下方「角色人设」层；你仍可微调文案再保存。
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {(data?.persona_presets || []).map((preset) => {
+              const active = activePersonaId === preset.id;
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  title={preset.description}
+                  onClick={() => applyPersonaPreset(preset)}
+                  className={
+                    "px-3 py-1.5 rounded-full text-sm border transition-colors cursor-pointer " +
+                    (active
+                      ? "bg-brand text-white border-brand"
+                      : "bg-white text-text border-border hover:border-brand/50")
+                  }
+                >
+                  {preset.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Reasoning mode */}
+        <div>
+          <h3 className="text-sm font-semibold text-text mb-2">思考模式（Agent）</h3>
+          <p className="text-xs text-text-muted mb-3">
+            仅影响<strong className="font-medium text-text">通用回答 + 对话工具</strong>路径。
+            ReAct 为当前默认实现；Plan-and-Execute 会先规划再逐步调用工具。
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {(data?.reasoning_modes || []).map((opt) => {
+              const active = reasoningMode === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setReasoningMode(opt.id)}
+                  className={
+                    "text-left p-3 rounded-xl border transition-colors cursor-pointer " +
+                    (active
+                      ? "border-brand bg-brand-light/40 ring-1 ring-brand/30"
+                      : "border-border bg-white hover:border-brand/40")
+                  }
+                >
+                  <div className="text-sm font-medium text-text">{opt.label}</div>
+                  <div className="text-xs text-text-muted mt-1 leading-relaxed">{opt.description}</div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Toolbar */}
         <div className="flex items-center gap-4 flex-wrap">
           <label className="flex items-center gap-2">
@@ -322,7 +385,7 @@ export default function PromptPage() {
               </div>
             )}
             <Textarea
-              value={data.composite ?? ""}
+              value={data.preview?.composed ?? data.composite ?? ""}
               readOnly
               rows={10}
               className="text-xs font-mono"

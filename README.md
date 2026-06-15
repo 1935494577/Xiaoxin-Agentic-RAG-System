@@ -13,13 +13,13 @@
 | **嵌入与重排** | FlagEmbedding / sentence-transformers、CrossEncoder 重排；可选 **ModelScope** 下载到 `enterprise_rag/data/models` |
 | **检索** | 查询改写、向量 + BM25 混合检索、重排；**L3 检索去重**（文本相似度 + MMR）；**检索结果缓存**（Redis 或进程内 TTL 回退） |
 | **入库去重** | **L1** 文档 content_hash 别名跳过重复嵌入；**L2** 父块 simhash 近似去重（`indexing/ingest_dedup`） |
-| **对话智能体** | LangGraph / SSE；混合专家；**检索置信度路由**（rerank confident/gray/weak，引用仅 confident）；**多轮上下文** L1–L4（见 `docs/conversation-context.md`）；**routing_model** 预处理与生成模型分离；**chat_routing_tier**（fast/balanced/quality）；`reset_context` / 滚动摘要 |
+| **对话智能体** | LangGraph / SSE；混合专家；**检索置信度路由**（rerank confident/gray/weak，引用仅 confident）；**多轮上下文** L1–L4（见 `docs/conversation-context.md`）；**routing_model** 预处理与生成模型分离；**chat_routing_tier**（fast/balanced/quality）；`reset_context` / 滚动摘要；**角色人设预设**（劲脑脑科教育 7 套，管理端选项卡切换）；**思考模式**（直接回答 / ReAct / Plan-and-Execute，可配置是否走工具循环） |
 | **HTTP API** | FastAPI：健康检查、入库、检索调试、流式对话、会话记忆、可插拔提示词、模型/向量库/UI 配置（`api`） |
 | **安全** | 可选 `RAG_API_SECRET`、CORS、可信 Host、安全头；注入检测；**部门 + 可见范围 ACL**（内部仅本部门、公开全员可见，向量/BM25 检索层过滤） |
-| **前端** | **Jnao Chat** React SPA（8502）：流式对话、**用户资料**（昵称/头像）、**新话题** / 混合专家工具栏、**工具调用 Trace** 面板；**React 管理后台**（`/admin`）：入库、工具、提示词、模型、**对话设置**（Tab：基础/检索/KB/多轮/性能路由）、**评测报告**、Trace 等 |
+| **前端** | **Jnao Chat** React SPA（8502）：流式对话、**登录/欢迎页**、**用户资料**（昵称/头像）、**新话题** / 混合专家工具栏；**React 管理后台**（`/admin`）：入库、工具、**提示词**（人设选项卡 + 思考模式）、模型、**对话设置**（Tab：基础/检索/KB/多轮/性能路由）、**评测报告**、Trace 等 |
 | **用户反馈（Sprint A–D）** | 👍👎 反馈 → Triage → 采纳 → **Actuator**（golden / 重入库工单 / 配置补丁）→ **golden 评测**（RAGAS 或 naive 回退，对比上一份 Δ）；`config_revisions` 可回滚；Admin **评测报告**页 |
 | **评测与追踪** | 可选 LangSmith / 本地 JSONL trace；`scripts/eval_ingest_dedup.py` 检索去重 A/B 评估 |
-| **容器与脚本** | `Dockerfile`、`docker-compose.yml`、`Makefile`；Windows `.ps1` 与 **macOS/Linux `.sh`** 一键启停；**生产启动** `run-api-prod.ps1` / `run-api-prod.sh` |
+| **容器与脚本** | `Dockerfile`、`docker-compose.yml`、`Makefile`；Windows `.ps1` 与 **macOS/Linux `.sh`** 一键启停；**生产启动** `run-api-prod.ps1` / `run-api-prod.sh`；**缓存清理** `clean-cache.ps1` |
 
 ---
 

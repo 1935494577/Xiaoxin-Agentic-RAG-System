@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from agent.prompt_engine import compose_system_prompt
+from agent.reasoning_modes import reasoning_policy
 
 GENERAL_WORLD_USER_HINT = (
     "（本题请用通用常识作答：若属于公众熟知的人物/概念/事实，请直接介绍，"
@@ -40,18 +41,24 @@ def kb_system_prompt(
     fast: bool = False,
     slots: list[dict[str, Any]] | None = None,
     persona: str | None = None,
+    reasoning_mode: str | None = None,
 ) -> str:
     resolved = _resolve_slots(slots, persona)
-    return compose_system_prompt(resolved, mode="kb", fast=fast)
+    text = compose_system_prompt(resolved, mode="kb", fast=fast)
+    policy = reasoning_policy(reasoning_mode)
+    return f"{text}\n\n{policy}" if policy else text
 
 
 def general_system_prompt(
     *,
     slots: list[dict[str, Any]] | None = None,
     persona: str | None = None,
+    reasoning_mode: str | None = None,
 ) -> str:
     resolved = _resolve_slots(slots, persona)
-    return compose_system_prompt(resolved, mode="general", fast=False)
+    text = compose_system_prompt(resolved, mode="general", fast=False)
+    policy = reasoning_policy(reasoning_mode)
+    return f"{text}\n\n{policy}" if policy else text
 
 
 def kb_user_content(contexts: list[str], question: str) -> str:
