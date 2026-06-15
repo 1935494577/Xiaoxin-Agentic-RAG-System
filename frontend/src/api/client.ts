@@ -371,13 +371,23 @@ export function fetchPrompts(mode: string, fast?: boolean): Promise<PromptData> 
   return request<PromptData>(`/config/prompts?${params}`);
 }
 
-export function savePrompts(mode: string, slots: Record<string, unknown>[], fast?: boolean): Promise<void> {
+export function savePrompts(
+  mode: string,
+  slots: Record<string, unknown>[],
+  fast?: boolean,
+  extras?: { active_persona_id?: string; agent_reasoning_mode?: string; reset_defaults?: boolean }
+): Promise<PromptData> {
   const params = new URLSearchParams({ mode });
   if (fast) params.set("fast", "true");
-  return request(`/config/prompts?${params}`, {
+  return request<PromptData>(`/config/prompts?${params}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ slots }),
+    body: JSON.stringify({
+      slots,
+      active_persona_id: extras?.active_persona_id,
+      agent_reasoning_mode: extras?.agent_reasoning_mode,
+      reset_defaults: extras?.reset_defaults,
+    }),
   });
 }
 

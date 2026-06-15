@@ -114,6 +114,27 @@ describe("MessageBubble", () => {
     expect(screen.getByText("回答内容")).toBeTruthy();
   });
 
+  it("does not render tool trace details in chat", () => {
+    const msg = {
+      role: "assistant" as const,
+      content: "今日财报速览",
+      meta: {
+        tool_trace: [
+          {
+            tool: "web_search",
+            arguments: { query: "今日财报" },
+            output: "搜索「今日财报」结果：\n1. Tesla\n   链接: https://example.com/tesla",
+            ok: true,
+          },
+        ],
+      },
+    };
+    render(React.createElement(MessageBubble, { message: msg }));
+    expect(screen.queryByText(/web_search/)).toBeNull();
+    expect(screen.queryByText(/搜索「今日财报」/)).toBeNull();
+    expect(screen.getByText("今日财报速览")).toBeTruthy();
+  });
+
   it("shows feedback buttons for assistant messages (not streaming)", () => {
     const msg = { role: "assistant" as const, content: "回答" };
     render(React.createElement(MessageBubble, { message: msg }));

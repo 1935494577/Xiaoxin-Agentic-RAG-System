@@ -37,5 +37,6 @@ def chat_memory_settings() -> dict[str, Any]:
         "chat_routing_tier": str(ui.get("chat_routing_tier") or "balanced"),
         "condense_llm_enabled": bool(ui.get("condense_llm_enabled", True)),
         "kb_llm_judge_always": bool(ui.get("kb_llm_judge_always", False)),
+        "agent_reasoning_mode": str(ui.get("agent_reasoning_mode") or "react"),
         "prompt_slots": load_prompt_slots(),
     }

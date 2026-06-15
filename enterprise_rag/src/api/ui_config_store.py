@@ -46,6 +46,7 @@ DEFAULT_UI_CONFIG: dict[str, Any] = {
     "chat_routing_tier": "balanced",
     "condense_llm_enabled": True,
     "kb_llm_judge_always": False,
+    "agent_reasoning_mode": "react",
     "ingest_tag_presets": ["制度", "培训", "产品", "FAQ", "内部"],
 }
 

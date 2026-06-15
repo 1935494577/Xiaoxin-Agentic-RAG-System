@@ -295,7 +295,17 @@ def update_prompt_config(
     raw_slots = None
     if body.slots is not None:
         raw_slots = [s.model_dump(exclude_unset=True) for s in body.slots]
-    save_prompt_config(slots=raw_slots, reset_defaults=bool(body.reset_defaults))
+    if body.agent_reasoning_mode is not None:
+        from api.ui_config_store import load_ui_config, save_ui_config
+
+        ui = load_ui_config()
+        ui["agent_reasoning_mode"] = body.agent_reasoning_mode
+        save_ui_config(ui)
+    save_prompt_config(
+        slots=raw_slots,
+        reset_defaults=bool(body.reset_defaults),
+        active_persona_id=body.active_persona_id,
+    )
     return PromptConfigPublic.model_validate(public_prompt_config(mode=mode, fast=fast))
 
 

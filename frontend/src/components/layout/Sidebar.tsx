@@ -4,7 +4,7 @@ import { MessageSquare, Database, Wrench, HardDrive, Brain, FileText, Cpu, Activ
 import { SidebarUserProfile } from "./SidebarUserProfile";
 
 const NAV_ITEMS = [
-  { id: "chat", label: "Jnao Chat", href: "/", icon: MessageSquare, primary: true },
+  { id: "chat", label: "Jnao Chat", href: "/chat", icon: MessageSquare, primary: true },
   { id: "ingest", label: "数据入库", href: "/admin/ingest", icon: Database },
   { id: "processing", label: "工具", href: "/admin/processing", icon: Wrench },
   { id: "vector_store", label: "向量库", href: "/admin/vector-store", icon: HardDrive },
@@ -21,7 +21,7 @@ export function Sidebar() {
   const location = useLocation();
 
   const isActive = (href: string) => {
-    if (href === "/") return location.pathname === "/";
+    if (href === "/chat") return location.pathname === "/chat";
     return location.pathname.startsWith(href);
   };
 

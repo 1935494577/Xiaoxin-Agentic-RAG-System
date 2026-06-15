@@ -52,7 +52,7 @@ def client(tmp_path, monkeypatch):
 def test_compose_kb_includes_persona_and_task():
     slots = default_slots()
     text = compose(slots, mode="kb", fast=False)
-    assert "猫娘" in text
+    assert "劲脑" in text or "知识" in text
     assert "参考资料" in text or "知识库助手" in text
 
 
@@ -61,8 +61,15 @@ def test_compose_fast_uses_fast_task():
     std = compose(slots, mode="kb", fast=False)
     fast = compose(slots, mode="kb", fast=True)
     assert "可结合对话历史" in std
-    assert "简洁作答" in fast
+    assert "信息充分" in fast
     assert "可结合对话历史" not in fast
+
+
+def test_compose_output_style_encourages_detail():
+    slots = default_slots()
+    text = compose(slots, mode="general", fast=False)
+    assert "足够信息量" in text
+    assert "分点展开" in text
 
 
 def test_disable_persona_layer():

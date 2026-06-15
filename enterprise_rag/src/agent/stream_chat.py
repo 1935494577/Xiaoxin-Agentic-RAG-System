@@ -40,6 +40,7 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
     rolling_summary = str(state.get("rolling_summary") or "")
     mem = state.get("memory_config") or {}
     fast = bool(state.get("stream_fast_mode"))
+    reasoning_mode = str(mem.get("agent_reasoning_mode") or "react")
     prompt_slots = mem.get("prompt_slots")
     hybrid = bool(state.get("hybrid_expert_mode"))
     llm_runtime = routing_llm_runtime(
@@ -149,7 +150,7 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
             tool_trace: list[dict[str, Any]] = []
             if answer_mode == "kb":
                 system = augment_system_with_summary(
-                    kb_system_prompt(fast=fast, slots=prompt_slots),
+                    kb_system_prompt(fast=fast, slots=prompt_slots, reasoning_mode=reasoning_mode),
                     rolling_summary,
                 )
                 user_content = kb_user_content(ctx, state["question"])
@@ -185,7 +186,7 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
                     raise
             else:
                 system = augment_system_with_summary(
-                    general_system_prompt(slots=prompt_slots),
+                    general_system_prompt(slots=prompt_slots, reasoning_mode=reasoning_mode),
                     rolling_summary,
                 )
                 user_content = general_user_content(
@@ -246,7 +247,7 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
                     )
                 else:
                     system = augment_system_with_summary(
-                        general_system_prompt(slots=prompt_slots),
+                        general_system_prompt(slots=prompt_slots, reasoning_mode=reasoning_mode),
                         rolling_summary,
                     )
                     user_content = general_user_content(

@@ -11,7 +11,7 @@ from agent.conversation_context import build_llm_messages
 from agent.llm_routing import model_for_task, routing_llm_runtime
 from agent.tools.config.registry import enabled_tool_ids, load_tools_config
 from agent.tools.runtime.loop import run_tool_loop, stream_answer_after_tools
-from agent.tools.runtime.prompt import AGENT_TOOLS_REALTIME_POLICY
+from agent.reasoning_modes import should_use_tool_loop
 
 ReplayFn = Callable[[list[str]], Iterator[str]]
 
@@ -41,8 +41,14 @@ def stream_general_answer(
     产出已格式化的 SSE 行；同时写入 parts 与 tool_trace_out。
     """
     enabled = enabled_tool_ids(load_tools_config())
-    system = general_system_prompt(slots=prompt_slots)
-    if enabled:
+    mem = state.get("memory_config") or {}
+    reasoning_mode = str(state.get("agent_reasoning_mode") or mem.get("agent_reasoning_mode") or "react")
+    use_tools = should_use_tool_loop(reasoning_mode, tools_enabled=bool(enabled) and is_tools_active())
+
+    system = general_system_prompt(slots=prompt_slots, reasoning_mode=reasoning_mode)
+    if use_tools:
+        from agent.tools.runtime.prompt import AGENT_TOOLS_REALTIME_POLICY
+
         system = f"{system}\n\n{AGENT_TOOLS_REALTIME_POLICY}"
     system = augment_system_with_summary(system, state.get("rolling_summary"))
     user_content = general_user_content(state["question"])
@@ -64,26 +70,27 @@ def stream_general_answer(
     )
     condense_model = model_for_task(routing_rt, task="routing")
 
-    text, trace = run_tool_loop(
-        client,
-        model=model,
-        messages=messages,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        enabled_ids=enabled,
-        emit=emit,
-        user_question=str(state.get("question") or ""),
-        condense_model=condense_model,
-    )
-    tool_trace_out.extend(trace)
-    for ev in pending:
-        yield emit_event(ev)
+    if use_tools:
+        text, trace = run_tool_loop(
+            client,
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            enabled_ids=enabled,
+            emit=emit,
+            user_question=str(state.get("question") or ""),
+            condense_model=condense_model,
+        )
+        tool_trace_out.extend(trace)
+        for ev in pending:
+            yield emit_event(ev)
 
-    if text:
-        parts.append(text)
-        if emit_tokens:
-            yield from replay_tokens([text])
-        return
+        if text:
+            parts.append(text)
+            if emit_tokens:
+                yield from replay_tokens([text])
+            return
 
     for delta in stream_answer_after_tools(
         client,
