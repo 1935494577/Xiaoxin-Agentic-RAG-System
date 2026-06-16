@@ -23,6 +23,7 @@ ADMIN_PAGES: list[AdminPageSpec] = [
     {"id": "prompts", "label": "提示词", "url_path": "prompts", "module": "pages/prompt_config.py"},
     {"id": "models", "label": "模型", "url_path": "models", "module": "pages/model_config.py"},
     {"id": "feedback", "label": "用户反馈", "url_path": "feedback", "module": "pages/feedback_inbox.py"},
+    {"id": "eval_reports", "label": "评测报告", "url_path": "eval-reports", "module": "pages/eval_reports.py"},
     {"id": "trace", "label": "链路 Trace", "url_path": "trace", "module": "pages/trace_config.py"},
     {"id": "tutorial", "label": "教程", "url_path": "tutorial", "module": "pages/tutorial.py"},
 ]

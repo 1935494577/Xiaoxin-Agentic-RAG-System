@@ -16,7 +16,9 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 8502,
     proxy: {
-      "/chat": { target: apiTarget, changeOrigin: true },
+      // API only — do NOT proxy GET /chat (React Router SPA route)
+      "/chat/sessions": { target: apiTarget, changeOrigin: true },
+      "/chat/stream": { target: apiTarget, changeOrigin: true },
       "/users": { target: apiTarget, changeOrigin: true },
       "/config": { target: apiTarget, changeOrigin: true },
       "/feedback": { target: apiTarget, changeOrigin: true },

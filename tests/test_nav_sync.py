@@ -1,4 +1,4 @@
-"""Ensure admin nav registry matches Streamlit pages."""
+"""Ensure admin nav registry matches React SPA sidebar."""
 
 from __future__ import annotations
 
@@ -10,8 +10,7 @@ from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "enterprise_rag" / "src"
-STREAMLIT_APP = ROOT / "frontend" / "admin" / "streamlit_app.py"
-CLIENT_TS = ROOT / "frontend" / "chat" / "src" / "api" / "client.ts"
+SIDEBAR_TS = ROOT / "frontend" / "src" / "components" / "layout" / "Sidebar.tsx"
 
 
 def _load_nav_config():
@@ -27,22 +26,9 @@ def _load_nav_config():
     return mod
 
 
-def _parse_streamlit_pages(text: str) -> list[dict[str, str | bool]]:
-    rows: list[dict[str, str | bool]] = []
-    for m in re.finditer(
-        r'st\.Page\("pages/([^"]+)"\s*,\s*title="([^"]+)"(?:\s*,\s*url_path="([^"]*)")?',
-        text,
-    ):
-        module, title, url_path = m.group(1), m.group(2), m.group(3) or ""
-        tail = text[m.start() : m.end() + 40]
-        is_default = "default=True" in tail
-        rows.append({"module": f"pages/{module}", "title": title, "url_path": url_path, "default": is_default})
-    return rows
-
-
-def _parse_client_nav_ids(text: str) -> list[str]:
-    block = re.search(r"NAV_FALLBACK_ITEMS[^[]*\[(.*?)\];", text, re.S)
-    assert block
+def _parse_sidebar_nav_ids(text: str) -> list[str]:
+    block = re.search(r"const NAV_ITEMS = \[(.*?)\];", text, re.S)
+    assert block, "NAV_ITEMS not found in Sidebar.tsx"
     return re.findall(r'id:\s*"([^"]+)"', block.group(1))
 
 
@@ -68,18 +54,11 @@ def client(tmp_path, monkeypatch):
         yield c
 
 
-def test_admin_pages_match_streamlit():
+def test_spa_sidebar_ids_match_registry():
     nav = _load_nav_config()
-    st_text = STREAMLIT_APP.read_text(encoding="utf-8")
-    st_pages = _parse_streamlit_pages(st_text)
-    registry = list(nav.ADMIN_PAGES)
-
-    assert len(st_pages) == len(registry)
-    for spec, page in zip(registry, st_pages, strict=True):
-        assert spec["module"] == page["module"]
-        assert spec["label"] == page["title"]
-        assert spec.get("url_path", "") == page["url_path"]
-        assert bool(spec.get("default")) == bool(page["default"])
+    sidebar_text = SIDEBAR_TS.read_text(encoding="utf-8")
+    spa_ids = [i for i in _parse_sidebar_nav_ids(sidebar_text) if i != "chat"]
+    assert spa_ids == [p["id"] for p in nav.ADMIN_PAGES]
 
 
 def test_nav_api_items_match_registry():
@@ -88,13 +67,6 @@ def test_nav_api_items_match_registry():
     admin_items = [i for i in cfg["items"] if i["id"] != "chat"]
     assert [i["id"] for i in admin_items] == [p["id"] for p in nav.ADMIN_PAGES]
     assert [i["label"] for i in admin_items] == [p["label"] for p in nav.ADMIN_PAGES]
-
-
-def test_spa_nav_fallback_ids():
-    nav = _load_nav_config()
-    client_text = CLIENT_TS.read_text(encoding="utf-8")
-    spa_ids = _parse_client_nav_ids(client_text)
-    assert spa_ids == [p["id"] for p in nav.ADMIN_PAGES]
 
 
 def test_nav_config_endpoint(client: TestClient):

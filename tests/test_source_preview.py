@@ -38,13 +38,13 @@ def test_source_preview_returns_parent_text(mock_fetch, api_client):
 @patch("api.main.fetch_parents_by_ids")
 def test_source_preview_not_found(mock_fetch, api_client):
     mock_fetch.return_value = {}
-    r = api_client.get("/sources/missing-id/preview", params={"user_department": "技术"})
+    r = api_client.get("/sources/preview/missing-id", params={"user_department": "技术"})
     assert r.status_code == 404
 
 
 @patch("api.main.fetch_parents_by_ids")
 def test_source_preview_respects_allowed_sources(mock_fetch, api_client):
-    mock_fetch.return_value {
+    mock_fetch.return_value = {
         "p1": {
             "parent_id": "p1",
             "source": "secret/doc.txt",

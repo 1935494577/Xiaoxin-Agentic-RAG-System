@@ -191,6 +191,14 @@ def save_prompt_config(
 
     if active_persona_id is not None:
         persona_id = str(active_persona_id).strip() or DEFAULT_PERSONA_ID
+        from agent.persona_presets import get_persona_content
+
+        preset_content = get_persona_content(persona_id)
+        if preset_content:
+            for slot in merged:
+                if slot.get("id") == "persona":
+                    slot["content"] = preset_content
+                    break
 
     payload = {"version": 1, "active_persona_id": persona_id, "slots": merged}
     path = _config_path()

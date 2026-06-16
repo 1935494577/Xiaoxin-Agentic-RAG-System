@@ -23,7 +23,9 @@ def test_kb_user_content_includes_refs():
 
 
 def test_general_user_content():
-    assert general_user_content("你好") == "用户问题：你好"
+    out = general_user_content("你好")
+    assert out.startswith("用户问题：你好")
+    assert "通用常识" in out
 
 
 def test_kb_system_prompt_with_persona_override():

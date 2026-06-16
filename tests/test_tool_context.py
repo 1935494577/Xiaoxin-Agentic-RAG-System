@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
 from agent.tools.runtime.tool_context import (
+    attach_time_anchor,
     compress_web_search_output,
     condense_with_llm,
     prepare_tool_content_for_llm,
@@ -9,8 +10,14 @@ from agent.tools.runtime.tool_context import (
 
 
 def test_short_output_passes_through():
-    s = "北京时间：2026年06月13日 15:13:01"
-    assert prepare_tool_content_for_llm(s, tool_name="get_beijing_time") == s
+    s = "plain tool output"
+    assert prepare_tool_content_for_llm(s, tool_name="other_tool") == s
+
+
+def test_realtime_tool_gets_time_anchor():
+    out = attach_time_anchor("搜索「杭州天气」结果：", tool_name="web_search")
+    assert out.startswith("【时间基准】")
+    assert "搜索「杭州天气」" in out
 
 
 def test_web_search_structural_compress():

@@ -47,9 +47,12 @@ def stream_general_answer(
 
     system = general_system_prompt(slots=prompt_slots, reasoning_mode=reasoning_mode)
     if use_tools:
+        from agent.tools.builtins.datetime_cn import format_beijing_time_anchor
         from agent.tools.runtime.prompt import AGENT_TOOLS_REALTIME_POLICY
 
-        system = f"{system}\n\n{AGENT_TOOLS_REALTIME_POLICY}"
+        system = (
+            f"{system}\n\n{AGENT_TOOLS_REALTIME_POLICY}\n\n{format_beijing_time_anchor()}"
+        )
     system = augment_system_with_summary(system, state.get("rolling_summary"))
     user_content = general_user_content(state["question"])
     messages = build_llm_messages(system=system, history=history, user_content=user_content)

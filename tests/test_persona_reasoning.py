@@ -47,3 +47,70 @@ def test_should_use_tool_loop_direct_skips_tools():
     assert should_use_tool_loop("direct", tools_enabled=True) is False
     assert should_use_tool_loop("react", tools_enabled=True) is True
     assert should_use_tool_loop("react", tools_enabled=False) is False
+
+
+def test_load_prompt_slots_reflects_saved_active_persona(tmp_path, monkeypatch):
+    import json
+
+    from api.prompt_config_store import load_prompt_slots, save_prompt_config
+    from config import settings
+
+    prompt_path = tmp_path / "prompt_config.json"
+    monkeypatch.setattr("api.prompt_config_store._config_path", lambda: prompt_path)
+    monkeypatch.setattr(settings, "prompt_config_path", prompt_path)
+
+    save_prompt_config(slots=[], reset_defaults=True, active_persona_id="reading_coach")
+    slots = load_prompt_slots()
+    persona = next(s for s in slots if s["id"] == "persona")
+    assert "超脑阅读教练" in persona["content"]
+
+
+def test_answer_node_general_includes_direct_reasoning_policy(monkeypatch):
+    from agent.nodes import answer_node
+    from agent.prompt_engine import default_prompt_slots
+
+    captured: dict = {}
+
+    class _Msg:
+        content = "好的"
+
+    class _Choice:
+        message = _Msg()
+
+    class _Resp:
+        choices = [_Choice()]
+
+    class _Completions:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return _Resp()
+
+    class _Chat:
+        completions = _Completions()
+
+    class _Client:
+        def __init__(self, **kwargs):
+            pass
+
+        chat = _Chat()
+
+    monkeypatch.setattr("agent.nodes.OpenAI", lambda **kwargs: _Client())
+
+    answer_node(
+        {
+            "question": "你好",
+            "contexts": [],
+            "contexts_meta": [],
+            "history": [],
+            "memory_config": {
+                "prompt_slots": default_prompt_slots(),
+                "agent_reasoning_mode": "direct",
+                "general_fallback_enabled": False,
+                "kb_llm_judge": False,
+            },
+            "llm_api_key": "sk-test",
+        }
+    )
+
+    system = captured["messages"][0]["content"]
+    assert "直接回答" in system

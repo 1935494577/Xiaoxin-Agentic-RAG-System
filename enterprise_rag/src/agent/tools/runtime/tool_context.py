@@ -122,6 +122,20 @@ def truncate_tool_output_for_llm(output: str, *, max_chars: int | None = None) -
     return text[:limit].rstrip() + f"\n…（上下文长度上限，原长 {len(text)} 字）"
 
 
+_REALTIME_TOOL_NAMES = frozenset({"get_beijing_time", "get_weather", "web_search"})
+
+
+def attach_time_anchor(text: str, *, tool_name: str) -> str:
+    body = (text or "").strip()
+    if not body or tool_name not in _REALTIME_TOOL_NAMES:
+        return body
+    if "【时间基准】" in body:
+        return body
+    from agent.tools.builtins.datetime_cn import format_beijing_time_anchor
+
+    return f"{format_beijing_time_anchor()}\n\n{body}"
+
+
 def prepare_tool_content_for_llm(
     output: str,
     *,
@@ -138,6 +152,8 @@ def prepare_tool_content_for_llm(
     text = (output or "").strip()
     if not text:
         return text
+
+    text = attach_time_anchor(text, tool_name=tool_name)
 
     min_chars = int(settings.tool_llm_condense_min_chars)
     if len(text) <= min_chars:

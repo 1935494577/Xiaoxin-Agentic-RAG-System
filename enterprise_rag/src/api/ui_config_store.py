@@ -97,14 +97,26 @@ def save_ui_config(patch: dict[str, Any]) -> dict[str, Any]:
 
 
 def public_ui_config() -> dict[str, Any]:
+    from agent.persona_presets import PERSONA_PRESETS
+    from agent.reasoning_modes import REASONING_MODES, normalize_reasoning_mode
+    from api.prompt_config_store import load_active_persona_id
+
     cfg = load_ui_config()
     logo_path = str(cfg.get("logo_image_path") or "").strip()
     has_logo_image = bool(logo_path and Path(logo_path).is_file())
+    persona_id = load_active_persona_id()
+    persona_meta = PERSONA_PRESETS.get(persona_id, {})
+    reasoning_mode = normalize_reasoning_mode(str(cfg.get("agent_reasoning_mode") or "react"))
+    reasoning_meta = REASONING_MODES.get(reasoning_mode, {})
     return {
         **cfg,
         "has_logo_image": has_logo_image,
         "supported_upload_extensions": list(SUPPORTED_UPLOAD_EXTENSIONS),
         "supported_upload_label": SUPPORTED_UPLOAD_LABEL,
+        "active_persona_id": persona_id,
+        "active_persona_label": str(persona_meta.get("label") or persona_id),
+        "agent_reasoning_mode": reasoning_mode,
+        "agent_reasoning_mode_label": str(reasoning_meta.get("label") or reasoning_mode),
     }
 
 

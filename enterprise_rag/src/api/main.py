@@ -26,6 +26,7 @@ from api.chat_routing import apply_routing_tier
 from api.routing_mode import apply_hybrid_expert_memory, resolve_hybrid_expert_mode
 from api.stream_retrieval import build_stream_retrieval_state, resolve_stream_fast_mode
 from api.auth_middleware import APIAuthMiddleware, SecurityHeadersMiddleware
+from api.department_auth import DepartmentFeatureMiddleware
 from api.feedback_router import router as feedback_router
 from api.chat_session_store import (
     append_messages,
@@ -80,6 +81,7 @@ from api.schemas import (
     RetrieveHit,
     RetrieveRequest,
     RetrieveResponse,
+    SourcePreviewResponse,
     SourceRef,
     VectorStoreCreate,
     VectorStoreListResponse,
@@ -118,7 +120,7 @@ from evaluation.langsmith_trace import configure_tracing, get_trace_status
 from feedback_loop.store import init_feedback_db
 from indexing.dedup_text import content_hash
 from indexing.embeddings import embed_texts
-from indexing.es_indexer import delete_parents_by_source, index_parent_documents
+from indexing.es_indexer import delete_parents_by_source, fetch_parents_by_ids, index_parent_documents
 from indexing.ingest_dedup import (
     check_document_duplicate,
     filter_parent_child_duplicates,
@@ -130,7 +132,7 @@ from api.user_profile_store import (
     init_user_profile_db,
     upsert_profile as upsert_user_profile,
 )
-from indexing.milvus_indexer import init_vector_db, insert_child_vectors
+from indexing.milvus_indexer import delete_by_source as milvus_delete_by_source, init_vector_db, insert_child_vectors
 
 
 @asynccontextmanager
@@ -177,6 +179,7 @@ _allow_origins = _origins if _origins else ["*"]
 _allow_creds = bool(_origins) and "*" not in _allow_origins
 
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(DepartmentFeatureMiddleware)
 app.add_middleware(APIAuthMiddleware)
 app.add_middleware(
     CORSMiddleware,
@@ -562,6 +565,35 @@ def retrieve(req: RetrieveRequest):
         for p in parents
     ]
     return RetrieveResponse(rewritten_query=rewritten, hits=hits)
+
+
+@app.get("/sources/preview/{parent_id}", response_model=SourcePreviewResponse)
+def source_preview(
+    parent_id: str,
+    user_department: str = Query(default="general", max_length=64),
+    allowed_sources: str | None = Query(default=None),
+):
+    """Return parent chunk text for citation preview (ACL + optional source allowlist)."""
+    from security.access_control import can_access_row
+    from security.permissions import filter_by_sources
+
+    row = fetch_parents_by_ids([parent_id]).get(parent_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Parent not found")
+    if not can_access_row(row, user_department):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    allow_list: list[str] | None = None
+    if allowed_sources is not None:
+        allow_list = [s.strip() for s in allowed_sources.split(",") if s.strip()]
+    if not filter_by_sources([row], allow_list):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return SourcePreviewResponse(
+        parent_id=parent_id,
+        source=str(row.get("source") or ""),
+        department=str(row.get("department") or ""),
+        permission_label=str(row.get("permission_label") or ""),
+        text=str(row.get("text") or ""),
+    )
 
 
 def _resolve_request_history(req: ChatRequest, mem: dict[str, Any] | None = None) -> list[dict[str, Any]]:
