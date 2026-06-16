@@ -152,10 +152,16 @@ def answer_node(state: AgentState) -> dict[str, Any]:
     prompt_slots = mem.get("prompt_slots")
 
     if answer_mode == "kb":
-        system = kb_system_prompt(fast=bool(state.get("stream_fast_mode")), slots=prompt_slots)
+        reasoning_mode = str(mem.get("agent_reasoning_mode") or "react")
+        system = kb_system_prompt(
+            fast=bool(state.get("stream_fast_mode")),
+            slots=prompt_slots,
+            reasoning_mode=reasoning_mode,
+        )
         user_content = retry_note + kb_user_content(ctx, state["question"])
     else:
-        system = general_system_prompt(slots=prompt_slots)
+        reasoning_mode = str(mem.get("agent_reasoning_mode") or "react")
+        system = general_system_prompt(slots=prompt_slots, reasoning_mode=reasoning_mode)
         user_content = retry_note + general_user_content(
             state["question"],
             contexts=ctx if bool(mem.get("general_fallback_enabled")) and ctx else None,

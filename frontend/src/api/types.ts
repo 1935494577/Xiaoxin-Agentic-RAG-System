@@ -46,6 +46,10 @@ export type UiConfig = {
   ingest_tag_presets?: string[];
   supported_upload_extensions?: string[];
   supported_upload_label?: string;
+  active_persona_id?: string;
+  active_persona_label?: string;
+  agent_reasoning_mode?: string;
+  agent_reasoning_mode_label?: string;
 };
 
 // ===== Chat =====

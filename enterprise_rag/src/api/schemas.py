@@ -90,6 +90,14 @@ class RetrieveResponse(BaseModel):
     hits: list[RetrieveHit] = Field(default_factory=list)
 
 
+class SourcePreviewResponse(BaseModel):
+    parent_id: str
+    source: str = ""
+    department: str = ""
+    permission_label: str = ""
+    text: str = ""
+
+
 class FeedbackRequest(BaseModel):
     user_id: str = Field(..., min_length=1, max_length=128)
     message_id: str | None = Field(default=None, max_length=128, description="兼容旧客户端，等同 trace_id")
@@ -362,6 +370,10 @@ class UiConfigPublic(BaseModel):
     condense_llm_enabled: bool = True
     kb_llm_judge_always: bool = False
     ingest_tag_presets: list[str] = Field(default_factory=list)
+    active_persona_id: str = "knowledge_consultant"
+    active_persona_label: str = "劲脑知识顾问"
+    agent_reasoning_mode: str = "react"
+    agent_reasoning_mode_label: str = "ReAct（推理+行动）"
 
 
 class UiConfigUpdate(BaseModel):

@@ -31,4 +31,7 @@ def test_agent_tools_update(client: TestClient):
         json={"chat_tools_enabled": True, "tools": {"get_weather": {"enabled": True}}},
     )
     assert r.status_code == 200
-    assert r.json()["tools"][0]["id"] == "get_weather"
+    ids = {t["id"] for t in r.json()["tools"]}
+    assert "get_weather" in ids
+    weather = next(t for t in r.json()["tools"] if t["id"] == "get_weather")
+    assert weather.get("enabled") is True

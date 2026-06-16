@@ -1,63 +1,93 @@
-import { useLocation } from "react-router-dom";
-import { NavLink } from "react-router-dom";
-import { MessageSquare, Database, Wrench, HardDrive, Brain, FileText, Cpu, Activity, BookOpen, ThumbsUp, BarChart3 } from "lucide-react";
+import { NavLink, useLocation } from "react-router-dom";
+import {
+  ALL_NAV_ITEMS,
+  getVisibleNavItems,
+  type NavItem,
+} from "@/lib/departmentAccess";
+import { cn } from "@/lib/utils";
+import { useUserProfile } from "../../context/UserProfileContext";
 import { SidebarUserProfile } from "./SidebarUserProfile";
 
-const NAV_ITEMS = [
-  { id: "chat", label: "Jnao Chat", href: "/chat", icon: MessageSquare, primary: true },
-  { id: "ingest", label: "数据入库", href: "/admin/ingest", icon: Database },
-  { id: "processing", label: "工具", href: "/admin/processing", icon: Wrench },
-  { id: "vector_store", label: "向量库", href: "/admin/vector-store", icon: HardDrive },
-  { id: "memory", label: "对话设置", href: "/admin/memory", icon: Brain },
-  { id: "prompts", label: "提示词", href: "/admin/prompts", icon: FileText },
-  { id: "models", label: "模型", href: "/admin/models", icon: Cpu },
-  { id: "feedback", label: "用户反馈", href: "/admin/feedback", icon: ThumbsUp },
-  { id: "eval_reports", label: "评测报告", href: "/admin/eval-reports", icon: BarChart3 },
-  { id: "trace", label: "链路 Trace", href: "/admin/trace", icon: Activity },
-  { id: "tutorial", label: "教程", href: "/admin/tutorial", icon: BookOpen },
-];
-
-export function Sidebar() {
-  const location = useLocation();
-
-  const isActive = (href: string) => {
-    if (href === "/chat") return location.pathname === "/chat";
-    return location.pathname.startsWith(href);
-  };
+function NavItemLink({ item }: { item: NavItem }) {
+  const Icon = item.icon;
 
   return (
-    <aside className="w-[240px] bg-surface-muted border-r border-border flex flex-col shrink-0">
-      <div className="px-4 py-4 border-b border-border">
-        <div className="flex items-center gap-2">
-          <img src="/company_logo.png" alt="Logo" className="h-7 w-auto" />
-          <h1 className="text-base font-semibold text-brand">知识库</h1>
+    <NavLink
+      to={item.href}
+      end={item.href === "/chat"}
+      className={({ isActive }) =>
+        cn(
+          "app-nav-link group",
+          isActive && "app-nav-link-active",
+          item.primary && !isActive && "font-medium text-text"
+        )
+      }
+    >
+      <Icon className="h-4 w-4 shrink-0 opacity-80 group-[.app-nav-link-active]:opacity-100" aria-hidden />
+      <span className="truncate">{item.label}</span>
+    </NavLink>
+  );
+}
+
+export function Sidebar() {
+  const { department } = useUserProfile();
+  const location = useLocation();
+  const visible = getVisibleNavItems(department);
+  const chatItem = visible.find((item) => item.id === "chat");
+  const adminItems = visible.filter((item) => item.id !== "chat");
+  const onAdminRoute = location.pathname.startsWith("/admin");
+
+  return (
+    <aside className="app-sidebar flex w-[240px] shrink-0 flex-col border-r border-border bg-surface-muted">
+      <div className="border-b border-border px-4 py-4">
+        <div className="flex items-center gap-2.5">
+          <img src="/company_logo.png" alt="" className="h-8 w-auto" />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-text">Jnao 知识库</p>
+            <p className="truncate text-[11px] text-text-muted">劲脑 · 内部工作平台</p>
+          </div>
         </div>
       </div>
-      <nav className="flex-1 overflow-y-auto p-2 flex flex-col gap-0.5">
-        {NAV_ITEMS.map((item) => {
-          const active = isActive(item.href);
-          const Icon = item.icon;
-          return (
-            <NavLink
-              key={item.id}
-              to={item.href}
-              className={
-                "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors " +
-                (active
-                  ? "bg-brand-light text-brand font-semibold"
-                  : "text-text-muted hover:bg-surface-muted/80 hover:text-text")
-              }
-            >
-              <Icon className="w-4 h-4 shrink-0" />
-              <span className="truncate">{item.label}</span>
-            </NavLink>
-          );
-        })}
+
+      <nav className="flex flex-1 flex-col gap-4 overflow-y-auto p-2 pt-3" aria-label="主导航">
+        {chatItem ? (
+          <div>
+            <p className="app-nav-section-label">工作区</p>
+            <div className="mt-1 flex flex-col gap-0.5">
+              <NavItemLink item={chatItem} />
+            </div>
+          </div>
+        ) : null}
+
+        {adminItems.length > 0 ? (
+          <div>
+            <p className="app-nav-section-label">管理</p>
+            <div className="mt-1 flex flex-col gap-0.5">
+              {adminItems.map((item) => (
+                <NavItemLink key={item.id} item={item} />
+              ))}
+            </div>
+          </div>
+        ) : null}
       </nav>
+
       <SidebarUserProfile />
-      <div className="px-4 py-2 border-t border-border text-[10px] text-text-muted/80 text-center">
-        Enterprise RAG
+
+      <div className="border-t border-border px-4 py-2 text-center text-[10px] text-text-muted/75">
+        {onAdminRoute ? "管理后台" : "Enterprise RAG"}
       </div>
     </aside>
   );
+}
+
+/** Resolve current admin page label for chrome header */
+export function resolveAdminPageLabel(pathname: string): string {
+  const match = ALL_NAV_ITEMS.find((item) => {
+    if (item.id === "chat") return false;
+    return pathname === item.href || pathname.startsWith(`${item.href}/`);
+  });
+  if (pathname === "/admin" || pathname === "/admin/") {
+    return ALL_NAV_ITEMS.find((i) => i.id === "ingest")?.label ?? "数据入库";
+  }
+  return match?.label ?? "管理";
 }

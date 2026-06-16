@@ -117,7 +117,7 @@ export default function IngestPage() {
         description={`支持 ${extLabel} 格式；可选标签、部门与可见范围。`}
       />
 
-      <div className="space-y-6">
+      <div className="admin-panel space-y-6">
         {/* Department & Permission */}
         <div className="grid grid-cols-2 gap-4">
           <label className="block">

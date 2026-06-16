@@ -25,9 +25,9 @@ describe("SessionList", () => {
     vi.clearAllMocks();
   });
 
-  it("renders Jnao Chat header", () => {
+  it("renders session list header", () => {
     render(React.createElement(SessionList, baseProps));
-    expect(screen.getByText("Jnao Chat")).toBeTruthy();
+    expect(screen.getByText("对话列表")).toBeTruthy();
   });
 
   it("renders new and delete buttons", () => {

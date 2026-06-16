@@ -32,9 +32,11 @@ def test_get_beijing_time_format(monkeypatch):
 
     monkeypatch.setattr("agent.tools.builtins.datetime_cn.datetime", _FixedDatetime)
     out = get_beijing_time()
+    assert "【时间基准】" in out
     assert "2026年06月11日" in out
     assert "星期四" in out
-    assert "15:30:45" in out
+    assert "15:30" in out
+    assert "下午" in out
     assert "北京时间" in out
 
 

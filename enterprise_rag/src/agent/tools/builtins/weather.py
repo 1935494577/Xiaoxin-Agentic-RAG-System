@@ -7,8 +7,10 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
+
+from agent.tools.builtins.datetime_cn import beijing_now, day_period, format_beijing_time_anchor
 
 DEFAULT_FORECAST_HOURS = 12
 MAX_FORECAST_HOURS = 24
@@ -78,14 +80,20 @@ def _format_weather(data: dict[str, Any], fallback_city: str, forecast_hours: in
     humidity = cur.get("humidity", "?")
     wind = cur.get("windspeedKmph", "?")
     obs = str(cur.get("observation_time") or "").strip()
+    now = beijing_now()
+    period = day_period(now.hour)
 
     lines = [
-        f"{place} 当前天气（观测 {obs or '刚刚'}）：{desc}，"
-        f"气温 {temp}°C（体感 {feel}°C），湿度 {humidity}%，风速 {wind} km/h。",
+        format_beijing_time_anchor(),
+        (
+            f"{place} 当前天气（北京时间 {now.strftime('%H:%M')}，"
+            f"数据源观测 {obs or '刚刚'}）：{desc}，"
+            f"气温 {temp}°C（体感 {feel}°C），湿度 {humidity}%，风速 {wind} km/h。"
+        ),
         "",
     ]
 
-    upcoming = _upcoming_hourly(data.get("weather") or [], obs, forecast_hours)
+    upcoming = _upcoming_hourly(data.get("weather") or [], now, forecast_hours)
     if upcoming:
         lines.append(f"未来约 {forecast_hours} 小时预报（3 小时步长）：")
         for slot in upcoming:
@@ -109,13 +117,6 @@ def _desc(row: dict[str, Any]) -> str:
     return text or "未知"
 
 
-def _slot_minutes(time_code: str) -> int:
-    n = int(time_code)
-    if n == 0:
-        return 0
-    return (n // 100) * 60 + (n % 100)
-
-
 def _time_label(time_code: str) -> str:
     n = int(time_code)
     if n == 0:
@@ -123,29 +124,28 @@ def _time_label(time_code: str) -> str:
     return f"{n // 100:02d}:{n % 100:02d}"
 
 
-def _parse_observation_minutes(obs: str) -> int | None:
-    obs = obs.strip()
-    if not obs:
+def _slot_datetime(date_str: str, time_code: str) -> datetime | None:
+    date_str = (date_str or "").strip()
+    if not date_str:
         return None
-    for fmt in ("%I:%M %p", "%H:%M"):
-        try:
-            dt = datetime.strptime(obs, fmt)
-            return dt.hour * 60 + dt.minute
-        except ValueError:
-            continue
-    return None
+    try:
+        day = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+    n = int(time_code)
+    hour, minute = (0, 0) if n == 0 else (n // 100, n % 100)
+    return datetime(day.year, day.month, day.day, hour, minute, tzinfo=beijing_now().tzinfo)
 
 
 def _upcoming_hourly(
     weather_days: list[Any],
-    observation_time: str,
+    now: datetime,
     forecast_hours: int,
 ) -> list[dict[str, Any]]:
-    now_min = _parse_observation_minutes(observation_time)
-    horizon = forecast_hours * 60
+    horizon_end = now + timedelta(hours=forecast_hours)
     out: list[dict[str, Any]] = []
 
-    for day_idx, day in enumerate(weather_days):
+    for day in weather_days:
         if not isinstance(day, dict):
             continue
         date_str = str(day.get("date") or "")
@@ -153,18 +153,15 @@ def _upcoming_hourly(
         for h in hourly:
             if not isinstance(h, dict):
                 continue
-            slot_min = _slot_minutes(str(h.get("time", "0")))
-            if now_min is not None:
-                day_offset = day_idx * 24 * 60
-                delta = day_offset + slot_min - now_min
-                if delta <= 0:
-                    continue
-                if delta > horizon:
-                    continue
+            slot_dt = _slot_datetime(date_str, str(h.get("time", "0")))
+            if slot_dt is None:
+                continue
+            if slot_dt <= now or slot_dt > horizon_end:
+                continue
             label = f"{date_str} {_time_label(str(h.get('time', '0')))}".strip()
             row = dict(h)
             row["label"] = label
-            row["_sort"] = day_idx * 24 * 60 + slot_min
+            row["_sort"] = slot_dt.timestamp()
             out.append(row)
 
     out.sort(key=lambda x: x.get("_sort", 0))

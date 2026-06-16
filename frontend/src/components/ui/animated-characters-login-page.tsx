@@ -1,138 +1,8 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 
-type PupilProps = {
-  size?: number;
-  maxDistance?: number;
-  pupilColor?: string;
-  forceLookX?: number;
-  forceLookY?: number;
-};
+type Look = { x?: number; y?: number } | undefined;
 
-export function Pupil({
-  size = 12,
-  maxDistance = 5,
-  pupilColor = "#2D2D2D",
-  forceLookX,
-  forceLookY,
-}: PupilProps) {
-  const [mouseX, setMouseX] = useState(0);
-  const [mouseY, setMouseY] = useState(0);
-  const pupilRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      setMouseX(e.clientX);
-      setMouseY(e.clientY);
-    };
-    window.addEventListener("mousemove", onMove);
-    return () => window.removeEventListener("mousemove", onMove);
-  }, []);
-
-  const pos = (() => {
-    if (forceLookX !== undefined && forceLookY !== undefined) {
-      return { x: forceLookX, y: forceLookY };
-    }
-    if (!pupilRef.current) return { x: 0, y: 0 };
-    const r = pupilRef.current.getBoundingClientRect();
-    const cx = r.left + r.width / 2;
-    const cy = r.top + r.height / 2;
-    const dx = mouseX - cx;
-    const dy = mouseY - cy;
-    const dist = Math.min(Math.hypot(dx, dy), maxDistance);
-    const angle = Math.atan2(dy, dx);
-    return { x: Math.cos(angle) * dist, y: Math.sin(angle) * dist };
-  })();
-
-  return (
-    <div
-      ref={pupilRef}
-      className="rounded-full transition-transform duration-100 ease-out"
-      style={{
-        width: size,
-        height: size,
-        backgroundColor: pupilColor,
-        transform: `translate(${pos.x}px, ${pos.y}px)`,
-      }}
-    />
-  );
-}
-
-type EyeBallProps = {
-  size?: number;
-  pupilSize?: number;
-  maxDistance?: number;
-  eyeColor?: string;
-  pupilColor?: string;
-  isBlinking?: boolean;
-  forceLookX?: number;
-  forceLookY?: number;
-};
-
-export function EyeBall({
-  size = 48,
-  pupilSize = 16,
-  maxDistance = 10,
-  eyeColor = "white",
-  pupilColor = "#2D2D2D",
-  isBlinking = false,
-  forceLookX,
-  forceLookY,
-}: EyeBallProps) {
-  const [mouseX, setMouseX] = useState(0);
-  const [mouseY, setMouseY] = useState(0);
-  const eyeRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      setMouseX(e.clientX);
-      setMouseY(e.clientY);
-    };
-    window.addEventListener("mousemove", onMove);
-    return () => window.removeEventListener("mousemove", onMove);
-  }, []);
-
-  const pos = (() => {
-    if (forceLookX !== undefined && forceLookY !== undefined) {
-      return { x: forceLookX, y: forceLookY };
-    }
-    if (!eyeRef.current) return { x: 0, y: 0 };
-    const r = eyeRef.current.getBoundingClientRect();
-    const cx = r.left + r.width / 2;
-    const cy = r.top + r.height / 2;
-    const dx = mouseX - cx;
-    const dy = mouseY - cy;
-    const dist = Math.min(Math.hypot(dx, dy), maxDistance);
-    const angle = Math.atan2(dy, dx);
-    return { x: Math.cos(angle) * dist, y: Math.sin(angle) * dist };
-  })();
-
-  return (
-    <div
-      ref={eyeRef}
-      className="flex items-center justify-center rounded-full transition-all duration-150"
-      style={{
-        width: size,
-        height: isBlinking ? 2 : size,
-        backgroundColor: eyeColor,
-        overflow: "hidden",
-      }}
-    >
-      {!isBlinking && (
-        <div
-          className="rounded-full transition-transform duration-100 ease-out"
-          style={{
-            width: pupilSize,
-            height: pupilSize,
-            backgroundColor: pupilColor,
-            transform: `translate(${pos.x}px, ${pos.y}px)`,
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-type FacePos = { faceX: number; faceY: number; bodySkew: number };
+type FacePos = { faceX: number; faceY: number; bodySkew: number; bodyTilt: number };
 
 function useMousePosition() {
   const [mouse, setMouse] = useState({ x: 0, y: 0 });
@@ -147,22 +17,24 @@ function useMousePosition() {
 function calcFacePos(
   ref: RefObject<HTMLDivElement | null>,
   mouseX: number,
-  mouseY: number
+  mouseY: number,
+  sensitivity = 1
 ): FacePos {
-  if (!ref.current) return { faceX: 0, faceY: 0, bodySkew: 0 };
+  if (!ref.current) return { faceX: 0, faceY: 0, bodySkew: 0, bodyTilt: 0 };
   const rect = ref.current.getBoundingClientRect();
   const cx = rect.left + rect.width / 2;
-  const cy = rect.top + rect.height / 3;
+  const cy = rect.top + rect.height * 0.32;
   const dx = mouseX - cx;
   const dy = mouseY - cy;
   return {
-    faceX: Math.max(-15, Math.min(15, dx / 20)),
-    faceY: Math.max(-10, Math.min(10, dy / 30)),
-    bodySkew: Math.max(-6, Math.min(6, -dx / 120)),
+    faceX: Math.max(-10, Math.min(10, (dx / 24) * sensitivity)),
+    faceY: Math.max(-7, Math.min(7, (dy / 30) * sensitivity)),
+    bodySkew: Math.max(-4, Math.min(4, (-dx / 140) * sensitivity)),
+    bodyTilt: Math.max(-3, Math.min(3, (dx / 200) * sensitivity)),
   };
 }
 
-function useBlink() {
+function useBlink(minDelay = 2600, maxDelay = 5200) {
   const [blinking, setBlinking] = useState(false);
   useEffect(() => {
     let timeout: ReturnType<typeof setTimeout>;
@@ -173,16 +45,412 @@ function useBlink() {
           setTimeout(() => {
             setBlinking(false);
             schedule();
-          }, 150);
+          }, 130);
         },
-        Math.random() * 4000 + 3000
+        Math.random() * (maxDelay - minDelay) + minDelay
       );
     };
     schedule();
     return () => clearTimeout(timeout);
-  }, []);
+  }, [minDelay, maxDelay]);
   return blinking;
 }
+
+type EyeProps = {
+  size: number;
+  pupil: number;
+  maxMove: number;
+  look?: Look;
+  blink: boolean;
+  sparkle?: boolean;
+};
+
+function TalentEye({ size, pupil, maxMove, look, blink, sparkle }: EyeProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  const { x: mouseX, y: mouseY } = useMousePosition();
+
+  const offset = (() => {
+    if (look?.x !== undefined && look?.y !== undefined) {
+      return { x: look.x, y: look.y };
+    }
+    if (!ref.current) return { x: 0, y: 0 };
+    const r = ref.current.getBoundingClientRect();
+    const dx = mouseX - (r.left + r.width / 2);
+    const dy = mouseY - (r.top + r.height / 2);
+    const dist = Math.min(Math.hypot(dx, dy), maxMove);
+    const a = Math.atan2(dy, dx);
+    return { x: Math.cos(a) * dist, y: Math.sin(a) * dist };
+  })();
+
+  return (
+    <div
+      ref={ref}
+      className="relative flex items-center justify-center rounded-full bg-white transition-all duration-150"
+      style={{ width: size, height: blink ? 2 : size, overflow: "hidden" }}
+    >
+      {!blink && (
+        <>
+          <div
+            className="rounded-full bg-[#1a1d21] transition-transform duration-100"
+            style={{
+              width: pupil,
+              height: pupil,
+              transform: `translate(${offset.x}px, ${offset.y}px)`,
+            }}
+          />
+          {sparkle && (
+            <div
+              className="pointer-events-none absolute rounded-full bg-white/90"
+              style={{ width: pupil * 0.35, height: pupil * 0.35, top: 2, left: 3 }}
+            />
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+type TalentId = "si" | "ying" | "xue" | "de" | "xing";
+
+type TalentSpec = {
+  id: TalentId;
+  name: string;
+  ability: string;
+  brain: string;
+  left: number;
+  width: number;
+  height: number;
+  z: number;
+  idle: string;
+  gradient: [string, string];
+  accent: string;
+};
+
+const TALENTS: TalentSpec[] = [
+  {
+    id: "si",
+    name: "思者",
+    ability: "创造力",
+    brain: "右脑5",
+    left: 0,
+    width: 96,
+    height: 248,
+    z: 1,
+    idle: "talent-idle-si",
+    gradient: ["#9575FF", "#5E35B1"],
+    accent: "#FFE082",
+  },
+  {
+    id: "ying",
+    name: "赢者",
+    ability: "想象力",
+    brain: "右脑4",
+    left: 88,
+    width: 92,
+    height: 210,
+    z: 2,
+    idle: "talent-idle-ying",
+    gradient: ["#FFD54F", "#F9A825"],
+    accent: "#FFFDE7",
+  },
+  {
+    id: "xue",
+    name: "学者",
+    ability: "专注力",
+    brain: "平衡3",
+    left: 172,
+    width: 88,
+    height: 196,
+    z: 3,
+    idle: "talent-idle-xue",
+    gradient: ["#42A5F5", "#1565C0"],
+    accent: "#E3F2FD",
+  },
+  {
+    id: "de",
+    name: "德者",
+    ability: "观察力",
+    brain: "左脑4",
+    left: 252,
+    width: 94,
+    height: 224,
+    z: 4,
+    idle: "talent-idle-de",
+    gradient: ["#66BB6A", "#2E7D32"],
+    accent: "#DCEDC8",
+  },
+  {
+    id: "xing",
+    name: "行者",
+    ability: "记忆力",
+    brain: "左脑5",
+    left: 338,
+    width: 90,
+    height: 188,
+    z: 5,
+    idle: "talent-idle-xing",
+    gradient: ["#FF8A65", "#E64A19"],
+    accent: "#FFCCBC",
+  },
+];
+
+function TalentBadge({ name, ability, brain }: Pick<TalentSpec, "name" | "ability" | "brain">) {
+  return (
+    <div className="talent-badge pointer-events-none absolute -bottom-5 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-full border border-white/15 bg-black/40 px-2 py-0.5 backdrop-blur-md">
+      <p className="text-center text-[9px] font-semibold leading-tight text-white/95">{name}</p>
+      <p className="text-center text-[8px] leading-tight text-white/55">
+        {ability} · {brain}
+      </p>
+    </div>
+  );
+}
+
+type MascotProps = {
+  spec: TalentSpec;
+  pos: FacePos;
+  blink: boolean;
+  look?: Look;
+  hideFace: boolean;
+  leanAway: boolean;
+  peek: boolean;
+  bodyRef: RefObject<HTMLDivElement | null>;
+};
+
+function SiMascot({ spec, pos, blink, look, leanAway, peek, bodyRef }: MascotProps) {
+  const h = leanAway ? spec.height + 28 : spec.height;
+  return (
+    <div className={`absolute bottom-8 ${spec.idle}`} style={{ left: spec.left, width: spec.width, zIndex: spec.z }}>
+      <div
+        ref={bodyRef}
+        className="talent-body talent-body-si relative mx-auto transition-all duration-700"
+        style={{
+          width: spec.width,
+          height: h,
+          background: `linear-gradient(168deg, ${spec.gradient[0]} 0%, ${spec.gradient[1]} 100%)`,
+          transform: leanAway
+            ? `skewX(-10deg) translateX(16px) rotate(${-2 + pos.bodyTilt}deg)`
+            : `skewX(${pos.bodySkew}deg) rotate(${-2 + pos.bodyTilt}deg)`,
+        }}
+      >
+        <div className="talent-idea-orbit pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2" aria-hidden>
+          <span className="talent-lightbulb absolute left-1/2 top-0 -translate-x-1/2 text-sm leading-none">💡</span>
+          <span className="talent-orbit-dot talent-orbit-a block h-2 w-2 rounded-full bg-[#FFE082]" />
+          <span className="talent-orbit-dot talent-orbit-b block h-1.5 w-1.5 rounded-full bg-white/70" />
+        </div>
+        <div
+          className="absolute flex gap-2 transition-all duration-300"
+          style={{ left: 22 + pos.faceX, top: (peek ? 42 : 36) + pos.faceY - 6 }}
+        >
+          <div className="relative">
+            <div className="absolute -top-1.5 left-0 h-[2px] w-3.5 rounded-full bg-[#311B92]/35" style={{ transform: "rotate(-12deg)" }} />
+            <TalentEye size={16} pupil={7} maxMove={4} look={look ?? { x: 0, y: -3 }} blink={blink} sparkle />
+          </div>
+          <div className="relative">
+            <div className="absolute -top-1.5 right-0 h-[2px] w-3.5 rounded-full bg-[#311B92]/35" style={{ transform: "rotate(12deg)" }} />
+            <TalentEye size={16} pupil={7} maxMove={4} look={look ?? { x: 0, y: -3 }} blink={blink} sparkle />
+          </div>
+        </div>
+        <div className="absolute left-[26px] top-[58px] h-2 w-2 rounded-full bg-[#FFAB91]/55" />
+        <div className="absolute right-[24px] top-[62px] h-2 w-2 rounded-full bg-[#FFAB91]/55" />
+        <div
+          className="absolute h-[3px] w-7 rounded-full bg-[#311B92]/50 transition-all duration-300"
+          style={{
+            left: 30 + pos.faceX,
+            top: 68 + pos.faceY,
+            transform: peek ? "rotate(0deg) scaleX(1.1)" : "rotate(-8deg)",
+          }}
+        />
+        <div className="talent-feet absolute bottom-0 left-1/2 flex -translate-x-1/2 gap-3">
+          <span className="h-2 w-5 rounded-b-full bg-black/15" />
+          <span className="h-2 w-5 rounded-b-full bg-black/15" />
+        </div>
+        <div className="talent-arm talent-arm-left absolute -left-2 top-[42%] h-7 w-3 rounded-full bg-white/15" />
+        <div className="talent-arm talent-arm-right absolute -right-1 top-[36%] h-8 w-3 rounded-full bg-white/15" />
+      </div>
+      <TalentBadge {...spec} />
+    </div>
+  );
+}
+
+function YingMascot({ spec, pos, blink, look, hideFace }: MascotProps) {
+  return (
+    <div className={`absolute bottom-8 ${spec.idle}`} style={{ left: spec.left, width: spec.width, zIndex: spec.z }}>
+      <div
+        className="talent-body talent-body-ying relative mx-auto transition-all duration-700"
+        style={{
+          width: spec.width,
+          height: spec.height,
+          background: `linear-gradient(168deg, ${spec.gradient[0]} 0%, ${spec.gradient[1]} 100%)`,
+          transform: `skewX(${pos.bodySkew}deg) rotate(${1 + pos.bodyTilt}deg)`,
+        }}
+      >
+        <div className="pointer-events-none absolute -top-5 left-1/2 flex -translate-x-1/2 items-end gap-1" aria-hidden>
+          <span className="talent-crown-block h-3 w-3 rotate-[-18deg] rounded-sm bg-[#FFF8E1]" />
+          <span className="talent-crown-block mb-1 h-4 w-4 rounded-sm bg-[#FFFDE7]" />
+          <span className="talent-crown-block h-3 w-3 rotate-[18deg] rounded-sm bg-[#FFF8E1]" />
+        </div>
+        {!hideFace ? (
+          <>
+            <div className="absolute flex gap-2" style={{ left: 24 + pos.faceX, top: 34 + pos.faceY }}>
+              <TalentEye size={14} pupil={6} maxMove={4} look={look} blink={blink} />
+              <TalentEye size={14} pupil={6} maxMove={4} look={look} blink={blink} />
+            </div>
+            <div className="absolute left-[28px] top-[52px] h-1.5 w-1.5 rounded-full bg-[#F57F17]/40" />
+            <div className="absolute right-[26px] top-[52px] h-1.5 w-1.5 rounded-full bg-[#F57F17]/40" />
+            <div
+              className="absolute h-[3px] w-8 rounded-full bg-[#E65100]/55"
+              style={{ left: 26 + pos.faceX, top: 58 + pos.faceY }}
+            />
+          </>
+        ) : (
+          <div className="absolute flex gap-3" style={{ left: 20, top: 34 }}>
+            <div className="h-2.5 w-7 rounded-full bg-[#F9A825]" />
+            <div className="h-2.5 w-7 rounded-full bg-[#F9A825]" />
+          </div>
+        )}
+        <div className="pointer-events-none absolute -right-2 top-[28%] text-base text-[#FFF8E1] opacity-90 talent-sparkle-twinkle" aria-hidden>
+          ✦
+        </div>
+        <div className="talent-feet absolute bottom-0 left-1/2 flex -translate-x-1/2 gap-2.5">
+          <span className="h-1.5 w-4 rounded-b-full bg-black/12" />
+          <span className="h-1.5 w-4 rounded-b-full bg-black/12" />
+        </div>
+      </div>
+      <TalentBadge {...spec} />
+    </div>
+  );
+}
+
+function XueMascot({ spec, pos, blink, look }: MascotProps) {
+  return (
+    <div className={`absolute bottom-8 ${spec.idle}`} style={{ left: spec.left, width: spec.width, zIndex: spec.z }}>
+      <div
+        className="talent-body talent-body-xue relative mx-auto transition-all duration-700"
+        style={{
+          width: spec.width,
+          height: spec.height,
+          background: `linear-gradient(168deg, ${spec.gradient[0]} 0%, ${spec.gradient[1]} 100%)`,
+          transform: `skewX(${pos.bodySkew * 0.6}deg) rotate(${pos.bodyTilt}deg)`,
+        }}
+      >
+        <div className="absolute flex gap-1.5" style={{ left: 18 + pos.faceX, top: 32 + pos.faceY }}>
+          <div className="relative rounded-full border-2 border-white/75 p-0.5">
+            <TalentEye size={13} pupil={5} maxMove={3} look={look} blink={blink} />
+          </div>
+          <div className="relative rounded-full border-2 border-white/75 p-0.5">
+            <TalentEye size={13} pupil={5} maxMove={3} look={look} blink={blink} />
+          </div>
+        </div>
+        <div
+          className="absolute h-[2px] w-5 rounded-full bg-white/35"
+          style={{ left: 32 + pos.faceX, top: 50 + pos.faceY }}
+        />
+        <div
+          className="pointer-events-none absolute -right-1 bottom-[36%] h-10 w-7 rounded-sm border border-white/30 shadow-sm talent-book-flip"
+          style={{ backgroundColor: spec.accent }}
+          aria-hidden
+        >
+          <div className="mx-auto mt-2 h-0.5 w-4 rounded bg-[#1565C0]/25" />
+          <div className="mx-auto mt-1 h-0.5 w-3 rounded bg-[#1565C0]/20" />
+          <div className="mx-auto mt-1 h-0.5 w-3.5 rounded bg-[#1565C0]/15" />
+        </div>
+        <div className="talent-feet absolute bottom-0 left-1/2 flex -translate-x-1/2 gap-2">
+          <span className="h-1.5 w-3.5 rounded-b-full bg-black/12" />
+          <span className="h-1.5 w-3.5 rounded-b-full bg-black/12" />
+        </div>
+      </div>
+      <TalentBadge {...spec} />
+    </div>
+  );
+}
+
+function DeMascot({ spec, pos, blink, look, leanAway }: MascotProps) {
+  return (
+    <div className={`absolute bottom-8 ${spec.idle}`} style={{ left: spec.left, width: spec.width, zIndex: spec.z }}>
+      <div
+        className="talent-body talent-body-de relative mx-auto transition-all duration-700"
+        style={{
+          width: spec.width,
+          height: spec.height,
+          background: `linear-gradient(168deg, ${spec.gradient[0]} 0%, ${spec.gradient[1]} 100%)`,
+          transform: leanAway
+            ? `skewX(-8deg) translateX(12px) rotate(${-1 + pos.bodyTilt}deg)`
+            : `skewX(${pos.bodySkew}deg) rotate(${-1 + pos.bodyTilt}deg)`,
+        }}
+      >
+        <div className="absolute flex items-end gap-2" style={{ left: 16 + pos.faceX, top: 30 + pos.faceY }}>
+          <TalentEye size={18} pupil={7} maxMove={5} look={look ?? { x: 3, y: 0 }} blink={blink} />
+          <TalentEye size={14} pupil={6} maxMove={4} look={look ?? { x: 3, y: 0 }} blink={blink} />
+        </div>
+        <div
+          className="absolute h-[2px] w-6 rounded-full bg-white/30"
+          style={{ left: 34 + pos.faceX, top: 54 + pos.faceY }}
+        />
+        <div className="pointer-events-none absolute -right-3 top-[32%] talent-scope-sweep" aria-hidden>
+          <div className="h-9 w-9 rounded-full border-[3px] border-white/55 bg-white/10" />
+          <div className="absolute bottom-0 left-1/2 h-3.5 w-1 -translate-x-1/2 rotate-45 rounded bg-white/45" />
+          <div className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/20" />
+        </div>
+        <div className="talent-feet absolute bottom-0 left-1/2 flex -translate-x-1/2 gap-2.5">
+          <span className="h-2 w-4 rounded-b-full bg-black/12" />
+          <span className="h-2 w-4 rounded-b-full bg-black/12" />
+        </div>
+      </div>
+      <TalentBadge {...spec} />
+    </div>
+  );
+}
+
+function XingMascot({ spec, pos, blink, look }: MascotProps) {
+  return (
+    <div className={`absolute bottom-8 ${spec.idle}`} style={{ left: spec.left, width: spec.width, zIndex: spec.z }}>
+      <div
+        className="talent-body talent-body-xing relative mx-auto transition-all duration-700"
+        style={{
+          width: spec.width,
+          height: spec.height,
+          background: `linear-gradient(168deg, ${spec.gradient[0]} 0%, ${spec.gradient[1]} 100%)`,
+          transform: `skewX(${pos.bodySkew * 0.5}deg) rotate(${1 + pos.bodyTilt}deg)`,
+        }}
+      >
+        <div className="absolute flex gap-2" style={{ left: 22 + pos.faceX, top: 30 + pos.faceY }}>
+          <TalentEye size={13} pupil={5} maxMove={3} look={look} blink={blink} />
+          <TalentEye size={13} pupil={5} maxMove={3} look={look} blink={blink} />
+        </div>
+        <div
+          className="absolute h-[2px] w-5 rounded-full bg-[#BF360C]/45"
+          style={{ left: 28 + pos.faceX, top: 48 + pos.faceY }}
+        />
+        <div className="pointer-events-none absolute -right-0.5 bottom-[34%] flex flex-col gap-1 talent-memory-fan" aria-hidden>
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="flex items-center gap-1 rounded-sm border border-white/25 bg-white/15 px-1 py-0.5"
+              style={{ opacity: 1 - i * 0.12, transform: `translateX(${i * 2}px)` }}
+            >
+              <span className="h-1.5 w-1.5 rounded-[2px] bg-white/50" />
+              <span className="h-0.5 w-3 rounded bg-white/40" />
+            </div>
+          ))}
+        </div>
+        <div className="talent-arm absolute -left-1.5 top-[44%] h-6 w-2.5 rounded-full bg-white/15 talent-arm-wave" />
+        <div className="talent-feet absolute bottom-0 left-1/2 flex -translate-x-1/2 gap-2">
+          <span className="h-1.5 w-4 rounded-b-full bg-black/12" />
+          <span className="h-1.5 w-4 rounded-b-full bg-black/12" />
+        </div>
+      </div>
+      <TalentBadge {...spec} />
+    </div>
+  );
+}
+
+const MASCOT_RENDERERS = {
+  si: SiMascot,
+  ying: YingMascot,
+  xue: XueMascot,
+  de: DeMascot,
+  xing: XingMascot,
+} as const;
 
 export type AnimatedCharacterMascotsProps = {
   isTyping: boolean;
@@ -196,331 +464,100 @@ export function AnimatedCharacterMascots({
   showPassword,
 }: AnimatedCharacterMascotsProps) {
   const { x: mouseX, y: mouseY } = useMousePosition();
-  const purpleRef = useRef<HTMLDivElement>(null);
-  const blackRef = useRef<HTMLDivElement>(null);
-  const orangeRef = useRef<HTMLDivElement>(null);
-  const yellowRef = useRef<HTMLDivElement>(null);
-  const tealRef = useRef<HTMLDivElement>(null);
+  const refs = {
+    si: useRef<HTMLDivElement>(null),
+    ying: useRef<HTMLDivElement>(null),
+    xue: useRef<HTMLDivElement>(null),
+    de: useRef<HTMLDivElement>(null),
+    xing: useRef<HTMLDivElement>(null),
+  };
 
-  const isPurpleBlinking = useBlink();
-  const isBlackBlinking = useBlink();
-  const isTealBlinking = useBlink();
-  const [isLookingAtEachOther, setIsLookingAtEachOther] = useState(false);
-  const [isPurplePeeking, setIsPurplePeeking] = useState(false);
+  const blinks = {
+    si: useBlink(2200, 4200),
+    ying: useBlink(2800, 5000),
+    xue: useBlink(3000, 5500),
+    de: useBlink(2400, 4600),
+    xing: useBlink(2600, 4800),
+  };
 
-  const hidingPassword = password.length > 0 && !showPassword;
-  const revealingPassword = password.length > 0 && showPassword;
+  const [watching, setWatching] = useState(false);
+  const [siPeek, setSiPeek] = useState(false);
+
+  const hiding = password.length > 0 && !showPassword;
+  const revealing = password.length > 0 && showPassword;
 
   useEffect(() => {
     if (!isTyping) {
-      setIsLookingAtEachOther(false);
+      setWatching(false);
       return;
     }
-    setIsLookingAtEachOther(true);
-    const t = setTimeout(() => setIsLookingAtEachOther(false), 800);
+    setWatching(true);
+    const t = setTimeout(() => setWatching(false), 850);
     return () => clearTimeout(t);
   }, [isTyping]);
 
   useEffect(() => {
-    if (!revealingPassword) {
-      setIsPurplePeeking(false);
+    if (!revealing) {
+      setSiPeek(false);
       return;
     }
-    let peekEnd: ReturnType<typeof setTimeout> | undefined;
-    const peekStart = setTimeout(() => {
-      setIsPurplePeeking(true);
-      peekEnd = setTimeout(() => setIsPurplePeeking(false), 800);
-    }, Math.random() * 2000 + 1500);
+    let end: ReturnType<typeof setTimeout> | undefined;
+    const start = setTimeout(() => {
+      setSiPeek(true);
+      end = setTimeout(() => setSiPeek(false), 850);
+    }, Math.random() * 1600 + 1000);
     return () => {
-      clearTimeout(peekStart);
-      if (peekEnd) clearTimeout(peekEnd);
+      clearTimeout(start);
+      if (end) clearTimeout(end);
     };
-  }, [revealingPassword]);
+  }, [revealing]);
 
-  const purplePos = calcFacePos(purpleRef, mouseX, mouseY);
-  const blackPos = calcFacePos(blackRef, mouseX, mouseY);
-  const orangePos = calcFacePos(orangeRef, mouseX, mouseY);
-  const yellowPos = calcFacePos(yellowRef, mouseX, mouseY);
-  const tealPos = calcFacePos(tealRef, mouseX, mouseY);
+  const positions = {
+    si: calcFacePos(refs.si, mouseX, mouseY, 1.1),
+    ying: calcFacePos(refs.ying, mouseX, mouseY, 0.9),
+    xue: calcFacePos(refs.xue, mouseX, mouseY, 0.75),
+    de: calcFacePos(refs.de, mouseX, mouseY, 1),
+    xing: calcFacePos(refs.xing, mouseX, mouseY, 0.85),
+  };
+
+  function resolveLook(id: TalentId): Look {
+    if (revealing) {
+      if (id === "si") return siPeek ? { x: 4, y: 4 } : { x: -3, y: -3 };
+      return { x: -4, y: -2 };
+    }
+    if (watching) {
+      if (id === "de" || id === "xue") return { x: -3, y: -2 };
+      if (id === "ying") return { x: 2, y: -2 };
+      return { x: 3, y: 2 };
+    }
+    if (hiding) {
+      if (id === "ying" || id === "de") return { x: -4, y: 2 };
+      if (id === "xing") return { x: -3, y: 0 };
+    }
+    return undefined;
+  }
 
   return (
-    <div className="relative" style={{ width: "640px", height: "400px" }}>
-      {/* Purple tall rectangle */}
-      <div
-        ref={purpleRef}
-        className="absolute bottom-0 transition-all duration-700 ease-in-out"
-        style={{
-          left: "55px",
-          width: "170px",
-          height: isTyping || hidingPassword ? "440px" : "400px",
-          backgroundColor: "#6C3FF5",
-          borderRadius: "10px 10px 0 0",
-          zIndex: 1,
-          transform: revealingPassword
-            ? "skewX(0deg)"
-            : isTyping || hidingPassword
-              ? `skewX(${(purplePos.bodySkew || 0) - 12}deg) translateX(40px)`
-              : `skewX(${purplePos.bodySkew || 0}deg)`,
-          transformOrigin: "bottom center",
-        }}
-      >
-        <div
-          className="absolute flex gap-8 transition-all duration-700 ease-in-out"
-          style={{
-            left: revealingPassword
-              ? "20px"
-              : isLookingAtEachOther
-                ? "55px"
-                : `${45 + purplePos.faceX}px`,
-            top: revealingPassword
-              ? "35px"
-              : isLookingAtEachOther
-                ? "65px"
-                : `${40 + purplePos.faceY}px`,
-          }}
-        >
-          <EyeBall
-            size={18}
-            pupilSize={7}
-            maxDistance={5}
-            isBlinking={isPurpleBlinking}
-            forceLookX={
-              revealingPassword
-                ? isPurplePeeking
-                  ? 4
-                  : -4
-                : isLookingAtEachOther
-                  ? 3
-                  : undefined
-            }
-            forceLookY={
-              revealingPassword
-                ? isPurplePeeking
-                  ? 5
-                  : -4
-                : isLookingAtEachOther
-                  ? 4
-                  : undefined
-            }
-          />
-          <EyeBall
-            size={18}
-            pupilSize={7}
-            maxDistance={5}
-            isBlinking={isPurpleBlinking}
-            forceLookX={
-              revealingPassword
-                ? isPurplePeeking
-                  ? 4
-                  : -4
-                : isLookingAtEachOther
-                  ? 3
-                  : undefined
-            }
-            forceLookY={
-              revealingPassword
-                ? isPurplePeeking
-                  ? 5
-                  : -4
-                : isLookingAtEachOther
-                  ? 4
-                  : undefined
-            }
-          />
-        </div>
-      </div>
+    <div className="talent-mascot-stage relative mx-auto w-full max-w-[440px] pb-6" style={{ height: "292px" }}>
+      <div className="talent-stage-floor pointer-events-none absolute bottom-8 left-1/2 h-4 w-[92%] -translate-x-1/2 rounded-[50%] bg-gradient-to-b from-black/25 to-transparent blur-md" />
+      <div className="talent-stage-glow pointer-events-none absolute bottom-12 left-1/2 h-20 w-[75%] -translate-x-1/2 rounded-[50%] bg-[#FFD54F]/10 blur-2xl" />
 
-      {/* Black tall rectangle */}
-      <div
-        ref={blackRef}
-        className="absolute bottom-0 transition-all duration-700 ease-in-out"
-        style={{
-          left: "215px",
-          width: "110px",
-          height: "310px",
-          backgroundColor: "#2D2D2D",
-          borderRadius: "8px 8px 0 0",
-          zIndex: 2,
-          transform: revealingPassword
-            ? "skewX(0deg)"
-            : isLookingAtEachOther
-              ? `skewX(${(blackPos.bodySkew || 0) * 1.5 + 10}deg) translateX(20px)`
-              : isTyping || hidingPassword
-                ? `skewX(${(blackPos.bodySkew || 0) * 1.5}deg)`
-                : `skewX(${blackPos.bodySkew || 0}deg)`,
-          transformOrigin: "bottom center",
-        }}
-      >
-        <div
-          className="absolute flex gap-6 transition-all duration-700 ease-in-out"
-          style={{
-            left: revealingPassword
-              ? "10px"
-              : isLookingAtEachOther
-                ? "32px"
-                : `${26 + blackPos.faceX}px`,
-            top: revealingPassword
-              ? "28px"
-              : isLookingAtEachOther
-                ? "12px"
-                : `${32 + blackPos.faceY}px`,
-          }}
-        >
-          <EyeBall
-            size={16}
-            pupilSize={6}
-            maxDistance={4}
-            isBlinking={isBlackBlinking}
-            forceLookX={revealingPassword ? -4 : isLookingAtEachOther ? 0 : undefined}
-            forceLookY={revealingPassword ? -4 : isLookingAtEachOther ? -4 : undefined}
+      {TALENTS.map((spec) => {
+        const Renderer = MASCOT_RENDERERS[spec.id];
+        return (
+          <Renderer
+            key={spec.id}
+            spec={spec}
+            pos={positions[spec.id]}
+            blink={blinks[spec.id]}
+            look={resolveLook(spec.id)}
+            hideFace={hiding && spec.id === "ying"}
+            leanAway={hiding && (spec.id === "si" || spec.id === "de")}
+            peek={revealing && spec.id === "si" && siPeek}
+            bodyRef={refs[spec.id]}
           />
-          <EyeBall
-            size={16}
-            pupilSize={6}
-            maxDistance={4}
-            isBlinking={isBlackBlinking}
-            forceLookX={revealingPassword ? -4 : isLookingAtEachOther ? 0 : undefined}
-            forceLookY={revealingPassword ? -4 : isLookingAtEachOther ? -4 : undefined}
-          />
-        </div>
-      </div>
-
-      {/* Orange semi-circle */}
-      <div
-        ref={orangeRef}
-        className="absolute bottom-0 transition-all duration-700 ease-in-out"
-        style={{
-          left: "0px",
-          width: "240px",
-          height: "200px",
-          zIndex: 3,
-          backgroundColor: "#FF9B6B",
-          borderRadius: "120px 120px 0 0",
-          transform: revealingPassword
-            ? "skewX(0deg)"
-            : `skewX(${orangePos.bodySkew || 0}deg)`,
-          transformOrigin: "bottom center",
-        }}
-      >
-        <div
-          className="absolute flex gap-8 transition-all duration-200 ease-out"
-          style={{
-            left: revealingPassword ? "50px" : `${82 + (orangePos.faceX || 0)}px`,
-            top: revealingPassword ? "85px" : `${90 + (orangePos.faceY || 0)}px`,
-          }}
-        >
-          <Pupil
-            size={12}
-            maxDistance={5}
-            forceLookX={revealingPassword ? -5 : undefined}
-            forceLookY={revealingPassword ? -4 : undefined}
-          />
-          <Pupil
-            size={12}
-            maxDistance={5}
-            forceLookX={revealingPassword ? -5 : undefined}
-            forceLookY={revealingPassword ? -4 : undefined}
-          />
-        </div>
-      </div>
-
-      {/* Yellow rounded rectangle */}
-      <div
-        ref={yellowRef}
-        className="absolute bottom-0 transition-all duration-700 ease-in-out"
-        style={{
-          left: "285px",
-          width: "130px",
-          height: "230px",
-          backgroundColor: "#E8D754",
-          borderRadius: "70px 70px 0 0",
-          zIndex: 4,
-          transform: revealingPassword
-            ? "skewX(0deg)"
-            : `skewX(${yellowPos.bodySkew || 0}deg)`,
-          transformOrigin: "bottom center",
-        }}
-      >
-        <div
-          className="absolute flex gap-6 transition-all duration-200 ease-out"
-          style={{
-            left: revealingPassword ? "20px" : `${52 + (yellowPos.faceX || 0)}px`,
-            top: revealingPassword ? "35px" : `${40 + (yellowPos.faceY || 0)}px`,
-          }}
-        >
-          <Pupil
-            size={12}
-            maxDistance={5}
-            forceLookX={revealingPassword ? -5 : undefined}
-            forceLookY={revealingPassword ? -4 : undefined}
-          />
-          <Pupil
-            size={12}
-            maxDistance={5}
-            forceLookX={revealingPassword ? -5 : undefined}
-            forceLookY={revealingPassword ? -4 : undefined}
-          />
-        </div>
-        <div
-          className="absolute h-1 w-20 rounded-full bg-[#2D2D2D] transition-all duration-200 ease-out"
-          style={{
-            left: revealingPassword ? "10px" : `${40 + (yellowPos.faceX || 0)}px`,
-            top: revealingPassword ? "88px" : `${88 + (yellowPos.faceY || 0)}px`,
-          }}
-        />
-      </div>
-
-      {/* Teal capsule — front right */}
-      <div
-        ref={tealRef}
-        className="absolute bottom-0 transition-all duration-700 ease-in-out"
-        style={{
-          left: "455px",
-          width: "100px",
-          height: "195px",
-          backgroundColor: "#42B8A8",
-          borderRadius: "50px 50px 0 0",
-          zIndex: 5,
-          transform: revealingPassword
-            ? "skewX(0deg)"
-            : isTyping
-              ? `skewX(${(tealPos.bodySkew || 0) * 1.2}deg) translateX(-8px)`
-              : `skewX(${tealPos.bodySkew || 0}deg)`,
-          transformOrigin: "bottom center",
-        }}
-      >
-        <div
-          className="absolute flex gap-4 transition-all duration-200 ease-out"
-          style={{
-            left: revealingPassword ? "18px" : `${30 + (tealPos.faceX || 0)}px`,
-            top: revealingPassword ? "32px" : `${36 + (tealPos.faceY || 0)}px`,
-          }}
-        >
-          <EyeBall
-            size={14}
-            pupilSize={5}
-            maxDistance={4}
-            isBlinking={isTealBlinking}
-            forceLookX={revealingPassword ? -4 : undefined}
-            forceLookY={revealingPassword ? -3 : undefined}
-          />
-          <EyeBall
-            size={14}
-            pupilSize={5}
-            maxDistance={4}
-            isBlinking={isTealBlinking}
-            forceLookX={revealingPassword ? -4 : undefined}
-            forceLookY={revealingPassword ? -3 : undefined}
-          />
-        </div>
-        <div
-          className="absolute h-1 w-10 rounded-full bg-[#2D2D2D] transition-all duration-200 ease-out"
-          style={{
-            left: revealingPassword ? "22px" : `${34 + (tealPos.faceX || 0)}px`,
-            top: revealingPassword ? "72px" : `${76 + (tealPos.faceY || 0)}px`,
-          }}
-        />
-      </div>
+        );
+      })}
     </div>
   );
 }

@@ -1,35 +1,51 @@
 import { Link, Navigate, Outlet, useLocation } from "react-router-dom";
+import {
+  canAccessAdminPath,
+  shouldEnforceDepartmentAccess,
+} from "../../lib/departmentAccess";
 import { useAuth } from "../../hooks/useAuth";
+import { useUserProfile } from "../../context/UserProfileContext";
+import AccessDeniedPage from "../../pages/admin/AccessDeniedPage";
+import { resolveAdminPageLabel } from "./Sidebar";
 
 const DEV_AUTH_BYPASS = import.meta.env.DEV;
 
-/**
- * Wraps all /admin/* pages.
- * - Visually marks admin area
- * - Auth guard: redirect to /login when not authenticated (prod only)
- */
 export default function AdminLayout() {
   const { isAuthenticated, username, logout } = useAuth();
+  const { department } = useUserProfile();
   const location = useLocation();
+  const pageLabel = resolveAdminPageLabel(location.pathname);
 
   if (!DEV_AUTH_BYPASS && !isAuthenticated) {
     const from = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/login?from=${from}`} replace />;
   }
 
+  if (
+    shouldEnforceDepartmentAccess(department) &&
+    !canAccessAdminPath(department, location.pathname)
+  ) {
+    return <AccessDeniedPage department={department} />;
+  }
+
   return (
-    <div className="flex flex-col h-full">
-      <div className="px-5 py-1.5 bg-surface-muted border-b border-border text-xs text-text-muted flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-warning" />
-          管理后台
-          {isAuthenticated && username ? (
-            <span className="text-text-muted/80">· {username}</span>
-          ) : null}
+    <div className="flex h-full min-h-0 flex-col bg-surface-muted/35">
+      <header className="flex shrink-0 items-center justify-between gap-4 border-b border-border bg-white px-6 py-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-text-muted">
+            管理后台
+          </p>
+          <h1 className="truncate text-base font-semibold text-text">{pageLabel}</h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3 text-sm">
+          {isAuthenticated && username ? (
+            <span className="hidden text-text-muted sm:inline">{username}</span>
+          ) : null}
           {!isAuthenticated && DEV_AUTH_BYPASS ? (
-            <Link to="/login" className="text-brand hover:text-brand-dark">
+            <Link
+              to="/login"
+              className="font-medium text-brand transition-colors hover:text-brand-dark"
+            >
               登录
             </Link>
           ) : null}
@@ -37,13 +53,13 @@ export default function AdminLayout() {
             <button
               type="button"
               onClick={logout}
-              className="text-brand hover:text-brand-dark cursor-pointer"
+              className="cursor-pointer font-medium text-brand transition-colors hover:text-brand-dark"
             >
               退出
             </button>
           ) : null}
         </div>
-      </div>
+      </header>
       <div className="flex-1 overflow-y-auto">
         <Outlet />
       </div>

@@ -19,10 +19,35 @@ import type {
   UserProfileUpdate,
   VectorStore,
 } from "./types";
+import { AUTH_SESSION_KEY } from "../lib/constants";
+
+function readAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
+  try {
+    const raw =
+      localStorage.getItem(AUTH_SESSION_KEY) ?? sessionStorage.getItem(AUTH_SESSION_KEY);
+    if (!raw) return headers;
+    const session = JSON.parse(raw) as { username?: string; department?: string };
+    if (session.department?.trim()) {
+      headers["X-User-Department"] = encodeURIComponent(session.department.trim());
+    }
+    if (session.username?.trim()) {
+      headers["X-User-Name"] = encodeURIComponent(session.username.trim());
+    }
+  } catch {
+    /* ignore malformed session */
+  }
+  return headers;
+}
 
 // ===== Base fetch wrapper =====
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(path, init);
+  const authHeaders = readAuthHeaders();
+  const headers = new Headers(init?.headers);
+  for (const [key, value] of Object.entries(authHeaders)) {
+    if (!headers.has(key)) headers.set(key, value);
+  }
+  const r = await fetch(path, { ...init, headers });
   if (!r.ok) {
     const text = await r.text();
     throw new Error(text || r.statusText);

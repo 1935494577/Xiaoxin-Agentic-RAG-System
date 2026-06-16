@@ -15,7 +15,7 @@ import { useLocalStorage } from "../hooks/useLocalStorage";
 import { useUserProfile } from "../context/UserProfileContext";
 import type { ChatMessage, ChatSession, StreamEvent, ToolTraceItem } from "../api/types";
 import { applyToolStreamEvent } from "../lib/streamTools";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, Sparkles } from "lucide-react";
 import { ChatInput } from "../components/chat/ChatInput";
 import { ChatToolbar } from "../components/chat/ChatToolbar";
 import { SessionList } from "../components/chat/SessionList";
@@ -287,17 +287,27 @@ export default function ChatPage() {
         <div className="flex-1 overflow-y-auto bg-white chat-scroll-area px-4 sm:px-6 pt-16 pb-4">
           <div className="min-h-full flex flex-col pb-2">
             {!displayMessages.length && !streaming && (
-              <div className="max-w-[480px] mx-auto my-auto text-center py-12">
-                <h2 className="text-[#1a1d21] font-semibold text-xl mb-3">Jnao Chat</h2>
-                <p className="text-text-muted mb-5">{inputPlaceholder}</p>
-                <div className="flex flex-wrap gap-2 justify-center">
+              <div className="chat-empty-state mx-auto my-auto max-w-lg py-12 text-center">
+                <div className="mx-auto mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-light text-brand">
+                  <Sparkles className="h-6 w-6" aria-hidden />
+                </div>
+                <h2 className="text-balance text-xl font-semibold text-text">
+                  {displayName ? `${displayName}，你好` : "Jnao Chat"}
+                </h2>
+                <p className="mx-auto mt-2 max-w-md text-pretty text-sm leading-relaxed text-text-muted">
+                  {inputPlaceholder}
+                </p>
+                <p className="mt-1 text-xs text-text-muted/80">
+                  部门：{department || "未设置"} · 回答将基于可见知识库范围
+                </p>
+                <div className="mt-6 flex flex-wrap justify-center gap-2">
                   {suggestedQuestions.map((q) => (
                     <button
                       key={q}
                       type="button"
                       onClick={() => setInput(q)}
                       disabled={streaming}
-                      className="border border-border bg-surface-muted text-text rounded-full px-3.5 py-2 text-[13px] leading-relaxed cursor-pointer hover:border-brand hover:bg-brand-light disabled:opacity-60 disabled:cursor-not-allowed max-w-full text-left transition-colors"
+                      className="chat-suggestion-chip max-w-full cursor-pointer rounded-full border border-border bg-surface px-3.5 py-2 text-left text-[13px] leading-relaxed text-text transition-colors hover:border-brand hover:bg-brand-light disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {q}
                     </button>
