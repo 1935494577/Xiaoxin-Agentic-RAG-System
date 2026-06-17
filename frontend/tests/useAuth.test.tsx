@@ -4,20 +4,32 @@
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { AuthProvider } from "../src/context/AuthContext";
+import { useAuth } from "../src/hooks/useAuth";
 
 const localStorageMock = (() => {
   let store: Record<string, string> = {};
   return {
     getItem: vi.fn((key: string) => store[key] ?? null),
-    setItem: vi.fn((key: string, value: string) => { store[key] = value; }),
-    removeItem: vi.fn((key: string) => { delete store[key]; }),
-    clear: vi.fn(() => { store = {}; }),
+    setItem: vi.fn((key: string, value: string) => {
+      store[key] = value;
+    }),
+    removeItem: vi.fn((key: string) => {
+      delete store[key];
+    }),
+    clear: vi.fn(() => {
+      store = {};
+    }),
   };
 })();
 
 Object.defineProperty(window, "localStorage", { value: localStorageMock });
+Object.defineProperty(window, "sessionStorage", { value: localStorageMock });
 
-import { useAuth } from "../src/hooks/useAuth";
+function wrapper({ children }: { children: ReactNode }) {
+  return <AuthProvider>{children}</AuthProvider>;
+}
 
 describe("useAuth", () => {
   beforeEach(() => {
@@ -26,7 +38,7 @@ describe("useAuth", () => {
   });
 
   it("generates a new userId when none is stored", () => {
-    const { result } = renderHook(() => useAuth());
+    const { result } = renderHook(() => useAuth(), { wrapper });
 
     expect(result.current.userId).toMatch(/^u_[a-z0-9]+$/);
     expect(result.current.userId.length).toBeGreaterThan(6);
@@ -35,15 +47,14 @@ describe("useAuth", () => {
   it("returns stored userId when it exists", () => {
     localStorageMock.getItem.mockReturnValueOnce('"u_stored_id_123"');
 
-    const { result } = renderHook(() => useAuth());
+    const { result } = renderHook(() => useAuth(), { wrapper });
 
     expect(result.current.userId).toBe("u_stored_id_123");
-    // Should not overwrite stored value
     expect(localStorageMock.setItem).not.toHaveBeenCalled();
   });
 
   it("userId is stable across re-renders (referential equality)", () => {
-    const { result, rerender } = renderHook(() => useAuth());
+    const { result, rerender } = renderHook(() => useAuth(), { wrapper });
     const first = result.current.userId;
 
     rerender();
@@ -53,20 +64,19 @@ describe("useAuth", () => {
   });
 
   it("two separate calls return the same stored userId", () => {
-    const { result: a } = renderHook(() => useAuth());
-    const { result: b } = renderHook(() => useAuth());
+    const { result: a } = renderHook(() => useAuth(), { wrapper });
+    const { result: b } = renderHook(() => useAuth(), { wrapper });
 
-    // userId is persisted to localStorage on first call; second call reads it back
     expect(a.current.userId).toBe(b.current.userId);
   });
 
   it("uses key rag_chat_user_id", () => {
-    renderHook(() => useAuth());
+    renderHook(() => useAuth(), { wrapper });
     expect(localStorageMock.getItem).toHaveBeenCalledWith("rag_chat_user_id");
   });
 
   it("login stores session and marks authenticated", () => {
-    const { result } = renderHook(() => useAuth());
+    const { result } = renderHook(() => useAuth(), { wrapper });
 
     expect(result.current.isAuthenticated).toBe(false);
 
@@ -84,7 +94,7 @@ describe("useAuth", () => {
   });
 
   it("logout clears session", () => {
-    const { result } = renderHook(() => useAuth());
+    const { result } = renderHook(() => useAuth(), { wrapper });
 
     act(() => {
       result.current.login("bob", "技术部");
@@ -93,5 +103,28 @@ describe("useAuth", () => {
 
     expect(result.current.isAuthenticated).toBe(false);
     expect(localStorageMock.removeItem).toHaveBeenCalledWith("jnao_auth_session");
+  });
+
+  it("shares session state across hook instances in one provider", () => {
+    function useTwoAuth() {
+      const a = useAuth();
+      const b = useAuth();
+      return { a, b };
+    }
+
+    const { result } = renderHook(() => useTwoAuth(), { wrapper });
+
+    act(() => {
+      result.current.a.login("carol", "媒体部");
+    });
+
+    expect(result.current.b.isAuthenticated).toBe(true);
+    expect(result.current.b.username).toBe("carol");
+
+    act(() => {
+      result.current.b.logout();
+    });
+
+    expect(result.current.a.isAuthenticated).toBe(false);
   });
 });

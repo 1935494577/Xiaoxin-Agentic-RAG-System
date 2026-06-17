@@ -90,6 +90,21 @@ export function shouldEnforceDepartmentAccess(department: string): boolean {
   return Boolean(department.trim()) && isKnownDepartment(department.trim());
 }
 
+/** 登录会话部门优先于服务端 profile，避免登录选「技术部」但 profile 仍是旧部门导致权限丢失。 */
+export function resolveEffectiveDepartment(
+  authDepartment: string,
+  profileDepartment: string,
+  isAuthenticated: boolean
+): string {
+  if (isAuthenticated && authDepartment.trim()) {
+    return authDepartment.trim();
+  }
+  if (profileDepartment.trim()) {
+    return profileDepartment.trim();
+  }
+  return FULL_ACCESS_DEPARTMENT;
+}
+
 export function canAccessFeature(department: string, feature: AdminFeature): boolean {
   if (!shouldEnforceDepartmentAccess(department)) return true;
   if (hasFullDepartmentAccess(department)) return true;

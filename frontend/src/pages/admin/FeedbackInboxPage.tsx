@@ -10,9 +10,12 @@ import {
   runFeedbackTriage,
 } from "../../api/client";
 import type { FeedbackItem } from "../../api/types";
+import { FeedbackStatsPanel } from "../../components/admin/FeedbackStatsPanel";
 import { PageHeader } from "../../components/admin/PageHeader";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
+import { useAuth } from "../../hooks/useAuth";
+import { canPerformAdminAction } from "../../lib/adminRoles";
 import { toast } from "sonner";
 
 const PAGE_SIZE = 20;
@@ -69,6 +72,8 @@ function formatTime(iso: string): string {
 
 export default function FeedbackInboxPage() {
   const queryClient = useQueryClient();
+  const { role } = useAuth();
+  const canTriage = canPerformAdminAction(role, "triage");
   const [offset, setOffset] = useState(0);
   const [ratingFilter, setRatingFilter] = useState<"" | "0" | "1">("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -179,6 +184,8 @@ export default function FeedbackInboxPage() {
         description="对话点赞/点踩与可选纠错 → 规则或大模型研判分类 → 运营采纳/驳回。负反馈优先按严重度排序。"
       />
 
+      <FeedbackStatsPanel sinceDays={sinceDays} />
+
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <label className="text-sm text-text-muted">
           时间
@@ -240,10 +247,10 @@ export default function FeedbackInboxPage() {
             <option value="created_desc">时间最新</option>
           </select>
         </label>
-        <Button type="button" variant="primary" onClick={() => handleTriage(false)}>
+        <Button type="button" variant="primary" disabled={!canTriage} onClick={() => handleTriage(false)}>
           规则研判
         </Button>
-        <Button type="button" variant="default" onClick={() => handleTriage(true)}>
+        <Button type="button" variant="default" disabled={!canTriage} onClick={() => handleTriage(true)}>
           大模型研判
         </Button>
         <Button type="button" variant="default" onClick={() => refetch()}>
@@ -343,7 +350,7 @@ export default function FeedbackInboxPage() {
                 </p>
               )}
               <div className="flex flex-wrap gap-2 mt-2">
-                {item.status === "triaged" && (
+                {item.status === "triaged" && canTriage && (
                   <>
                     <Button
                       type="button"

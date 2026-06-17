@@ -16,6 +16,16 @@ vi.mock("../src/context/UserProfileContext", () => ({
   }),
 }));
 
+vi.mock("../src/hooks/useAuth", () => ({
+  useAuth: () => ({
+    isAuthenticated: true,
+    department: "运营部",
+    username: "测试用户",
+    role: "operator",
+    logout: vi.fn(),
+  }),
+}));
+
 vi.mock("../src/components/layout/SidebarUserProfile", () => ({
   SidebarUserProfile: () => <div data-testid="sidebar-profile">profile</div>,
 }));

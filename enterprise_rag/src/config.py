@@ -150,6 +150,8 @@ class Settings(BaseSettings):
     modelscope_cache_dir: str = ""
 
     rag_api_secret: str = ""
+    # 非空时 /admin/* 须用此密钥；Chat 与其它 API 仍用 RAG_API_SECRET
+    rag_admin_api_secret: str = ""
     cors_allow_origins: str = ""
     disable_openapi_docs: bool = False
     trusted_hosts: str = ""

@@ -15,7 +15,8 @@ export default function IngestPage() {
   const [perm, setPerm] = useState("internal");
   const [selectedPresets, setSelectedPresets] = useState<string[]>([]);
   const [customTags, setCustomTags] = useState("");
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const { data: ui } = useQuery({
@@ -49,26 +50,51 @@ export default function IngestPage() {
   })();
 
   const uploadMut = useMutation({
-    mutationFn: async ({
-      ingestMode,
-    }: {
-      ingestMode: string;
-    }) => {
-      if (!file) throw new Error("请先选择文件");
-      return uploadDocument(file, {
+    mutationFn: async ({ ingestMode }: { ingestMode: string }) => {
+      if (!files.length) throw new Error("请先选择文件");
+      const opts = {
         department: dept,
         permission: perm,
         mode: ingestMode,
         tags: allTags,
-      });
+      };
+      const results: { name: string; ok: boolean; message: string }[] = [];
+      setBatchProgress({ done: 0, total: files.length });
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        try {
+          const data = await uploadDocument(f, opts);
+          results.push({ name: f.name, ok: true, message: data?.message || "入库成功" });
+        } catch (e) {
+          results.push({
+            name: f.name,
+            ok: false,
+            message: e instanceof Error ? e.message : "入库失败",
+          });
+        }
+        setBatchProgress({ done: i + 1, total: files.length });
+      }
+      setBatchProgress(null);
+      return results;
     },
-    onSuccess: (data) => {
-      toast.success(data?.message || "入库成功");
-      setFile(null);
+    onSuccess: (results) => {
+      const ok = results.filter((r) => r.ok).length;
+      const fail = results.length - ok;
+      if (fail === 0) {
+        toast.success(`全部 ${ok} 个文件入库成功`);
+      } else if (ok === 0) {
+        toast.error(`全部 ${fail} 个文件入库失败`);
+      } else {
+        toast.message(`入库完成：成功 ${ok}，失败 ${fail}`);
+      }
+      setFiles([]);
       if (fileRef.current) fileRef.current.value = "";
       queryClient.invalidateQueries({ queryKey: ["uiConfig"] });
     },
-    onError: (e: Error) => toast.error(e.message || "入库失败"),
+    onError: (e: Error) => {
+      setBatchProgress(null);
+      toast.error(e.message || "入库失败");
+    },
   });
 
   const togglePreset = (tag: string) => {
@@ -87,24 +113,37 @@ export default function IngestPage() {
             : "原始未处理数据，将自动调用清洗工具链（解析 → 规范化 → 去水印 → 脱敏）后入库。"}
         </p>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-2">
           <input
             ref={fileRef}
             type="file"
+            multiple
             accept={acceptExts}
-            title="选择上传文件"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            title="选择上传文件（可多选）"
+            onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
             className="text-sm text-text file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border file:border-border file:bg-white file:text-sm file:text-text cursor-pointer"
           />
-          {file && <span className="text-sm text-text-muted">已选择：{file.name}</span>}
+          {files.length > 0 && (
+            <ul className="text-sm text-text-muted space-y-0.5">
+              {files.map((f) => (
+                <li key={`${f.name}-${f.size}`}>· {f.name}</li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <Button
           variant="primary"
-          disabled={!file || uploadMut.isPending}
+          disabled={!files.length || uploadMut.isPending}
           onClick={() => uploadMut.mutate({ ingestMode })}
         >
-          {uploadMut.isPending ? "入库中..." : "确认入库"}
+          {uploadMut.isPending
+            ? batchProgress
+              ? `入库中 ${batchProgress.done}/${batchProgress.total}…`
+              : "入库中..."
+            : files.length > 1
+              ? `确认入库（${files.length} 个文件）`
+              : "确认入库"}
         </Button>
       </div>
     );

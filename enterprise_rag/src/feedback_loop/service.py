@@ -6,8 +6,9 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
+from feedback_loop.stores import get_trace_store
 from feedback_loop.store import append_feedback_jsonl, enrich_feedback, get_feedback, insert_feedback
-from feedback_loop.trace_loader import load_trace_by_id, snapshot_from_trace
+from feedback_loop.trace_loader import snapshot_from_trace
 
 _log = logging.getLogger(__name__)
 
@@ -55,7 +56,7 @@ def enrich_feedback_from_trace(feedback_id: str) -> None:
         if not tid:
             _export_feedback_row(feedback_id)
             return
-        trace = load_trace_by_id(str(tid))
+        trace = get_trace_store().load_by_id(str(tid))
         if not trace:
             _export_feedback_row(feedback_id)
             return

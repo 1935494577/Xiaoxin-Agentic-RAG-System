@@ -2,11 +2,23 @@
 
 ## 1. 网关密钥 `RAG_API_SECRET`
 
-- 在 `.env` 中设置 **非空** `RAG_API_SECRET` 后，除白名单外所有接口需要鉴权。
+- 在 `.env` 中设置 **非空** `RAG_API_SECRET` 后，除白名单外 **Chat 与一般 API** 需要鉴权。
 - 白名单（无需密钥）：`GET /health`、`GET /`、`GET /favicon.ico`、以及 `OPTIONS` 预检。
 - 客户端任选其一请求头：
   - `X-API-Key: <与服务器相同的密钥>`
   - `Authorization: Bearer <与服务器相同的密钥>`
+
+## 1b. 管理端密钥 `RAG_ADMIN_API_SECRET`（Sprint F3）
+
+- **非空** 时，`/admin/*` 与 `/api/v1/admin/*` 须使用 **独立** Admin 密钥；Chat 与其它路径仍用 `RAG_API_SECRET`。
+- 未配置时，管理端回退为与 `RAG_API_SECRET` 相同（开发态兼容）。
+- 前端 SPA 经 Vite 代理访问 API 时，生产建议在网关层分别注入两路密钥。
+
+## 1c. Admin 角色 `X-Admin-Role`（Sprint F2）
+
+- 可选请求头：`viewer` | `operator` | `admin`（默认 `admin`）。
+- `GET /admin/*` 需 viewer+；研判/采纳/导出需 operator+；配置回滚需 admin。
+- 前端登录后按部门写入：技术部 → `admin`，其它部门 → `operator`。
 
 **Streamlit**：侧栏填写「API 访问密钥」，或设置环境变量 `STREAMLIT_RAG_API_SECRET`（推荐在部署环境中注入，避免人工输入）。
 
@@ -44,6 +56,8 @@
 ## 8. 检查清单
 
 - [ ] `.env` 中 `RAG_API_SECRET` 已设置且仅注入到可信环境  
+- [ ] 生产环境已设置 `RAG_ADMIN_API_SECRET`（与管理端分离）  
+- [ ] 前端 Admin 已启用登录守卫（RequireAuth）  
 - [ ] `CORS_ALLOW_ORIGINS` 已收窄  
 - [ ] 生产 `DISABLE_OPENAPI_DOCS=true`  
 - [ ] HTTPS 终止在 Nginx / 云负载均衡  

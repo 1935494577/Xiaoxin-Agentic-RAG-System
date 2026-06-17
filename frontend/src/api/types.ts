@@ -291,3 +291,22 @@ export type FeedbackListResponse = {
   limit: number;
   offset: number;
 };
+
+export type FeedbackStats = {
+  since_days: number;
+  tenant_id: string;
+  total: number;
+  positive: number;
+  negative: number;
+  pending_triage: number;
+  by_issue_type: Array<{ issue_type: string; count: number }>;
+  by_status: Array<{ status: string; count: number }>;
+};
+
+export type SourcePreview = {
+  parent_id: string;
+  source: string;
+  department: string;
+  permission_label: string;
+  text: string;
+};

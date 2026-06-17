@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, Response, StreamingResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -25,9 +25,11 @@ from api.prompt_config_store import public_prompt_config, save_prompt_config
 from api.chat_routing import apply_routing_tier
 from api.routing_mode import apply_hybrid_expert_memory, resolve_hybrid_expert_mode
 from api.stream_retrieval import build_stream_retrieval_state, resolve_stream_fast_mode
+from api.admin_roles import AdminRoleMiddleware
 from api.auth_middleware import APIAuthMiddleware, SecurityHeadersMiddleware
 from api.department_auth import DepartmentFeatureMiddleware
 from api.feedback_router import router as feedback_router
+from tenant.context import TenantContextMiddleware, get_tenant_id
 from api.chat_session_store import (
     append_messages,
     clear_rolling_summary,
@@ -179,6 +181,8 @@ _allow_origins = _origins if _origins else ["*"]
 _allow_creds = bool(_origins) and "*" not in _allow_origins
 
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(TenantContextMiddleware)
+app.add_middleware(AdminRoleMiddleware)
 app.add_middleware(DepartmentFeatureMiddleware)
 app.add_middleware(APIAuthMiddleware)
 app.add_middleware(
@@ -195,6 +199,7 @@ if _hosts:
 
 app.include_router(agent_tools_router)
 app.include_router(feedback_router)
+app.include_router(feedback_router, prefix="/api/v1")
 
 
 @app.get("/", include_in_schema=False)
@@ -738,29 +743,33 @@ def chat_stream(req: ChatRequest):
 
 
 @app.get("/chat/sessions", response_model=list[ChatSessionPublic])
-def chat_sessions_list(user_id: str = Query(..., min_length=1, max_length=128)):
+def chat_sessions_list(request: Request, user_id: str = Query(..., min_length=1, max_length=128)):
     """按用户 ID 列出对话会话（SQLite 持久化）。"""
-    return [ChatSessionPublic.model_validate(s) for s in list_sessions(user_id)]
+    tid = get_tenant_id(request)
+    return [ChatSessionPublic.model_validate(s) for s in list_sessions(user_id, tenant_id=tid)]
 
 
 @app.post("/chat/sessions", response_model=ChatSessionPublic)
-def chat_sessions_create(req: ChatSessionCreate):
-    row = create_session(req.user_id, title=req.title)
+def chat_sessions_create(req: ChatSessionCreate, request: Request):
+    row = create_session(req.user_id, title=req.title, tenant_id=get_tenant_id(request))
     return ChatSessionPublic.model_validate(row)
 
 
 @app.get("/chat/sessions/{session_id}/messages", response_model=list[ChatMessagePublic])
 def chat_session_messages(
+    request: Request,
     session_id: str,
     user_id: str = Query(..., min_length=1, max_length=128),
 ):
-    if not get_session(session_id, user_id):
+    tid = get_tenant_id(request)
+    if not get_session(session_id, user_id, tenant_id=tid):
         raise HTTPException(status_code=404, detail="会话不存在")
-    return [ChatMessagePublic.model_validate(m) for m in list_messages(session_id, user_id)]
+    return [ChatMessagePublic.model_validate(m) for m in list_messages(session_id, user_id, tenant_id=tid)]
 
 
 @app.post("/chat/sessions/{session_id}/messages", response_model=list[ChatMessagePublic])
-def chat_session_append(session_id: str, req: ChatMessagesAppend, background_tasks: BackgroundTasks):
+def chat_session_append(session_id: str, req: ChatMessagesAppend, background_tasks: BackgroundTasks, request: Request):
+    tid = get_tenant_id(request)
     if req.user_id.strip() != req.user_id:
         raise HTTPException(status_code=400, detail="invalid user_id")
     try:
@@ -769,6 +778,7 @@ def chat_session_append(session_id: str, req: ChatMessagesAppend, background_tas
             req.user_id,
             [m.model_dump(exclude_none=True) for m in req.messages],
             auto_title_from=req.auto_title_from,
+            tenant_id=tid,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
@@ -785,8 +795,8 @@ def chat_session_append(session_id: str, req: ChatMessagesAppend, background_tas
 
 
 @app.put("/chat/sessions/{session_id}", response_model=ChatSessionPublic)
-def chat_session_update(session_id: str, req: ChatSessionUpdate):
-    row = update_session_title(session_id, req.user_id, req.title)
+def chat_session_update(session_id: str, req: ChatSessionUpdate, request: Request):
+    row = update_session_title(session_id, req.user_id, req.title, tenant_id=get_tenant_id(request))
     if not row:
         raise HTTPException(status_code=404, detail="会话不存在")
     return ChatSessionPublic.model_validate(row)
@@ -794,10 +804,11 @@ def chat_session_update(session_id: str, req: ChatSessionUpdate):
 
 @app.delete("/chat/sessions/{session_id}")
 def chat_session_delete(
+    request: Request,
     session_id: str,
     user_id: str = Query(..., min_length=1, max_length=128),
 ):
-    if not delete_session(session_id, user_id):
+    if not delete_session(session_id, user_id, tenant_id=get_tenant_id(request)):
         raise HTTPException(status_code=404, detail="会话不存在")
     return {"ok": True}
 

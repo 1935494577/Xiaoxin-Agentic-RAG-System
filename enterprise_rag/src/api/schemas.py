@@ -147,6 +147,27 @@ class FeedbackListResponse(BaseModel):
     offset: int
 
 
+class FeedbackStatsIssueCount(BaseModel):
+    issue_type: str
+    count: int
+
+
+class FeedbackStatsStatusCount(BaseModel):
+    status: str
+    count: int
+
+
+class FeedbackStatsResponse(BaseModel):
+    since_days: int
+    tenant_id: str = "internal"
+    total: int
+    positive: int
+    negative: int
+    pending_triage: int
+    by_issue_type: list[FeedbackStatsIssueCount] = Field(default_factory=list)
+    by_status: list[FeedbackStatsStatusCount] = Field(default_factory=list)
+
+
 class FeedbackTriageRequest(BaseModel):
     limit: int = Field(default=20, ge=1, le=50)
     use_llm: bool = True

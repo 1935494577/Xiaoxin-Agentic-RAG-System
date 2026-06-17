@@ -9,6 +9,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from api.admin_roles import is_admin_api_path
 from config import settings
 
 
@@ -34,11 +35,21 @@ def _is_public_path(path: str, method: str) -> bool:
     return False
 
 
+def _secret_for_path(path: str) -> str:
+    admin_secret = (settings.rag_admin_api_secret or "").strip()
+    if is_admin_api_path(path) and admin_secret:
+        return admin_secret
+    return (settings.rag_api_secret or "").strip()
+
+
 class APIAuthMiddleware(BaseHTTPMiddleware):
-    """若配置 RAG_API_SECRET，则除白名单外需携带 X-API-Key 或 Authorization: Bearer。"""
+    """若配置 RAG_API_SECRET，则除白名单外需携带 X-API-Key 或 Authorization: Bearer。
+
+    管理端路径在配置 RAG_ADMIN_API_SECRET 时须使用独立密钥（Sprint F3）。
+    """
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        secret = (settings.rag_api_secret or "").strip()
+        secret = _secret_for_path(request.url.path)
         if not secret or _is_public_path(request.url.path, request.method):
             return await call_next(request)
         got = _client_token(request)

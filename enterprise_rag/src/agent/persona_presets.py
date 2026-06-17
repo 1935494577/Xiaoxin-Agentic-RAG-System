@@ -5,6 +5,12 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from agent.brain_evolution_analyst import (
+    PERSONA_CONTENT as BRAIN_EVOLUTION_ANALYST_PERSONA,
+    PERSONA_ID as BRAIN_EVOLUTION_ANALYST_ID,
+    SLOT_OVERRIDES as BRAIN_EVOLUTION_ANALYST_SLOTS,
+)
+
 DEFAULT_PERSONA_ID = "knowledge_consultant"
 
 PERSONA_PRESETS: dict[str, dict[str, str]] = {
@@ -73,6 +79,16 @@ PERSONA_PRESETS: dict[str, dict[str, str]] = {
             "无数据支撑时不虚构指标；需要实时数据时说明应查询的系统或报表。"
         ),
     },
+    BRAIN_EVOLUTION_ANALYST_ID: {
+        "label": "脑进化之书 · 资深分析师",
+        "description": "深度讲解《超脑进化之书》：结构化解读、举例、练习引导与跨段综合。",
+        "content": BRAIN_EVOLUTION_ANALYST_PERSONA,
+    },
+}
+
+# Optional full prompt-layer overrides when a preset is active (slot id → content).
+PERSONA_SLOT_OVERRIDES: dict[str, dict[str, str]] = {
+    BRAIN_EVOLUTION_ANALYST_ID: BRAIN_EVOLUTION_ANALYST_SLOTS,
 }
 
 
@@ -97,8 +113,14 @@ def get_persona_content(preset_id: str) -> str | None:
     return str(meta.get("content") or "").strip() or None
 
 
+def get_persona_slot_overrides(preset_id: str) -> dict[str, str]:
+    pid = (preset_id or "").strip()
+    raw = PERSONA_SLOT_OVERRIDES.get(pid) or {}
+    return dict(raw)
+
+
 def apply_active_persona(slots: list[dict[str, Any]], active_persona_id: str | None) -> list[dict[str, Any]]:
-    """Inject active preset into persona slot when composing prompts."""
+    """Inject active preset into persona slot and optional task/policy/output overrides."""
     pid = (active_persona_id or DEFAULT_PERSONA_ID).strip()
     content = get_persona_content(pid)
     if not content:
@@ -108,4 +130,11 @@ def apply_active_persona(slots: list[dict[str, Any]], active_persona_id: str | N
         if slot.get("id") == "persona" and bool(slot.get("enabled", True)):
             slot["content"] = content
             break
+    overrides = get_persona_slot_overrides(pid)
+    if not overrides:
+        return out
+    for slot in out:
+        sid = str(slot.get("id") or "")
+        if sid in overrides and bool(slot.get("enabled", True)):
+            slot["content"] = overrides[sid]
     return out

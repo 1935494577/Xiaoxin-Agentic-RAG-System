@@ -3,6 +3,8 @@ import type {
   ChatSession,
   FeedbackListResponse,
   FeedbackPayload,
+  FeedbackStats,
+  SourcePreview,
   ModelProfile,
   ModelProfilesData,
   NavConfig,
@@ -20,6 +22,7 @@ import type {
   VectorStore,
 } from "./types";
 import { AUTH_SESSION_KEY } from "../lib/constants";
+import { resolveAdminRole, type AdminRole } from "../lib/adminRoles";
 
 function readAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
@@ -27,13 +30,19 @@ function readAuthHeaders(): Record<string, string> {
     const raw =
       localStorage.getItem(AUTH_SESSION_KEY) ?? sessionStorage.getItem(AUTH_SESSION_KEY);
     if (!raw) return headers;
-    const session = JSON.parse(raw) as { username?: string; department?: string };
+    const session = JSON.parse(raw) as {
+      username?: string;
+      department?: string;
+      role?: AdminRole;
+    };
     if (session.department?.trim()) {
       headers["X-User-Department"] = encodeURIComponent(session.department.trim());
     }
     if (session.username?.trim()) {
       headers["X-User-Name"] = encodeURIComponent(session.username.trim());
     }
+    const role = session.role ?? resolveAdminRole(session.department ?? "");
+    headers["X-Admin-Role"] = role;
   } catch {
     /* ignore malformed session */
   }
@@ -48,6 +57,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     if (!headers.has(key)) headers.set(key, value);
   }
   const r = await fetch(path, { ...init, headers });
+  if (r.status === 401) {
+    localStorage.removeItem(AUTH_SESSION_KEY);
+    sessionStorage.removeItem(AUTH_SESSION_KEY);
+    const from = encodeURIComponent(window.location.pathname + window.location.search);
+    if (!window.location.pathname.startsWith("/login")) {
+      window.location.assign(`/login?from=${from}`);
+    }
+    throw new Error("Unauthorized");
+  }
   if (!r.ok) {
     const text = await r.text();
     throw new Error(text || r.statusText);
@@ -199,6 +217,18 @@ export function fetchFeedbackList(params?: {
   if (params?.limit !== undefined) q.set("limit", String(params.limit));
   const qs = q.toString();
   return request<FeedbackListResponse>(`/admin/feedback${qs ? `?${qs}` : ""}`);
+}
+
+export function fetchFeedbackStats(sinceDays = 7): Promise<FeedbackStats> {
+  return request<FeedbackStats>(`/admin/feedback/stats?since_days=${sinceDays}`);
+}
+
+export function fetchSourcePreview(
+  parentId: string,
+  userDepartment: string
+): Promise<SourcePreview> {
+  const params = new URLSearchParams({ user_department: userDepartment });
+  return request<SourcePreview>(`/sources/preview/${encodeURIComponent(parentId)}?${params}`);
 }
 
 export function runFeedbackTriage(opts?: {

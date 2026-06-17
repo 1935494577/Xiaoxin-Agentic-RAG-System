@@ -1,4 +1,4 @@
-import { MessageSquarePlus, Info } from "lucide-react";
+import { MessageSquarePlus, Info, Download } from "lucide-react";
 import { HybridToggle } from "./HybridToggle";
 
 type Props = {
@@ -7,6 +7,8 @@ type Props = {
   newTopicPending: boolean;
   onNewTopicToggle: () => void;
   streaming: boolean;
+  onExport?: () => void;
+  exportDisabled?: boolean;
 };
 
 export function ChatToolbar({
@@ -15,6 +17,8 @@ export function ChatToolbar({
   newTopicPending,
   onNewTopicToggle,
   streaming,
+  onExport,
+  exportDisabled,
 }: Props) {
   return (
     <div className="max-w-[768px] mx-auto space-y-2">
@@ -36,6 +40,21 @@ export function ChatToolbar({
           <MessageSquarePlus size={14} />
           {newTopicPending ? "下一条：新话题" : "新话题"}
         </button>
+        {onExport ? (
+          <>
+            <span className="hidden sm:inline h-4 w-px bg-border" aria-hidden />
+            <button
+              type="button"
+              disabled={streaming || exportDisabled}
+              onClick={onExport}
+              title="导出当前对话为 Markdown"
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-white px-3 py-1.5 text-xs font-medium text-text-muted hover:border-brand hover:text-brand transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Download size={14} />
+              导出
+            </button>
+          </>
+        ) : null}
       </div>
       {newTopicPending && (
         <p className="flex items-start gap-1.5 text-xs text-brand px-1">

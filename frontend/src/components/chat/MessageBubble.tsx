@@ -6,6 +6,7 @@ import { useAuth } from "../../hooks/useAuth";
 import type { ChatMessage } from "../../api/types";
 import { MarkdownContent, StreamingPlainText } from "./MarkdownContent";
 import { ChatAvatar } from "./ChatAvatar";
+import { SourcePreviewButton } from "./SourcePreviewButton";
 
 type Props = {
   message: ChatMessage;
@@ -17,6 +18,7 @@ type Props = {
   userDisplayName?: string;
   aiAvatar?: string;
   aiDisplayName?: string;
+  userDepartment?: string;
 };
 
 function stripFootnotes(text: string): string {
@@ -66,6 +68,7 @@ function MessageBubble({
   userDisplayName = "",
   aiAvatar = "",
   aiDisplayName = "",
+  userDepartment = "技术部",
 }: Props) {
   const { userId } = useAuth();
   const [feedback, setFeedback] = useState<number | null>(null);
@@ -193,7 +196,29 @@ function MessageBubble({
         {!isUser && sources.length > 0 && (
           <div className="flex flex-wrap gap-x-2.5 gap-y-1.5 mt-4 pt-3 border-t border-border-light text-xs text-text-muted">
             <span className="text-text-muted shrink-0">引用</span>
-            <span className="break-all">{sources.join(" · ")}</span>
+            {message.meta?.source_refs?.length ? (
+              message.meta.source_refs.map((ref, idx) => {
+                const label =
+                  (ref.source || "").split(/[/\\]/).pop() || ref.source || ref.parent_id || `来源${idx + 1}`;
+                if (ref.parent_id) {
+                  return (
+                    <SourcePreviewButton
+                      key={`${ref.parent_id}-${idx}`}
+                      parentId={ref.parent_id}
+                      label={label}
+                      department={userDepartment}
+                    />
+                  );
+                }
+                return (
+                  <span key={`${label}-${idx}`} className="break-all">
+                    {label}
+                  </span>
+                );
+              })
+            ) : (
+              <span className="break-all">{sources.join(" · ")}</span>
+            )}
           </div>
         )}
 

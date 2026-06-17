@@ -15,6 +15,8 @@ import { useLocalStorage } from "../hooks/useLocalStorage";
 import { useUserProfile } from "../context/UserProfileContext";
 import type { ChatMessage, ChatSession, StreamEvent, ToolTraceItem } from "../api/types";
 import { applyToolStreamEvent } from "../lib/streamTools";
+import { downloadMarkdown, messagesToMarkdown } from "../lib/exportChatMarkdown";
+import { toast } from "sonner";
 import { PanelLeftClose, PanelLeftOpen, Sparkles } from "lucide-react";
 import { ChatInput } from "../components/chat/ChatInput";
 import { ChatToolbar } from "../components/chat/ChatToolbar";
@@ -110,6 +112,18 @@ export default function ChatPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamText, streaming]);
+
+  const handleExport = useCallback(() => {
+    if (!messages.length) {
+      toast.message("当前对话为空，无法导出");
+      return;
+    }
+    const session = sessions.find((s) => s.id === sessionId);
+    const md = messagesToMarkdown(messages, session);
+    const name = (session?.title || "对话").replace(/[\\/:*?"<>|]/g, "_").slice(0, 40);
+    downloadMarkdown(`${name}.md`, md);
+    toast.success("已导出 Markdown");
+  }, [messages, sessionId, sessions]);
 
   // ---- session CRUD ----
   const handleNew = async () => {
@@ -337,6 +351,7 @@ export default function ChatPage() {
                   userDisplayName={displayName}
                   aiAvatar={aiAvatarUrl}
                   aiDisplayName={aiDisplayName}
+                  userDepartment={department}
                   streaming={streaming && i === displayMessages.length - 1 && m.role === "assistant"}
                 />
               );
@@ -353,6 +368,8 @@ export default function ChatPage() {
               newTopicPending={newTopicPending}
               onNewTopicToggle={() => setNewTopicPending((v) => !v)}
               streaming={streaming}
+              onExport={handleExport}
+              exportDisabled={!messages.length}
             />
           </div>
           <ChatInput

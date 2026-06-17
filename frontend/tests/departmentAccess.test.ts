@@ -9,6 +9,7 @@ import {
   getDefaultAdminPath,
   getVisibleNavItems,
   resolveAdminFeatureFromPath,
+  resolveEffectiveDepartment,
 } from "../src/lib/departmentAccess";
 
 describe("departmentAccess", () => {
@@ -66,5 +67,11 @@ describe("departmentAccess", () => {
   it("default admin path for restricted dept is ingest", () => {
     expect(getDefaultAdminPath("运营部")).toBe("/admin/ingest");
     expect(getDefaultAdminPath(FULL_ACCESS_DEPARTMENT)).toBe("/admin/ingest");
+  });
+
+  it("resolveEffectiveDepartment prefers auth session when logged in", () => {
+    expect(resolveEffectiveDepartment("技术部", "运营部", true)).toBe("技术部");
+    expect(resolveEffectiveDepartment("", "运营部", true)).toBe("运营部");
+    expect(resolveEffectiveDepartment("技术部", "运营部", false)).toBe("运营部");
   });
 });
