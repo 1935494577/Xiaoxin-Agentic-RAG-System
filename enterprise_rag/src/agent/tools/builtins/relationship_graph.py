@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from graph.viz import build_graph_viz, format_graph_tool_output, resolve_center_from_query
+from graph.viz import (
+    build_graph_viz,
+    format_graph_tool_output,
+    is_generic_org_graph_query,
+    resolve_center_from_query,
+    resolve_graph_source,
+)
+from graph.store import entity_exists, pick_default_org_center
 
 _context: dict[str, Any] = {}
 
@@ -24,14 +31,34 @@ def show_relationship_graph(query: str, center_name: str | None = None, max_hops
     用户问组织关系、汇报线、人物关系图时调用。
     """
     q = (query or "").strip()
-    center = (center_name or "").strip() or resolve_center_from_query(q)
-    if not center:
-        return "请提供要查看关系的人物或团队名称（center_name 或 query）。"
+    dept = str(_context.get("user_department") or "") or "技术部"
+    center = (center_name or "").strip() or resolve_center_from_query(q, department=dept)
+    if center and not entity_exists(center):
+        center = ""
+
     hops = int(max_hops) if max_hops is not None else int(_context.get("max_hops") or 3)
     hops = max(1, min(hops, 4))
-    dept = str(_context.get("user_department") or "") or "技术部"
 
-    viz = build_graph_viz(center=center, department=dept or None, max_hops=hops, limit=80)
+    if not center:
+        from graph.lazy_rebuild import try_rebuild_org_chart_from_disk
+
+        try_rebuild_org_chart_from_disk(query=q, center="", department=dept)
+        center = resolve_center_from_query(q, department=dept) or pick_default_org_center(department=dept)
+
+    if not center:
+        return "请提供要查看关系的人物或团队名称（center_name 或 query）。"
+
+    hop_limit = 4 if is_generic_org_graph_query(q) else hops
+    node_limit = 120 if is_generic_org_graph_query(q) else 80
+    doc_source = resolve_graph_source(q, center, department=dept)
+
+    viz = build_graph_viz(
+        center=center,
+        department=dept or None,
+        max_hops=hop_limit,
+        limit=node_limit,
+        source=doc_source or None,
+    )
 
     if not viz.get("edges"):
         from graph.lazy_rebuild import try_rebuild_org_chart_from_disk
@@ -39,10 +66,22 @@ def show_relationship_graph(query: str, center_name: str | None = None, max_hops
         rebuilt = try_rebuild_org_chart_from_disk(query=q, center=center, department=dept)
         if rebuilt:
             pc, ec, src = rebuilt
-            viz = build_graph_viz(center=center, department=dept or None, max_hops=hops, limit=80)
+            doc_source = src or doc_source
+            viz = build_graph_viz(
+                center=center,
+                department=dept or None,
+                max_hops=hop_limit,
+                limit=node_limit,
+                source=doc_source or None,
+            )
             if not viz.get("edges") and ec > 0:
-                # 部门过滤可能导致空图，再试不限部门
-                viz = build_graph_viz(center=center, department=None, max_hops=hops, limit=80)
+                viz = build_graph_viz(
+                    center=center,
+                    department=None,
+                    max_hops=hop_limit,
+                    limit=node_limit,
+                    source=doc_source or None,
+                )
 
     if viz.get("nodes") and not viz.get("edges"):
         return (

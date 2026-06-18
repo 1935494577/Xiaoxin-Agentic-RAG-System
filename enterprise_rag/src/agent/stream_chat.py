@@ -22,9 +22,14 @@ from agent.llm_routing import routing_llm_runtime
 from agent.pipelines.agentic import stream_agentic_answer
 from agent.pipelines.classic import run_classic_retrieval, run_graph_retrieval
 from agent.pipelines.doc_task import retrieve_for_doc_task
+from agent.pipelines.relationship_graph import stream_relationship_graph_turn
 from agent.stream_verifier import run_stream_verifier
+from agent.tools.runtime.routing import (
+    question_needs_agent_tools,
+    resolve_relationship_graph_query,
+    should_use_relationship_graph_fast_path,
+)
 from agent.tools.runtime.stream import is_tools_active, stream_general_answer
-from agent.tools.runtime.routing import question_needs_agent_tools
 from graph.prompts import graph_kb_system_extra
 from config import settings
 from evaluation.stream_langsmith import new_stream_tracer
@@ -61,6 +66,15 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
     trace = new_stream_tracer(state)
     trace_err: str | None = None
     quiet = bool(state.get("quiet_routing"))
+
+    if should_use_relationship_graph_fast_path(state["question"], history):
+        graph_state = dict(state)
+        graph_state["relationship_graph_query"] = resolve_relationship_graph_query(
+            state["question"],
+            history,
+        )
+        yield from stream_relationship_graph_turn(graph_state, trace=trace, quiet=quiet, emit=_evt)
+        return
 
     input_mode, doc_task_type = resolve_input_mode(
         input_mode=state.get("input_mode"),

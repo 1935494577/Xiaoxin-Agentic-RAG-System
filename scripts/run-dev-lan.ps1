@@ -1,13 +1,21 @@
 # Start API + Frontend for LAN access (same office network, no cloud server).
-# Your PC stays on; colleagues open http://<your-LAN-IP>:8502
+# Colleagues open http://<your-LAN-IP>:8502 — Chat uses Vite proxy to API on this PC.
 param(
     [switch]$NoReload,
-    [switch]$NoSpa
+    [switch]$NoSpa,
+    [switch]$OpenFirewall,
+    [switch]$KbOnly
 )
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "_port_utils.ps1")
+
+if ($KbOnly) {
+    $Py = Get-DevPython
+    Write-Host "Ensuring KB-only Chat settings (hybrid/general fallback off)..."
+    & $Py (Join-Path $PSScriptRoot "ensure_kb_only_ui.py")
+}
 
 $Py = Get-DevPython
 $ApiPort = $script:DevApiPort
@@ -29,6 +37,11 @@ function Get-LanIPv4 {
 }
 
 $LanIp = Get-LanIPv4
+
+if ($OpenFirewall) {
+    $fwScript = Join-Path $PSScriptRoot "open-lan-firewall.ps1"
+    & $fwScript -ChatPort $SpaPort -ChatOnly
+}
 
 Stop-DevPorts
 
@@ -82,13 +95,26 @@ if (-not $NoSpa) {
 }
 
 Write-Host ""
+Write-Host "========== Jnao Chat (LAN) ==========" -ForegroundColor Green
+if ($KbOnly) {
+    Write-Host "  Mode: 知识库专用（不启用混合专家 / 通用兜底）" -ForegroundColor Green
+} else {
+    Write-Host "  Mode: 跟随 ui_config（建议 LAN 演示用 -KbOnly）" -ForegroundColor Yellow
+}
+Write-Host ""
 Write-Host "  >>> You (this PC):     http://127.0.0.1:$SpaPort" -ForegroundColor Green
 Write-Host "  >>> Colleagues (LAN):  http://${LanIp}:$SpaPort" -ForegroundColor Cyan
-Write-Host "  >>> Admin:             http://${LanIp}:$SpaPort/admin/" -ForegroundColor Cyan
-Write-Host "  API (direct):          http://${LanIp}:$ApiPort"
 Write-Host ""
-Write-Host "If colleagues cannot connect, allow inbound TCP $SpaPort (and $ApiPort) in Windows Firewall."
-Write-Host "Keep this PC awake; stop with Ctrl+C here."
+Write-Host "  同事：浏览器打开上面 LAN 地址 → 登录选部门 → 直接提问（仅检索本机知识库）"
+Write-Host "  管理后台（请勿分享给同事）: http://${LanIp}:$SpaPort/admin/"
+Write-Host ""
+Write-Host "  API (direct): http://${LanIp}:$ApiPort"
+Write-Host ""
+if (-not $OpenFirewall) {
+    Write-Host "  若同事连不上：以管理员运行 .\scripts\open-lan-firewall.ps1" -ForegroundColor Yellow
+    Write-Host "  或：.\scripts\run-dev-lan.ps1 -OpenFirewall -KbOnly" -ForegroundColor Yellow
+}
+Write-Host "  保持本机不休眠；在此窗口 Ctrl+C 停止服务。"
 Write-Host ""
 
 $utilsPath = Join-Path $PSScriptRoot "_port_utils.ps1"

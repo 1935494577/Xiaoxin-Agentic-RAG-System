@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { GraphViz, GraphVizEdge } from "../../api/types";
 import InteractiveRelationshipGraph from "./InteractiveRelationshipGraph";
 import GraphFullscreenViewer, { GraphExpandButton } from "./GraphFullscreenViewer";
+import GraphNodeDetailPanel from "./GraphNodeDetailPanel";
 
 type Props = {
   graph: GraphViz;
@@ -29,6 +30,12 @@ function previewHeight(nodeCount: number): number {
 /** 关系图：内联预览 + 全屏放大 + 关系明细。 */
 export default function RelationshipGraphView({ graph }: Props) {
   const [fullscreen, setFullscreen] = useState(false);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+  const selectedNode = useMemo(
+    () => graph.nodes.find((n) => n.id === selectedNodeId) ?? null,
+    [graph.nodes, selectedNodeId]
+  );
 
   if (!graph.nodes.length) {
     return (
@@ -51,11 +58,23 @@ export default function RelationshipGraphView({ graph }: Props) {
           </div>
         </div>
 
-        <InteractiveRelationshipGraph
-          graph={graph}
-          height={previewHeight(graph.nodes.length)}
-          onExpandClick={openFullscreen}
-        />
+        <div className="relative">
+          <InteractiveRelationshipGraph
+            graph={graph}
+            height={previewHeight(graph.nodes.length)}
+            onExpandClick={openFullscreen}
+            selectedNodeId={selectedNodeId}
+            onNodeSelect={setSelectedNodeId}
+          />
+          {selectedNode && (
+            <GraphNodeDetailPanel
+              graph={graph}
+              node={selectedNode}
+              onClose={() => setSelectedNodeId(null)}
+              className="absolute bottom-2 left-2 right-2 sm:left-auto sm:right-2 sm:w-[min(100%,320px)] z-20"
+            />
+          )}
+        </div>
 
         {graph.edges.length > 0 && (
           <details className="group pt-1">
@@ -76,6 +95,8 @@ export default function RelationshipGraphView({ graph }: Props) {
         open={fullscreen}
         onClose={() => setFullscreen(false)}
         graph={graph}
+        selectedNodeId={selectedNodeId}
+        onNodeSelect={setSelectedNodeId}
       />
     </>
   );

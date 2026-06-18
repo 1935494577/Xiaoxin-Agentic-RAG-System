@@ -9,6 +9,8 @@ type Props = {
   chartKeySuffix?: string;
   onExpandClick?: () => void;
   scaleMax?: number;
+  selectedNodeId?: string | null;
+  onNodeSelect?: (nodeId: string | null) => void;
 };
 
 /** 可拖拽、缩放的关系力导向图（ECharts Graph，按需加载）。 */
@@ -18,6 +20,8 @@ export default function InteractiveRelationshipGraph({
   chartKeySuffix = "inline",
   onExpandClick,
   scaleMax = 2.5,
+  selectedNodeId = null,
+  onNodeSelect,
 }: Props) {
   const chartKey = useMemo(
     () => `${chartKeySuffix}-${graph.center_id}-${graph.nodes.length}-${graph.edges.length}`,
@@ -50,10 +54,17 @@ export default function InteractiveRelationshipGraph({
           </div>
         }
       >
-        <InteractiveChart graph={graph} height={height} chartKey={chartKey} scaleMax={scaleMax} />
+        <InteractiveChart
+          graph={graph}
+          height={height}
+          chartKey={chartKey}
+          scaleMax={scaleMax}
+          selectedNodeId={selectedNodeId}
+          onNodeSelect={onNodeSelect}
+        />
       </Suspense>
       <p className="absolute top-2 right-3 text-[10px] text-text-muted/70 pointer-events-none">
-        拖拽节点 · 滚轮缩放 · 按住空白处平移
+        点击节点看详情 · 拖拽 · 滚轮缩放
       </p>
     </div>
   );

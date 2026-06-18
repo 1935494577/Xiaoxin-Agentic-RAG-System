@@ -94,6 +94,8 @@ xiaoxin_RAG/
 | 平台 | 一键开发 | 仅 API | 管理后台 | 停止服务 |
 |------|----------|--------|----------|----------|
 | **Windows** | `.\scripts\run-dev.ps1` | `.\scripts\run-api.ps1` | `.\scripts\run_frontend.ps1` | `.\scripts\stop-dev.ps1` |
+| **Windows（局域网分享 Chat 页面）** | `.\scripts\run-chat-lan-kb.ps1` | — | 同端口 `/admin/` | `.\scripts\stop-dev.ps1` |
+| **Windows（局域网暴露 RAG API）** | `.\scripts\run-api-lan.ps1` | 同事直连 `:8010` | — | `.\scripts\stop-dev.ps1` |
 | **macOS / Linux** | `./scripts/run-dev.sh` | `./scripts/run-api.sh` | `./scripts/run_frontend.sh` | `./scripts/stop-dev.sh` |
 
 > macOS 不能直接运行 `.ps1`（除非单独安装 PowerShell）。克隆后先赋予执行权限：  
@@ -109,6 +111,30 @@ cp .env.example .env           # 编辑 API Key 等
 ```
 
 依赖：**Python 3.10+**、**Node.js LTS**（Chat SPA）、可选 **Homebrew** 安装 `python3` / `node`。
+
+#### 局域网同事调用 RAG API（推荐：自有客户端 / 脚本）
+
+不开放前端，仅暴露后端 FastAPI，同事请求你本机的 **8010** 端口：
+
+```powershell
+.\scripts\stop-dev.ps1
+.\scripts\run-api-lan.ps1 -KbOnly
+# 首次连不上（管理员）：.\scripts\run-api-lan.ps1 -KbOnly -OpenFirewall
+```
+
+接口说明与 curl/Python 示例见 **[docs/lan_api_chat.md](docs/lan_api_chat.md)**。核心端点：
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/health` | 连通性 |
+| POST | `/chat` | 一次性 JSON 回答 |
+| POST | `/chat/stream` | SSE 流式（与前端相同协议） |
+
+请求体需含 `message`、`user_id`、`user_department`；知识库专用请加 `"hybrid_expert_mode": false`。
+
+#### 局域网同事访问 Chat 页面（可选）
+
+若同事用浏览器而非 API，见 `run-chat-lan-kb.ps1`（端口 **8502**）。
 
 ---
 

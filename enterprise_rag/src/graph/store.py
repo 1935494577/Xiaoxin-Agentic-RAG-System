@@ -78,6 +78,51 @@ def delete_edges_by_source(source: str) -> None:
         conn.commit()
 
 
+_ORG_CHART_RELATIONS = (
+    "汇报",
+    "虚线汇报",
+    "管辖",
+    "虚线管辖",
+    "虚线指导",
+    "协作",
+)
+
+
+def list_org_chart_sources(*, department: str | None = None, limit: int = 20) -> list[str]:
+    """Sources that contain structured org-chart edges."""
+    with _lock:
+        conn = _get_conn()
+        placeholders = ",".join("?" for _ in _ORG_CHART_RELATIONS)
+        params: list[Any] = list(_ORG_CHART_RELATIONS)
+        dept_clause = ""
+        if department:
+            dept_clause = " AND (department = ? OR department = '' OR department IS NULL)"
+            params.append(department)
+        params.append(limit)
+        rows = conn.execute(
+            f"""
+            SELECT source FROM edges
+            WHERE relation IN ({placeholders}){dept_clause}
+            GROUP BY source
+            ORDER BY COUNT(*) DESC, source DESC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+    return [str(r["source"]) for r in rows]
+
+
+def supersede_other_org_charts(new_source: str, *, department: str | None = None) -> list[str]:
+    """Remove prior org-chart imports in the same department when a new doc is ingested."""
+    removed: list[str] = []
+    for src in list_org_chart_sources(department=department):
+        if src == new_source:
+            continue
+        delete_edges_by_source(src)
+        removed.append(src)
+    return removed
+
+
 def upsert_entity_profile(
     *,
     name: str,
@@ -108,7 +153,12 @@ def upsert_entity_profile(
         conn.commit()
 
 
-def get_entity_profiles(names: list[str], *, department: str | None = None) -> dict[str, dict[str, Any]]:
+def get_entity_profiles(
+    names: list[str],
+    *,
+    department: str | None = None,
+    source: str | None = None,
+) -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
     for name in names:
         n = name.strip()
@@ -121,12 +171,18 @@ def get_entity_profiles(names: list[str], *, department: str | None = None) -> d
             if department:
                 dept_clause = " AND (department = ? OR department = '' OR department IS NULL)"
                 params.append(department)
+            source_clause = ""
+            if source:
+                source_clause = " AND source = ?"
+                params.append(source)
             row = conn.execute(
                 f"""
                 SELECT name, entity_type, department, title, bio
                 FROM entities
-                WHERE (name = ? OR name LIKE ?){dept_clause}
-                ORDER BY LENGTH(name) ASC
+                WHERE (name = ? OR name LIKE ?){dept_clause}{source_clause}
+                ORDER BY CASE WHEN bio != '' AND bio IS NOT NULL THEN 0 ELSE 1 END,
+                         LENGTH(bio) DESC,
+                         LENGTH(name) ASC
                 LIMIT 1
                 """,
                 params,
@@ -146,6 +202,7 @@ def import_relationship_bundle(
     relationships: list[dict[str, Any]],
 ) -> tuple[int, int]:
     """Import structured people + edges. Returns (people_count, edge_count)."""
+    supersede_other_org_charts(source, department=department)
     delete_edges_by_source(source)
     pc = 0
     for p in people:
@@ -225,12 +282,36 @@ def expand_from_seeds(
     department: str | None = None,
     max_hops: int = 2,
     limit: int = 30,
+    source: str | None = None,
 ) -> list[dict[str, Any]]:
     """BFS expand entity names; return edge rows with parent_id for text lookup."""
-    rows = _expand_from_seeds_impl(seed_names, department=department, max_hops=max_hops, limit=limit)
+    rows = _expand_from_seeds_impl(
+        seed_names, department=department, max_hops=max_hops, limit=limit, source=source
+    )
     if rows or not department:
         return rows
-    return _expand_from_seeds_impl(seed_names, department=None, max_hops=max_hops, limit=limit)
+    return _expand_from_seeds_impl(
+        seed_names, department=None, max_hops=max_hops, limit=limit, source=source
+    )
+
+
+def primary_source_for_entity(name: str) -> str:
+    n = (name or "").strip()
+    if not n:
+        return ""
+    with _lock:
+        conn = _get_conn()
+        row = conn.execute(
+            """
+            SELECT source, COUNT(*) AS c FROM edges
+            WHERE src_name = ? OR dst_name = ?
+            GROUP BY source
+            ORDER BY c DESC
+            LIMIT 1
+            """,
+            (n, n),
+        ).fetchone()
+    return str(row["source"]) if row else ""
 
 
 def _expand_from_seeds_impl(
@@ -239,6 +320,7 @@ def _expand_from_seeds_impl(
     department: str | None,
     max_hops: int,
     limit: int,
+    source: str | None = None,
 ) -> list[dict[str, Any]]:
     seeds = [s.strip() for s in seed_names if s and s.strip()]
     if not seeds:
@@ -260,11 +342,15 @@ def _expand_from_seeds_impl(
                 if department:
                     dept_clause = " AND (department = ? OR department = '' OR department IS NULL)"
                     params.append(department)
+                source_clause = ""
+                if source:
+                    source_clause = " AND source = ?"
+                    params.append(source)
                 rows = conn.execute(
                     f"""
                     SELECT src_name, relation, dst_name, source, department, parent_id, confidence
                     FROM edges
-                    WHERE (src_name = ? OR dst_name = ?){dept_clause}
+                    WHERE (src_name = ? OR dst_name = ?){dept_clause}{source_clause}
                     ORDER BY confidence DESC
                     LIMIT ?
                     """,
@@ -318,6 +404,53 @@ def list_sources_matching(substring: str, *, limit: int = 5) -> list[str]:
             (q, limit),
         ).fetchall()
     return [str(r["source"]) for r in erows]
+
+
+def list_relationship_sources(*, limit: int = 5) -> list[str]:
+    """Sources ordered by edge count; deprioritize test/demo filenames."""
+    with _lock:
+        conn = _get_conn()
+        rows = conn.execute(
+            """
+            SELECT source FROM edges
+            GROUP BY source
+            ORDER BY COUNT(*) DESC,
+                     CASE WHEN source LIKE '%测试%' OR source LIKE '%test%' THEN 1 ELSE 0 END,
+                     source DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        out = [str(r["source"]) for r in rows]
+        if out:
+            return out
+        erows = conn.execute(
+            "SELECT DISTINCT source FROM entities LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return [str(r["source"]) for r in erows]
+
+
+def pick_default_org_center(*, department: str | None = None) -> str:
+    """Pick CEO / root from the richest relationship source."""
+    for src in list_relationship_sources(limit=5):
+        center = pick_center_for_source(src, department=department)
+        if center:
+            return center
+    return ""
+
+
+def entity_exists(name: str) -> bool:
+    n = (name or "").strip()
+    if not n:
+        return False
+    with _lock:
+        conn = _get_conn()
+        row = conn.execute(
+            "SELECT 1 FROM entities WHERE name = ? LIMIT 1",
+            (n,),
+        ).fetchone()
+    return row is not None
 
 
 def pick_center_for_source(source: str, *, department: str | None = None) -> str:

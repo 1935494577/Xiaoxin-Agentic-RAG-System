@@ -7,6 +7,7 @@ from pathlib import Path
 
 from config import settings
 from graph.org_chart import import_org_chart_if_detected
+from graph.viz import is_generic_org_graph_query
 
 
 def _candidate_files() -> list[Path]:
@@ -48,18 +49,19 @@ def try_rebuild_org_chart_from_disk(
     Returns (people_count, edge_count, source) or None.
     """
     tokens = _query_tokens(query, center)
+    generic = is_generic_org_graph_query(query or "")
     best: tuple[int, int, str] | None = None
 
     for path in _candidate_files():
         name = path.name
-        if tokens and not any(t in name for t in tokens):
+        if not generic and tokens and not any(t in name for t in tokens):
             if "关系" not in name and "组织" not in name:
                 continue
         try:
             text = path.read_text(encoding="utf-8")
         except OSError:
             continue
-        if center and center not in text:
+        if center and not generic and center not in text:
             if not re.search(r"关系图|组织|汇报|管辖", query or ""):
                 continue
         counts = import_org_chart_if_detected(text, source=name, department=department)

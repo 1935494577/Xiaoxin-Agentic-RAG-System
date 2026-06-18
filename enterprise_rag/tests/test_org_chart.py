@@ -37,6 +37,32 @@ def test_parse_org_chart_text():
         assert any(r["from_name"] == "刘洋" and r["to_name"] == "李浩然" for r in rels)
 
 
+def test_parse_org_chart_extracts_bio():
+    from graph.org_chart import parse_org_chart_text
+
+    text = """
+林峰（CTO）：向 CEO 汇报；管辖 研发部、架构组；负责技术路线与架构决策
+王鑫（COO）：向 CEO 汇报；负责日常运营与交付管理
+张振国（CEO）：管辖 CTO、CFO、COO；负责公司战略与投融资
+"""
+    people, _rels = parse_org_chart_text(text)
+    by_name = {p["name"]: p for p in people}
+    assert by_name["林峰"]["bio"] == "负责技术路线与架构决策"
+    assert by_name["王鑫"]["bio"] == "负责日常运营与交付管理"
+    assert by_name["张振国"]["bio"] == "负责公司战略与投融资"
+
+
+def test_import_org_chart_persists_bio_in_viz(graph_db):
+    from graph.org_chart import import_org_chart_if_detected
+    from graph.viz import build_graph_viz
+
+    text = "张振国（CEO）：管辖 CTO\n林峰（CTO）：向 CEO 汇报；负责技术路线与架构决策"
+    import_org_chart_if_detected(text, source="bio_test.txt", department="技术部")
+    viz = build_graph_viz(center="林峰", department="技术部", max_hops=2, limit=20)
+    node = next(n for n in viz["nodes"] if n["label"] == "林峰")
+    assert "技术路线" in node["bio"]
+
+
 def test_import_org_chart_if_detected(graph_db):
     from graph.org_chart import import_org_chart_if_detected
     from graph.viz import build_graph_viz

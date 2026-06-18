@@ -1183,7 +1183,17 @@ def _ingest_text(
     dedup_stats = plan.stats
 
     persist_chunks_jsonl(parents, children)
+    dept = department or settings.default_department
     if not children:
+        graph_msg = ""
+        try:
+            from graph.org_chart import org_chart_ingest_message
+
+            graph_msg = org_chart_ingest_message(text, source=source, department=dept)
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).warning("org chart import failed for %s", source, exc_info=True)
         finalize_document_registry(
             source, text, parent_count=len(parents), child_count=0
         )
@@ -1192,7 +1202,7 @@ def _ingest_text(
                 chunks_indexed=0,
                 source=source,
                 tags=doc_tags,
-                message=dedup_stats.message,
+                message=(dedup_stats.message or "") + graph_msg,
                 dedup=IngestDedupStatsResponse(
                     content_hash=dedup_stats.content_hash or None,
                     skipped_parents=dedup_stats.skipped_parents,
@@ -1228,14 +1238,11 @@ def _ingest_text(
     ]
     index_parent_documents(parent_docs)
 
-    dept = department or settings.default_department
     graph_msg = ""
     try:
-        from graph.org_chart import import_org_chart_if_detected
+        from graph.org_chart import org_chart_ingest_message
 
-        org_counts = import_org_chart_if_detected(text, source=source, department=dept)
-        if org_counts:
-            graph_msg = f"；已解析组织关系图 {org_counts[1]} 条"
+        graph_msg = org_chart_ingest_message(text, source=source, department=dept)
     except Exception:
         import logging
 

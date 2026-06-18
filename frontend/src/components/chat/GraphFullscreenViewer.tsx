@@ -2,18 +2,31 @@ import { useEffect, useMemo } from "react";
 import { Maximize2, X } from "lucide-react";
 import type { GraphViz } from "../../api/types";
 import InteractiveRelationshipGraph from "./InteractiveRelationshipGraph";
+import GraphNodeDetailPanel from "./GraphNodeDetailPanel";
 
 type Props = {
   open: boolean;
   onClose: () => void;
   graph: GraphViz;
+  selectedNodeId?: string | null;
+  onNodeSelect?: (nodeId: string | null) => void;
 };
 
 /** 全屏关系图查看：更大画布 + 滚轮缩放。 */
-export default function GraphFullscreenViewer({ open, onClose, graph }: Props) {
+export default function GraphFullscreenViewer({
+  open,
+  onClose,
+  graph,
+  selectedNodeId = null,
+  onNodeSelect,
+}: Props) {
   const centerLabel = useMemo(
     () => graph.nodes.find((n) => n.id === graph.center_id)?.label || "关系图",
     [graph]
+  );
+  const selectedNode = useMemo(
+    () => graph.nodes.find((n) => n.id === selectedNodeId) ?? null,
+    [graph.nodes, selectedNodeId]
   );
 
   useEffect(() => {
@@ -59,17 +72,27 @@ export default function GraphFullscreenViewer({ open, onClose, graph }: Props) {
           </button>
         </header>
 
-        <div className="flex-1 min-h-0 p-3 sm:p-4 overflow-hidden">
+        <div className="flex-1 min-h-0 p-3 sm:p-4 overflow-hidden relative">
           <InteractiveRelationshipGraph
             graph={graph}
             height={chartHeight}
             chartKeySuffix="fullscreen"
             scaleMax={5}
+            selectedNodeId={selectedNodeId}
+            onNodeSelect={onNodeSelect}
           />
+          {selectedNode && onNodeSelect && (
+            <GraphNodeDetailPanel
+              graph={graph}
+              node={selectedNode}
+              onClose={() => onNodeSelect(null)}
+              className="absolute bottom-4 right-4 w-[min(100%,360px)] z-20"
+            />
+          )}
         </div>
 
         <footer className="px-4 py-2 border-t border-border text-[11px] text-text-muted text-center shrink-0">
-          拖拽节点调整布局 · 滚轮缩放 · 按住空白处平移 · 按 Esc 关闭
+          点击节点看详情 · 拖拽布局 · 滚轮缩放 · Esc 关闭
         </footer>
       </div>
     </div>
