@@ -99,6 +99,12 @@ def run_tool_loop(
                 trace.append({"tool": name, "arguments": args, "output": output, "ok": ok})
                 if emit:
                     emit({"type": "tool_result", "tool": name, "output": output, "ok": ok})
+                    if ok and name == "show_relationship_graph":
+                        from graph.viz import parse_graph_viz_from_tool_output
+
+                        viz = parse_graph_viz_from_tool_output(output)
+                        if viz:
+                            emit({"type": "graph_viz", "graph": viz})
                 working.append(
                     {
                         "role": "tool",

@@ -4,6 +4,8 @@ import { HybridToggle } from "./HybridToggle";
 type Props = {
   hybridExpert: boolean;
   onHybridChange: (on: boolean) => void;
+  hybridUsesServerDefault?: boolean;
+  department?: string;
   newTopicPending: boolean;
   onNewTopicToggle: () => void;
   streaming: boolean;
@@ -14,6 +16,8 @@ type Props = {
 export function ChatToolbar({
   hybridExpert,
   onHybridChange,
+  hybridUsesServerDefault = true,
+  department,
   newTopicPending,
   onNewTopicToggle,
   streaming,
@@ -24,6 +28,17 @@ export function ChatToolbar({
     <div className="max-w-[768px] mx-auto space-y-2">
       <div className="flex items-center gap-3 flex-wrap rounded-xl border border-border bg-surface-muted/50 px-3 py-2">
         <HybridToggle enabled={hybridExpert} onChange={onHybridChange} disabled={streaming} />
+        {department ? (
+          <span
+            className="text-[11px] text-text-muted px-2 py-0.5 rounded-full bg-white border border-border"
+            title="检索权限按登录部门过滤；与同事不一致时回答可能不同"
+          >
+            部门：{department}
+          </span>
+        ) : null}
+        {!hybridUsesServerDefault ? (
+          <span className="text-[11px] text-brand">本页已临时切换混合专家</span>
+        ) : null}
         <span className="hidden sm:inline h-4 w-px bg-border" aria-hidden />
         <button
           type="button"

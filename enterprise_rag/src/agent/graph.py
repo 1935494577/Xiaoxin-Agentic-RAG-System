@@ -69,6 +69,7 @@ def run_agent(
     topic_shift: bool = False,
     skip_retrieval_rewrite: bool = False,
     rolling_summary: str | None = None,
+    rag_architecture: str = "classic",
 ) -> dict[str, Any]:
     app = get_agent_app()
     init: AgentState = {
@@ -83,6 +84,7 @@ def run_agent(
         "topic_shift": bool(topic_shift),
         "skip_retrieval_rewrite": bool(skip_retrieval_rewrite),
         "rolling_summary": (rolling_summary or "").strip(),
+        "rag_architecture": rag_architecture,
     }
     if llm_runtime:
         init.update(llm_runtime)

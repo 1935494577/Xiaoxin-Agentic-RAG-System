@@ -64,7 +64,9 @@ from api.schemas import (
     ChatSessionCreate,
     ChatSessionPublic,
     ChatSessionUpdate,
+    EphemeralDocPublic,
     IngestDedupStatsResponse,
+    IngestedSourcePublic,
     IngestResponse,
     IngestTextRequest,
     ModelProfileCreate,
@@ -75,6 +77,8 @@ from api.schemas import (
     ModelConnectionStatus,
     PreviewRequest,
     PreviewResponse,
+    RelationshipImportRequest,
+    RelationshipImportResponse,
     ProcessingToolsPublic,
     ProcessingToolsUpdate,
     PromptConfigPublic,
@@ -129,6 +133,7 @@ from indexing.ingest_dedup import (
     finalize_document_registry,
     prepare_source_reingest,
 )
+from indexing.document_registry import get_document_registry
 from api.user_profile_store import (
     get_profile as get_user_profile,
     init_user_profile_db,
@@ -601,6 +606,59 @@ def source_preview(
     )
 
 
+@app.get("/sources/list", response_model=list[IngestedSourcePublic])
+def sources_list():
+    """List ingested document sources for Chat source filter."""
+    reg = get_document_registry()
+    rows: list[IngestedSourcePublic] = []
+    seen: set[str] = set()
+    for h, doc in (reg._docs or {}).items():  # noqa: SLF001 — admin/list helper
+        src = str(doc.get("canonical_source") or "")
+        if not src or src in seen:
+            continue
+        seen.add(src)
+        rows.append(
+            IngestedSourcePublic(
+                source=src,
+                parent_count=int(doc.get("parent_count") or 0),
+                child_count=int(doc.get("child_count") or 0),
+            )
+        )
+    return sorted(rows, key=lambda r: r.source)
+
+
+@app.post("/chat/documents/upload", response_model=EphemeralDocPublic)
+async def chat_document_upload(
+    file: UploadFile = File(...),
+    session_id: str = Query(..., min_length=1, max_length=64),
+    user_id: str = Query(..., min_length=1, max_length=128),
+    department: str | None = Query(default=None, max_length=64),
+):
+    """Upload a temporary document for session-scoped Q&A (Classic RAG)."""
+    from chat_ephemeral.store import save_ephemeral_document
+    from document_loader.cleaner import clean_file
+
+    safe_name = _safe_upload_filename(file.filename)
+    raw = await file.read()
+    tmp = settings.data_processed_dir / f"ephemeral_{session_id}_{safe_name}"
+    tmp.parent.mkdir(parents=True, exist_ok=True)
+    tmp.write_bytes(raw)
+    try:
+        text = clean_file(tmp, use_presidio=settings.use_presidio)
+    finally:
+        tmp.unlink(missing_ok=True)
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="文件内容为空")
+    doc = save_ephemeral_document(
+        session_id=session_id,
+        user_id=user_id,
+        filename=safe_name,
+        text=text,
+        department=department,
+    )
+    return EphemeralDocPublic(doc_id=doc.doc_id, filename=doc.filename, session_id=doc.session_id)
+
+
 def _resolve_request_history(req: ChatRequest, mem: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     mem = mem or chat_memory_settings()
     req_hist = [h.model_dump() for h in req.history] if req.history else None
@@ -640,6 +698,32 @@ def _prepare_chat_turn(
     )
 
 
+def _resolve_chat_architecture(req: ChatRequest, mem: dict[str, Any], runtime: dict[str, Any]) -> tuple[str, str, str | None]:
+    from agent.architecture_router import resolve_rag_architecture
+    from agent.input_modes import resolve_input_mode
+    from agent.llm_routing import routing_llm_runtime
+
+    input_mode, doc_task_type = resolve_input_mode(
+        input_mode=req.input_mode,
+        doc_task_type=req.doc_task_type,
+        temp_document_id=req.temp_document_id,
+        message=req.message,
+    )
+    llm_rt = routing_llm_runtime(runtime)
+    arch, _ = resolve_rag_architecture(
+        req.message,
+        department=req.user_department,
+        input_mode=input_mode,
+        doc_task_type=doc_task_type,
+        scenario_tags=req.scenario_tags,
+        request_override=req.rag_architecture or mem.get("default_rag_architecture") or "auto",
+        router_enabled=bool(mem.get("rag_arch_router_enabled", True)),
+        llm_fallback=bool(mem.get("rag_arch_llm_fallback", False)),
+        llm_runtime=llm_rt,
+    )
+    return arch, input_mode, doc_task_type
+
+
 @app.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest, background_tasks: BackgroundTasks):
     """步骤7：对话入口。"""
@@ -652,6 +736,7 @@ def chat(req: ChatRequest, background_tasks: BackgroundTasks):
     mem = chat_memory_settings()
     mem = apply_routing_tier(mem)
     turn = _prepare_chat_turn(req, mem, runtime)
+    rag_arch, _, _ = _resolve_chat_architecture(req, mem, runtime)
     out = run_agent(
         question=req.message,
         user_id=req.user_id,
@@ -664,6 +749,7 @@ def chat(req: ChatRequest, background_tasks: BackgroundTasks):
         topic_shift=turn.topic_shift,
         skip_retrieval_rewrite=turn.skip_retrieval_rewrite,
         rolling_summary=turn.rolling_summary,
+        rag_architecture=rag_arch,
     )
     if req.session_id and bool(mem.get("rolling_summary_enabled", True)):
         background_tasks.add_task(
@@ -719,6 +805,11 @@ def chat_stream(req: ChatRequest):
         "llm_max_tokens_answer": req.max_tokens_answer,
         "llm_temperature_verifier": req.verifier_temperature,
         "llm_max_tokens_verifier": req.max_tokens_verifier,
+        "rag_architecture": req.rag_architecture,
+        "input_mode": req.input_mode,
+        "doc_task_type": req.doc_task_type,
+        "temp_document_id": req.temp_document_id,
+        "scenario_tags": req.scenario_tags,
     }
     state.update(
         build_stream_retrieval_state(
@@ -856,6 +947,55 @@ def ingest_text(req: IngestTextRequest):
     )
 
 
+@app.post("/ingest/relationships", response_model=RelationshipImportResponse)
+def ingest_relationships(req: RelationshipImportRequest):
+    """结构化人物画像与关系入库，供对话中关系图工具展示。"""
+    from graph.store import import_relationship_bundle
+
+    people = [p.model_dump() for p in req.people]
+    relationships = [r.model_dump() for r in req.relationships]
+    pc, ec = import_relationship_bundle(
+        source=req.source,
+        department=req.department,
+        people=people,
+        relationships=relationships,
+    )
+    return RelationshipImportResponse(
+        source=req.source,
+        people_imported=pc,
+        relationships_imported=ec,
+        message=f"已导入 {pc} 个人物、{ec} 条关系",
+    )
+
+
+@app.post("/ingest/rebuild-relationships", response_model=RelationshipImportResponse)
+def rebuild_relationships_from_source(
+    source: str = Query(..., max_length=256, description="已入库文件的 source 名"),
+    department: str | None = Query(default=None, max_length=64),
+):
+    """从已入库的 processed 文本重新解析组织关系图（无需重新向量入库）。"""
+    from graph.org_chart import import_org_chart_if_detected
+
+    processed = settings.data_processed_dir / Path(source).name
+    if not processed.is_file():
+        raise HTTPException(status_code=404, detail="未找到已入库文件，请先上传或检查 source 名称")
+    text = processed.read_text(encoding="utf-8")
+    dept = department or settings.default_department
+    counts = import_org_chart_if_detected(text, source=source, department=dept)
+    if not counts:
+        raise HTTPException(
+            status_code=422,
+            detail="未能从该文件解析组织关系（需包含「姓名（职位）：向…汇报 / 管辖…」格式）",
+        )
+    pc, ec = counts
+    return RelationshipImportResponse(
+        source=source,
+        people_imported=pc,
+        relationships_imported=ec,
+        message=f"已从 {source} 解析并导入 {pc} 个人物、{ec} 条关系",
+    )
+
+
 @app.post("/ingest/path", response_model=IngestResponse)
 def ingest_path(
     relative_path: str = Query(..., description="Path under enterprise_rag/data/raw"),
@@ -943,6 +1083,7 @@ async def ingest_upload(
         department=department,
         permission_label=permission_label,
         tags=normalize_ingest_tags(tags),
+        llm_runtime=llm_runtime,
     )
     result.ingest_mode = mode
     result.tools_used = proc.tools_used
@@ -953,12 +1094,51 @@ async def ingest_upload(
     return result
 
 
+def _schedule_graph_extraction(
+    parent_docs: list[dict[str, Any]],
+    source: str,
+    department: str,
+    llm_runtime: dict[str, Any] | None = None,
+) -> None:
+    """Background graph extraction after ingest (non-blocking)."""
+    import logging
+    import threading
+
+    from api.ui_config_store import load_ui_config
+
+    if not load_ui_config().get("graph_extraction_enabled", True):
+        return
+
+    log = logging.getLogger(__name__)
+    parents = [
+        {
+            "parent_id": p.get("parent_id"),
+            "text": p.get("content") or p.get("text"),
+            **p,
+        }
+        for p in parent_docs
+    ]
+
+    def _run() -> None:
+        try:
+            from graph.extract import extract_graph_from_parents
+
+            extract_graph_from_parents(
+                parents, source=source, department=department, llm_runtime=llm_runtime
+            )
+        except Exception:
+            log.warning("graph extraction failed for %s", source, exc_info=True)
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
 def _ingest_text(
     text: str,
     source: str,
     department: str | None = None,
     permission_label: str | None = None,
     tags: list[str] | None = None,
+    llm_runtime: dict[str, Any] | None = None,
 ) -> IngestResponse:
     doc_tags = normalize_ingest_tags(tags)
     settings.data_processed_dir.mkdir(parents=True, exist_ok=True)
@@ -1047,6 +1227,21 @@ def _ingest_text(
         for p in parents
     ]
     index_parent_documents(parent_docs)
+
+    dept = department or settings.default_department
+    graph_msg = ""
+    try:
+        from graph.org_chart import import_org_chart_if_detected
+
+        org_counts = import_org_chart_if_detected(text, source=source, department=dept)
+        if org_counts:
+            graph_msg = f"；已解析组织关系图 {org_counts[1]} 条"
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).warning("org chart import failed for %s", source, exc_info=True)
+
+    _schedule_graph_extraction(parent_docs, source, dept, llm_runtime=llm_runtime)
     doc_rec = finalize_document_registry(
         source, text, parent_count=len(parents), child_count=len(children)
     )
@@ -1056,7 +1251,7 @@ def _ingest_text(
             chunks_indexed=len(children),
             source=source,
             tags=doc_tags,
-            message=dedup_stats.message,
+            message=(dedup_stats.message or "") + graph_msg,
             dedup=IngestDedupStatsResponse(
                 content_hash=dedup_stats.content_hash or None,
                 skipped_parents=dedup_stats.skipped_parents,

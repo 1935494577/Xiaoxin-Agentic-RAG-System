@@ -5,6 +5,8 @@ import type {
   FeedbackPayload,
   FeedbackStats,
   SourcePreview,
+  EphemeralDoc,
+  IngestedSource,
   ModelProfile,
   ModelProfilesData,
   NavConfig,
@@ -138,17 +140,53 @@ export function appendMessages(
   });
 }
 
+export function listIngestedSources(): Promise<IngestedSource[]> {
+  return request<IngestedSource[]>("/sources/list");
+}
+
+export async function uploadChatDocument(
+  file: File,
+  sessionId: string,
+  userId: string,
+  department?: string
+): Promise<EphemeralDoc> {
+  const form = new FormData();
+  form.append("file", file);
+  const q = new URLSearchParams({
+    session_id: sessionId,
+    user_id: userId,
+  });
+  if (department?.trim()) q.set("department", department.trim());
+  const authHeaders = readAuthHeaders();
+  const headers = new Headers(authHeaders);
+  const r = await fetch(`/chat/documents/upload?${q}`, { method: "POST", body: form, headers });
+  if (!r.ok) {
+    const text = await r.text();
+    throw new Error(text || r.statusText);
+  }
+  return r.json() as Promise<EphemeralDoc>;
+}
+
 // ===== SSE Streaming =====
 export async function streamChat(
   payload: StreamPayload,
   onEvent: (evt: StreamEvent) => void,
   signal?: AbortSignal
 ): Promise<void> {
+  const authHeaders = readAuthHeaders();
+  const headers = new Headers({
+    "Content-Type": "application/json",
+    Accept: "text/event-stream",
+  });
+  for (const [key, value] of Object.entries(authHeaders)) {
+    headers.set(key, value);
+  }
   const r = await fetch("/chat/stream", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(payload),
     signal,
+    cache: "no-store",
   });
   if (!r.ok) {
     const text = await r.text();

@@ -39,4 +39,10 @@ def chat_memory_settings() -> dict[str, Any]:
         "kb_llm_judge_always": bool(ui.get("kb_llm_judge_always", False)),
         "agent_reasoning_mode": str(ui.get("agent_reasoning_mode") or "react"),
         "prompt_slots": load_prompt_slots(),
+        "rag_arch_router_enabled": bool(ui.get("rag_arch_router_enabled", True)),
+        "rag_arch_llm_fallback": bool(ui.get("rag_arch_llm_fallback", False)),
+        "default_rag_architecture": str(ui.get("default_rag_architecture") or "auto"),
+        "graph_extraction_enabled": bool(ui.get("graph_extraction_enabled", True)),
+        "agentic_max_turns": int(ui.get("agentic_max_turns") or 6),
+        "agentic_max_kb_searches": int(ui.get("agentic_max_kb_searches") or 4),
     }

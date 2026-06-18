@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     processing_tools_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "processing_tools.json"
     agent_tools_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "agent_tools.json"
     doc_registry_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "doc_registry.json"
+    graph_db_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "knowledge_graph.db"
+    ephemeral_docs_dir: Path = _REPO_ROOT / "enterprise_rag" / "data" / "ephemeral"
+    graph_extraction_max_parents: int = 20
 
     # Tavily 联网搜索（Chat 对话工具 web_search）
     tavily_api_key: str = ""

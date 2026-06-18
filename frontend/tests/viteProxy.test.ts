@@ -8,5 +8,7 @@ describe("vite dev proxy", () => {
     expect(src).not.toMatch(/["']\/chat["']\s*:\s*\{/);
     expect(src).toContain('"/chat/sessions"');
     expect(src).toContain('"/chat/stream"');
+    expect(src).toContain("sseProxy");
+    expect(src).toContain("x-accel-buffering");
   });
 });

@@ -51,6 +51,7 @@ class AgentState(TypedDict, total=False):
     topic_shift: bool
     skip_retrieval_rewrite: bool
     rolling_summary: str
+    rag_architecture: str
 
 
 def router_node(state: AgentState) -> dict[str, Any]:
@@ -63,6 +64,12 @@ def router_node(state: AgentState) -> dict[str, Any]:
 
 
 def retrieve_node(state: AgentState) -> dict[str, Any]:
+    arch = str(state.get("rag_architecture") or "classic").strip().lower()
+    if arch == "graph":
+        from agent.pipelines.classic import run_graph_retrieval
+
+        return run_graph_retrieval(state)  # type: ignore[arg-type]
+
     from retrieval.hybrid_searcher import hybrid_search
 
     dept = state.get("user_department") or settings.default_department

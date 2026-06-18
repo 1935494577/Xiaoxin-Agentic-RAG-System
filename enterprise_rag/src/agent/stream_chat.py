@@ -11,16 +11,21 @@ from agent.answer_prompts import (
     kb_system_prompt,
     kb_user_content,
 )
+from agent.architecture_router import resolve_rag_architecture
+from agent.input_modes import resolve_input_mode
 from agent.kb_judge import answer_indicates_kb_miss, should_attach_citations
 from agent.answer_router import resolve_answer_mode
 from agent.context_format import build_source_citations
 from agent.conversation_context import build_llm_messages
 from agent.conversation.rolling_summary import augment_system_with_summary
 from agent.llm_routing import routing_llm_runtime
-from agent.nodes import retrieve_node
+from agent.pipelines.agentic import stream_agentic_answer
+from agent.pipelines.classic import run_classic_retrieval, run_graph_retrieval
+from agent.pipelines.doc_task import retrieve_for_doc_task
 from agent.stream_verifier import run_stream_verifier
 from agent.tools.runtime.stream import is_tools_active, stream_general_answer
 from agent.tools.runtime.routing import question_needs_agent_tools
+from graph.prompts import graph_kb_system_extra
 from config import settings
 from evaluation.stream_langsmith import new_stream_tracer
 from openai import OpenAI
@@ -57,56 +62,126 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
     trace_err: str | None = None
     quiet = bool(state.get("quiet_routing"))
 
+    input_mode, doc_task_type = resolve_input_mode(
+        input_mode=state.get("input_mode"),
+        doc_task_type=state.get("doc_task_type"),
+        temp_document_id=state.get("temp_document_id"),
+        message=state["question"],
+    )
+    router_enabled = bool(mem.get("rag_arch_router_enabled", True))
+    llm_fallback = bool(mem.get("rag_arch_llm_fallback", False))
+    req_override = state.get("rag_architecture") or mem.get("default_rag_architecture") or "auto"
+    rag_arch, route_meta = resolve_rag_architecture(
+        state["question"],
+        department=str(state.get("user_department") or ""),
+        input_mode=input_mode,
+        doc_task_type=doc_task_type,
+        scenario_tags=state.get("scenario_tags"),
+        request_override=req_override,
+        router_enabled=router_enabled,
+        llm_fallback=llm_fallback,
+        llm_runtime=llm_runtime,
+    )
+    state["rag_architecture"] = rag_arch
+    state["input_mode"] = input_mode
+    state["doc_task_type"] = doc_task_type
+
     if not quiet:
+        yield _evt(
+            {
+                "type": "status",
+                "phase": "routing",
+                "rag_architecture": rag_arch,
+                "input_mode": input_mode,
+                "doc_task_type": doc_task_type,
+                "route_meta": route_meta,
+                "trace_id": trace.trace_id,
+            }
+        )
+
+    use_agentic_pipeline = rag_arch == "agentic"
+
+    if not quiet and not use_agentic_pipeline:
         yield _evt({"type": "status", "phase": "retrieving", "trace_id": trace.trace_id})
 
-    try:
+    ctx: list[str] = []
+    meta: list[dict[str, Any]] = []
+    rewritten = state.get("retrieval_query") or state["question"]
+
+    if use_agentic_pipeline:
         with trace.span(
             "retrieve",
-            "retriever",
-            inputs={"question": state["question"], "stream_fast_mode": fast},
-        ) as span_out:
-            try:
-                retrieved = retrieve_node(init_state)  # type: ignore[arg-type]
-            except Exception as e:
-                trace_err = str(e)
-                raise
-            ctx = retrieved.get("contexts") or []
-            meta = retrieved.get("contexts_meta") or []
-            rewritten = retrieved.get("rewritten_query") or state["question"]
-            span_out.update(
-                {
-                    "rewritten_query": rewritten,
-                    "context_count": len(ctx),
-                    "contexts_meta": meta[:5],
-                }
-            )
-    except Exception as e:
-        trace.finish({}, error=str(e))
-        yield _evt({"type": "error", "message": str(e), "trace_id": trace.trace_id})
-        return
+            "agentic",
+            inputs={"question": state["question"], "rag_architecture": rag_arch},
+        ):
+            pass
+    else:
+        try:
+            with trace.span(
+                "retrieve",
+                "retriever",
+                inputs={
+                    "question": state["question"],
+                    "stream_fast_mode": fast,
+                    "rag_architecture": rag_arch,
+                    "input_mode": input_mode,
+                },
+            ) as span_out:
+                try:
+                    if input_mode in ("doc_task", "temp_document"):
+                        retrieved = retrieve_for_doc_task(
+                            init_state,
+                            input_mode=input_mode,
+                            doc_task_type=doc_task_type,
+                        )
+                    elif rag_arch == "graph":
+                        retrieved = run_graph_retrieval(init_state)
+                    else:
+                        retrieved = run_classic_retrieval(init_state)
+                except Exception as e:
+                    trace_err = str(e)
+                    raise
+                ctx = retrieved.get("contexts") or []
+                meta = retrieved.get("contexts_meta") or []
+                rewritten = retrieved.get("rewritten_query") or state["question"]
+                span_out.update(
+                    {
+                        "rewritten_query": rewritten,
+                        "context_count": len(ctx),
+                        "contexts_meta": meta[:5],
+                        "rag_architecture": rag_arch,
+                    }
+                )
+        except Exception as e:
+            trace.finish({}, error=str(e))
+            yield _evt({"type": "error", "message": str(e), "trace_id": trace.trace_id})
+            return
 
     with trace.span(
         "route",
         "chain",
-        inputs={"question": state["question"], "context_count": len(ctx)},
+        inputs={"question": state["question"], "context_count": len(ctx), "rag_architecture": rag_arch},
     ) as route_out:
-        answer_mode = resolve_answer_mode(
-            ctx,
-            meta,
-            question=state["question"],
-            kb_min_score=float(mem.get("kb_min_score", 0.55)),
-            kb_min_rerank_score=float(mem.get("kb_min_rerank_score", 0.0)),
-            kb_llm_judge=bool(mem.get("kb_llm_judge", True)),
-            general_fallback_enabled=bool(mem.get("general_fallback_enabled", True)),
-            topic_shift=bool(state.get("topic_shift")),
-            kb_llm_judge_always=bool(mem.get("kb_llm_judge_always", False)),
-            llm_runtime=llm_runtime,
-        )
-        if is_tools_active() and question_needs_agent_tools(state["question"]):
+        if use_agentic_pipeline:
             answer_mode = "general"
-            route_out["tool_route_override"] = True
+        else:
+            answer_mode = resolve_answer_mode(
+                ctx,
+                meta,
+                question=state["question"],
+                kb_min_score=float(mem.get("kb_min_score", 0.55)),
+                kb_min_rerank_score=float(mem.get("kb_min_rerank_score", 0.0)),
+                kb_llm_judge=bool(mem.get("kb_llm_judge", True)),
+                general_fallback_enabled=bool(mem.get("general_fallback_enabled", True)),
+                topic_shift=bool(state.get("topic_shift")),
+                kb_llm_judge_always=bool(mem.get("kb_llm_judge_always", False)),
+                llm_runtime=llm_runtime,
+            )
+            if is_tools_active() and question_needs_agent_tools(state["question"]):
+                answer_mode = "general"
+                route_out["tool_route_override"] = True
         route_out["answer_mode"] = answer_mode
+        route_out["rag_architecture"] = rag_arch
 
     api_key = (state.get("llm_api_key") or "").strip() or settings.openai_api_key
     api_base = (state.get("llm_api_base") or "").strip() or settings.openai_api_base
@@ -121,6 +196,7 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
                 "type": "status",
                 "phase": "generating",
                 "answer_mode": answer_mode,
+                "rag_architecture": rag_arch,
                 "trace_id": trace.trace_id,
             }
         )
@@ -148,9 +224,37 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
             },
         ) as draft_out:
             tool_trace: list[dict[str, Any]] = []
-            if answer_mode == "kb":
+            if use_agentic_pipeline:
+                max_turns = int(mem.get("agentic_max_turns") or 6)
+                try:
+                    yield from stream_agentic_answer(
+                        state=state,
+                        client=client,
+                        model=model,
+                        temperature=temp,
+                        max_tokens=mt,
+                        history=history,
+                        prompt_slots=prompt_slots,
+                        parts=parts,
+                        tool_trace_out=tool_trace,
+                        emit_event=_evt,
+                        replay_tokens=_replay_tokens,
+                        emit_tokens=True,
+                        max_turns=max_turns,
+                    )
+                except Exception as e:
+                    trace_err = str(e)
+                    raise
+                agentic_hits = list(state.get("_agentic_hits") or [])
+                if agentic_hits:
+                    meta = agentic_hits
+                    ctx = [str(h.get("text") or "") for h in agentic_hits]
+                    answer_mode = "kb"
+            elif answer_mode == "kb":
+                graph_extra = graph_kb_system_extra() if rag_arch == "graph" else ""
                 system = augment_system_with_summary(
-                    kb_system_prompt(fast=fast, slots=prompt_slots, reasoning_mode=reasoning_mode),
+                    kb_system_prompt(fast=fast, slots=prompt_slots, reasoning_mode=reasoning_mode)
+                    + (f"\n\n{graph_extra}" if graph_extra else ""),
                     rolling_summary,
                 )
                 user_content = kb_user_content(ctx, state["question"])
@@ -305,6 +409,8 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
     sources, source_refs = build_source_citations(meta, **cite_kw) if attach else ([], [])
     full_answer = answer
 
+    graph_viz_payload = _graph_viz_from_tool_trace(state.get("_tool_trace") or [])
+
     done_payload = {
         "type": "done",
         "answer": full_answer,
@@ -312,9 +418,12 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
         "sources": sources if verified else [],
         "source_refs": source_refs if verified else [],
         "answer_mode": answer_mode,
+        "rag_architecture": rag_arch,
+        "input_mode": input_mode,
         "verified": verified,
         "trace_id": trace.trace_id,
         "tool_trace": state.get("_tool_trace") or [],
+        "graph_viz": graph_viz_payload,
         "topic_shift": bool(state.get("topic_shift")),
         "retrieval_query": state.get("retrieval_query") or state["question"],
         "routing_model": state.get("routing_model"),
@@ -324,6 +433,7 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
     trace.finish(
         {
             "answer_mode": answer_mode,
+            "rag_architecture": rag_arch,
             "verified": verified,
             "source_count": len(sources),
             "kb_fallback": fell_back_to_general,
@@ -383,6 +493,19 @@ def _stream_tokens(
 def _replay_tokens(parts: list[str]) -> Iterator[str]:
     for delta in parts:
         yield _evt({"type": "token", "content": delta})
+
+
+def _graph_viz_from_tool_trace(tool_trace: list[dict[str, Any]]) -> dict[str, Any] | None:
+    from graph.viz import parse_graph_viz_from_tool_output
+
+    for row in reversed(tool_trace):
+        if str(row.get("tool") or "") != "show_relationship_graph":
+            continue
+        out = str(row.get("output") or "")
+        viz = parse_graph_viz_from_tool_output(out)
+        if viz:
+            return viz
+    return None
 
 
 def _evt(payload: dict[str, Any]) -> str:

@@ -48,6 +48,12 @@ DEFAULT_UI_CONFIG: dict[str, Any] = {
     "kb_llm_judge_always": False,
     "agent_reasoning_mode": "react",
     "ingest_tag_presets": ["制度", "培训", "产品", "FAQ", "内部"],
+    "rag_arch_router_enabled": True,
+    "rag_arch_llm_fallback": False,
+    "default_rag_architecture": "auto",
+    "graph_extraction_enabled": True,
+    "agentic_max_turns": 6,
+    "agentic_max_kb_searches": 4,
 }
 
 SUPPORTED_UPLOAD_EXTENSIONS = ("txt", "md", "pdf", "docx", "html")

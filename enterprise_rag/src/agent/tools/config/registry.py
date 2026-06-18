@@ -58,6 +58,53 @@ TOOL_DEFINITIONS: dict[str, dict[str, Any]] = {
             "required": ["query"],
         },
     },
+    "kb_search": {
+        "label": "知识库检索",
+        "description": (
+            "检索企业内部知识库。调查、分析、多步推理类问题必须先调用此工具。"
+            "每次检索应使用不同或更精确的 query。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "检索问句或关键词",
+                },
+                "top_k": {
+                    "type": "integer",
+                    "description": "返回条数，1-10，默认 5",
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    "show_relationship_graph": {
+        "label": "关系图展示",
+        "description": (
+            "查询并生成人物/组织关系图，在对话中可视化展示。"
+            "当用户询问上下级、汇报关系、工作关系、组织关系图、谁和谁有关时必调用。"
+            "可展示人物画像摘要（职位、部门）。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "用户原问题或关系查询描述",
+                },
+                "center_name": {
+                    "type": "string",
+                    "description": "关系图中心人物或实体名称，如：张三",
+                },
+                "max_hops": {
+                    "type": "integer",
+                    "description": "关系扩展跳数 1-3，默认 2",
+                },
+            },
+            "required": ["query"],
+        },
+    },
 }
 
 DEFAULT_CONFIG: dict[str, Any] = {

@@ -13,11 +13,11 @@
 | **嵌入与重排** | FlagEmbedding / sentence-transformers、CrossEncoder 重排；可选 **ModelScope** 下载到 `enterprise_rag/data/models` |
 | **检索** | 查询改写、向量 + BM25 混合检索、重排；**L3 检索去重**（文本相似度 + MMR）；**检索结果缓存**（Redis 或进程内 TTL 回退） |
 | **入库去重** | **L1** 文档 content_hash 别名跳过重复嵌入；**L2** 父块 simhash 近似去重（`indexing/ingest_dedup`） |
-| **对话智能体** | LangGraph / SSE；混合专家；**检索置信度路由**（rerank confident/gray/weak，引用仅 confident）；**多轮上下文** L1–L4（见 `docs/conversation-context.md`）；**routing_model** 预处理与生成模型分离；**chat_routing_tier**（fast/balanced/quality）；`reset_context` / 滚动摘要；**角色人设预设**（劲脑脑科教育 7 套，管理端选项卡切换）；**思考模式**（直接回答 / ReAct / Plan-and-Execute，可配置是否走工具循环） |
-| **HTTP API** | FastAPI：健康检查、入库、检索调试、流式对话、会话记忆、可插拔提示词、模型/向量库/UI 配置（`api`） |
+| **对话智能体** | LangGraph / SSE；**多架构 RAG 调度**（Classic / Graph / Agentic 自动或手动路由，见 `docs/rag_architecture_router.md`）；混合专家；**检索置信度路由**（rerank confident/gray/weak，引用仅 confident）；**多轮上下文** L1–L4（见 `docs/conversation-context.md`）；**routing_model** 预处理与生成模型分离；**chat_routing_tier**（fast/balanced/quality）；`reset_context` / 滚动摘要；**角色人设预设**（劲脑脑科教育 7 套，管理端选项卡切换）；**思考模式**（直接回答 / ReAct / Plan-and-Execute，可配置是否走工具循环）；**kb_search** 工具（Agentic 多轮检索）；**人物关系图**（`show_relationship_graph` 工具 + SQLite 知识图谱 + 组织关系文档自动解析入库） |
+| **HTTP API** | FastAPI：健康检查、入库、**关系入库**（`POST /ingest/relationships`、组织关系补建 `rebuild-relationships`）、检索调试、流式对话、会话记忆、可插拔提示词、模型/向量库/UI 配置（`api`） |
 | **安全** | 可选 `RAG_API_SECRET`、**`RAG_ADMIN_API_SECRET`**（管理 API 独立密钥）、CORS、可信 Host、安全头；**Admin 角色**（`X-Admin-Role`：viewer/operator/admin）；**前端 RequireAuth**（未登录跳转 `/login`）；注入检测；**部门 + 可见范围 ACL** |
 | **租户预留（Sprint E）** | `X-Tenant-ID` 中间件（默认 `internal`）；`/api/v1/*` 路由别名；`FeedbackStore` / `TraceStore` 抽象 |
-| **前端** | **Jnao Chat** React SPA（8502）：**欢迎页**（液态玻璃登录按钮）、**登录页**（思→德→学→行→赢 漫画 Q 版 mascot 互动）、流式对话、**当前角色人设**工具栏展示、**用户资料**（昵称/头像）、**新话题** / 混合专家；**部门功能门控**（管理端导航按部门可见性）；**React 管理后台**（`/admin`）：入库、工具、**提示词**（人设选项卡 + 思考模式）、模型、**对话设置**、**评测报告**、Trace 等 |
+| **前端** | **Jnao Chat** React SPA（8502）：流式对话；**多架构 RAG 由服务端按提问自动路由**（用户无感知）；**Chat 内交互关系图**（ECharts 力导向网、拖拽/缩放、全屏放大）；**用户资料**（昵称/头像）、**新话题** / 混合专家；**部门功能门控**（管理端导航按部门可见性）；**React 管理后台**（`/admin`）：入库、工具、**提示词**、模型、**对话设置**（含 RAG 路由开关）、**评测报告**、Trace 等 |
 | **用户反馈（Sprint A–D）** | 👍👎 反馈 → Triage → 采纳 → **Actuator**（golden / 重入库工单 / 配置补丁）→ **golden 评测**（RAGAS 或 naive 回退，对比上一份 Δ）；`config_revisions` 可回滚；Admin **评测报告**页；Feedback 故障时 **Chat 热路径不受影响** |
 | **评测与追踪** | 可选 LangSmith / 本地 JSONL trace；`scripts/eval_ingest_dedup.py` 检索去重 A/B 评估 |
 | **容器与脚本** | `Dockerfile`、`docker-compose.yml`、`Makefile`；Windows `.ps1` 与 **macOS/Linux `.sh`** 一键启停；**生产启动** `run-api-prod.ps1` / `run-api-prod.sh`；**缓存清理** `clean-cache.ps1` |
@@ -31,7 +31,7 @@
 - **`.env`**（从 `.env.example` 复制后本地填写密钥与模型服务地址）
 - **内部规划稿**：`PROJECT_PLAN.md`、`plan1.md`、`project.txt`
 - **虚拟环境与缓存**：`.venv/`、`__pycache__/`、`.pytest_cache/` 等
-- **运行期索引与数据产物**：`enterprise_rag/data/milvus_lite/`、`bm25_index.json`、`numpy_vectors.json`、`chunks_*.jsonl`、`processed/**`（除 `.gitkeep`）、`feedback.jsonl`、`golden.jsonl` 等
+- **运行期索引与数据产物**：`enterprise_rag/data/milvus_lite/`、`bm25_index.json`、`numpy_vectors.json`、`chunks_*.jsonl`、`processed/**`（除 `.gitkeep`）、`feedback.jsonl`、`golden.jsonl`、`knowledge_graph.db` 等
 - **本地调试/审计产物**：`debug-*.log`、`.codegraph/`、`enterprise_rag/data/_audit_tmp/`、`enterprise_rag/data/_bench_tmp/`
 
 **嵌入与重排模型**默认下载到 `enterprise_rag/data/models/`，**不纳入 Git**（由 `.gitignore` 排除）；克隆仓库后请在本地按上文「模型获取」方式自行下载权重。

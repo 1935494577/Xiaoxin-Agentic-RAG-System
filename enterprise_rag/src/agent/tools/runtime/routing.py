@@ -10,10 +10,16 @@ _REALTIME_RE = re.compile(
     r"实时|最新|新闻|放假|节假日|调休|天气怎么样|天气如何",
     re.IGNORECASE,
 )
+_RELATION_GRAPH_RE = re.compile(
+    r"关系图|组织图|架构图|汇报关系|上下级|人物关系|谁向谁|组织关系",
+    re.IGNORECASE,
+)
 
 
 def question_needs_agent_tools(question: str) -> bool:
     q = (question or "").strip()
     if not q:
         return False
+    if _RELATION_GRAPH_RE.search(q):
+        return True
     return bool(_REALTIME_RE.search(q))
