@@ -37,7 +37,9 @@ export function ChatToolbar({
           </span>
         ) : null}
         {!hybridUsesServerDefault ? (
-          <span className="text-[11px] text-brand">本页已临时切换混合专家</span>
+          <span className="text-[11px] text-brand">
+            {hybridExpert ? "本页已临时开启混合专家" : "本页已临时关闭混合专家（仅知识库）"}
+          </span>
         ) : null}
         <span className="hidden sm:inline h-4 w-px bg-border" aria-hidden />
         <button

@@ -49,6 +49,7 @@ def test_hybrid_search_returns_cached_result_without_retrieval(recording_cache):
         pre_rerank_k=None,
         retrieval_dedup=True,
         query_rewrite_enabled=False,
+        query_normalize_enabled=True,
     )
     parents = [{"parent_id": "p1", "text": "年假制度", "hybrid_score": 0.95}]
     recording_cache.store[key] = ("年假 申请", parents)

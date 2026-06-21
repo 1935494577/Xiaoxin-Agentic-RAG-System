@@ -8,6 +8,7 @@ from agent.conversation.history_prune import prune_history_by_embedding
 from agent.conversation.memory import trim_history, truncate_assistant_for_history
 from agent.conversation.query_condense import condense_turn
 from agent.conversation.types import CondenseResult, TurnContext
+from retrieval.query_normalize import build_search_variants, normalize_query
 
 
 def _mem_bool(mem: dict[str, Any], key: str, default: bool) -> bool:
@@ -103,9 +104,10 @@ def prepare_turn(
 
     history_for_llm = _soften_history(history_for_llm, assistant_max_chars=assistant_cap)
 
+    retrieval_q = cond.standalone_query or msg
     return TurnContext(
         message=msg,
-        retrieval_query=cond.standalone_query or msg,
+        retrieval_query=retrieval_q,
         topic_shift=bool(reset_context or cond.topic_shift),
         history_for_llm=history_for_llm,
         condense_used_llm=cond.used_llm,
@@ -118,5 +120,7 @@ def prepare_turn(
             "history_turns_out": len(history_for_llm),
             "reset_context": bool(reset_context),
             "has_rolling_summary": bool(effective_summary),
+            "retrieval_query_normalized": normalize_query(retrieval_q),
+            "search_variants": build_search_variants(retrieval_q),
         },
     )

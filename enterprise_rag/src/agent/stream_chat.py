@@ -13,7 +13,7 @@ from agent.answer_prompts import (
 )
 from agent.architecture_router import resolve_rag_architecture
 from agent.input_modes import resolve_input_mode
-from agent.kb_judge import answer_indicates_kb_miss, should_attach_citations
+from agent.kb_judge import answer_indicates_kb_miss, should_attach_citations, should_use_knowledge_base
 from agent.answer_router import resolve_answer_mode
 from agent.context_format import build_source_citations
 from agent.conversation_context import build_llm_messages
@@ -177,7 +177,7 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
         inputs={"question": state["question"], "context_count": len(ctx), "rag_architecture": rag_arch},
     ) as route_out:
         if use_agentic_pipeline:
-            answer_mode = "general"
+            answer_mode = "general" if hybrid else "kb"
         else:
             answer_mode = resolve_answer_mode(
                 ctx,
@@ -191,11 +191,29 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
                 kb_llm_judge_always=bool(mem.get("kb_llm_judge_always", False)),
                 llm_runtime=llm_runtime,
             )
-            if is_tools_active() and question_needs_agent_tools(state["question"]):
+            if hybrid and is_tools_active() and question_needs_agent_tools(state["question"]):
                 answer_mode = "general"
                 route_out["tool_route_override"] = True
         route_out["answer_mode"] = answer_mode
         route_out["rag_architecture"] = rag_arch
+
+    strict_kb_only = not hybrid
+    if strict_kb_only and not use_agentic_pipeline and answer_mode == "kb":
+        kb_ok = should_use_knowledge_base(
+            state["question"],
+            ctx,
+            meta,
+            kb_min_score=float(mem.get("kb_min_score", 0.55)),
+            kb_min_rerank_score=float(mem.get("kb_min_rerank_score", 0.0)),
+            kb_llm_judge=bool(mem.get("kb_llm_judge", True)),
+            llm_runtime=llm_runtime,
+            topic_shift=bool(state.get("topic_shift")),
+            kb_llm_judge_always=bool(mem.get("kb_llm_judge_always", False)),
+        )
+        if not kb_ok:
+            ctx = []
+            meta = []
+            state["_kb_strict_miss"] = True
 
     api_key = (state.get("llm_api_key") or "").strip() or settings.openai_api_key
     api_base = (state.get("llm_api_base") or "").strip() or settings.openai_api_base
@@ -267,7 +285,12 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
             elif answer_mode == "kb":
                 graph_extra = graph_kb_system_extra() if rag_arch == "graph" else ""
                 system = augment_system_with_summary(
-                    kb_system_prompt(fast=fast, slots=prompt_slots, reasoning_mode=reasoning_mode)
+                    kb_system_prompt(
+                        fast=fast,
+                        slots=prompt_slots,
+                        reasoning_mode=reasoning_mode,
+                        strict_kb_only=strict_kb_only,
+                    )
                     + (f"\n\n{graph_extra}" if graph_extra else ""),
                     rolling_summary,
                 )

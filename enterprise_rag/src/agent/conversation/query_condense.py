@@ -114,7 +114,8 @@ def condense_turn(
     system = (
         "你是多轮对话查询理解助手。根据最近对话，输出一行 JSON，不要其它文字。\n"
         '格式：{"standalone_query":"...","topic_shift":true|false}\n'
-        "standalone_query：将当前用户消息改写为可独立用于搜索的完整问句（消解指代）。\n"
+        "standalone_query：将当前用户消息改写为可独立用于搜索的完整问句（消解指代；"
+        "理解各年龄段口语、常见错别字与语音误识，转为书面检索用语，保留原意）。\n"
         "topic_shift：若用户明显切换到与上文无关的新话题则为 true，否则 false。"
     )
     user = f"最近对话：\n{hist_text}\n\n当前用户消息：{msg}"
