@@ -196,7 +196,9 @@ def hybrid_search(
 
     rk = retrieve_top_k if retrieve_top_k is not None else settings.retrieve_top_k
     if settings.query_normalize_enabled:
-        variants = build_search_variants(
+        from retrieval.query_understanding import build_search_variants_enriched
+
+        variants = build_search_variants_enriched(
             rewritten,
             max_variants=int(settings.query_normalize_max_variants),
         )

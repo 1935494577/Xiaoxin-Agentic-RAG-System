@@ -115,4 +115,9 @@ describe("ChatInput", () => {
     render(React.createElement(ChatInput, { ...baseProps, placeholder: "自定义占位符" }));
     expect(screen.getByPlaceholderText("自定义占位符")).toBeTruthy();
   });
+
+  it("renders voice input button", () => {
+    render(React.createElement(ChatInput, baseProps));
+    expect(screen.getByRole("button", { name: "语音输入" })).toBeTruthy();
+  });
 });

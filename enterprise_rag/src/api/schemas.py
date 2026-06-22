@@ -605,6 +605,10 @@ class EphemeralDocPublic(BaseModel):
     session_id: str
 
 
+class TranscribeResponse(BaseModel):
+    text: str = Field(default="", max_length=8000)
+
+
 class IngestedSourcePublic(BaseModel):
     source: str
     parent_count: int = 0

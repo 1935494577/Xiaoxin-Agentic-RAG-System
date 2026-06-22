@@ -167,6 +167,30 @@ export async function uploadChatDocument(
   return r.json() as Promise<EphemeralDoc>;
 }
 
+export async function transcribeAudio(
+  blob: Blob,
+  language = "zh"
+): Promise<{ text: string }> {
+  const ext = blob.type.includes("mp4")
+    ? "m4a"
+    : blob.type.includes("mpeg")
+      ? "mp3"
+      : blob.type.includes("wav")
+        ? "wav"
+        : "webm";
+  const form = new FormData();
+  form.append("file", blob, `speech.${ext}`);
+  const authHeaders = readAuthHeaders();
+  const headers = new Headers(authHeaders);
+  const q = new URLSearchParams({ language });
+  const r = await fetch(`/chat/transcribe?${q}`, { method: "POST", body: form, headers });
+  if (!r.ok) {
+    const text = await r.text();
+    throw new Error(text || r.statusText);
+  }
+  return r.json() as Promise<{ text: string }>;
+}
+
 // ===== SSE Streaming =====
 export async function streamChat(
   payload: StreamPayload,

@@ -21,7 +21,7 @@ DEFAULT_TRIAGE_PROMPT = """你是企业 RAG 反馈分析员。根据用户反馈
   "severity": "low|medium|high",
   "human_review_required": true,
   "summary": "一句话原因",
-  "suggested_actions": [{"action": "add_to_golden|propose_reingest|apply_config_patch", "confidence": 0.0-1.0, "detail": "可选说明"}]
+  "suggested_actions": [{"action": "add_to_golden|propose_reingest|apply_config_patch|propose_query_alias|apply_query_alias", "confidence": 0.0-1.0, "detail": "可选说明", "patch": {"canonical": "规范词", "aliases": ["错字形式"]}}]
 }
 规则：rating=1 通常 issue_type=ok；context_count=0 优先 retrieval_miss；用户纠错提到过期/废止倾向 stale_doc；答案与资料明显矛盾为 hallucination。"""
 
@@ -54,6 +54,8 @@ def _normalize_severity(raw: str | None) -> str:
 
 
 def rule_based_triage(row: dict[str, Any]) -> dict[str, Any]:
+    from retrieval.query_aliases_store import alias_patch_from_question
+
     rating = int(row.get("rating") or 0)
     if rating >= 1:
         return {
@@ -73,19 +75,31 @@ def rule_based_triage(row: dict[str, Any]) -> dict[str, Any]:
         ctx_n = None
 
     if ctx_n == 0:
+        actions = [
+            {"action": "propose_reingest", "confidence": 0.55, "detail": "确认知识库是否覆盖该主题"},
+            {
+                "action": "apply_config_patch",
+                "confidence": 0.6,
+                "detail": "采纳后自动略降 kb_min_score 以扩大召回",
+            },
+        ]
+        patch = alias_patch_from_question(str(row.get("question") or ""))
+        if patch:
+            actions.insert(
+                0,
+                {
+                    "action": "apply_query_alias",
+                    "confidence": 0.72,
+                    "patch": patch,
+                    "detail": "问题含疑似错字/别名，合并到 query_aliases",
+                },
+            )
         return {
             "issue_type": "retrieval_miss",
             "severity": "high",
             "human_review_required": True,
             "summary": "检索上下文为空，可能漏召回或阈值过高",
-            "suggested_actions": [
-                {"action": "propose_reingest", "confidence": 0.55, "detail": "确认知识库是否覆盖该主题"},
-                {
-                    "action": "apply_config_patch",
-                    "confidence": 0.6,
-                    "detail": "采纳后自动略降 kb_min_score 以扩大召回",
-                },
-            ],
+            "suggested_actions": actions,
             "mode": "rule",
         }
 
@@ -114,14 +128,26 @@ def rule_based_triage(row: dict[str, Any]) -> dict[str, Any]:
         }
 
     if ctx_n is not None and ctx_n > 0:
+        actions = [
+            {"action": "apply_config_patch", "confidence": 0.4, "detail": "人工审阅提示词与 verifier 配置"}
+        ]
+        patch = alias_patch_from_question(str(row.get("question") or ""))
+        if patch:
+            actions.insert(
+                0,
+                {
+                    "action": "propose_query_alias",
+                    "confidence": 0.68,
+                    "patch": patch,
+                    "detail": "问题可能含领域错字，建议补 query alias",
+                },
+            )
         return {
             "issue_type": "prompt",
             "severity": "medium",
             "human_review_required": True,
             "summary": "有检索上下文但用户仍不满意，可能生成或提示词问题",
-            "suggested_actions": [
-                {"action": "apply_config_patch", "confidence": 0.4, "detail": "人工审阅提示词与 verifier 配置"}
-            ],
+            "suggested_actions": actions,
             "mode": "rule",
         }
 

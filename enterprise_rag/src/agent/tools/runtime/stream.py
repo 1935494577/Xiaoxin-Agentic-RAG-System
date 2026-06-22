@@ -44,6 +44,8 @@ def stream_general_answer(
     mem = state.get("memory_config") or {}
     reasoning_mode = str(state.get("agent_reasoning_mode") or mem.get("agent_reasoning_mode") or "react")
     use_tools = should_use_tool_loop(reasoning_mode, tools_enabled=bool(enabled) and is_tools_active())
+    if bool(state.get("_realtime_tool_turn")):
+        use_tools = bool(enabled) and is_tools_active()
 
     system = general_system_prompt(slots=prompt_slots, reasoning_mode=reasoning_mode)
     if use_tools:

@@ -3,6 +3,7 @@ import type { ProxyOptions } from "vite";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { shouldServeAdminSpa } from "./vite/adminProxyBypass";
 
 const apiTarget = process.env.VITE_API_PROXY || "http://127.0.0.1:8010";
 const devHost = process.env.VITE_DEV_HOST || "127.0.0.1";
@@ -32,6 +33,14 @@ function sseProxy(): ProxyOptions {
   });
 }
 
+function adminApiProxy(): ProxyOptions {
+  return apiProxy({
+    bypass(req) {
+      if (shouldServeAdminSpa(req)) return false;
+    },
+  });
+}
+
 export default defineConfig({
   plugins: [tailwindcss(), react()],
   resolve: {
@@ -47,6 +56,7 @@ export default defineConfig({
       "/chat/sessions": apiProxy(),
       "/chat/documents": apiProxy({ timeout: 300_000 }),
       "/chat/stream": sseProxy(),
+      "/chat/transcribe": apiProxy({ timeout: 120_000 }),
       "/users": apiProxy(),
       "/config": apiProxy(),
       "/feedback": apiProxy(),
@@ -55,7 +65,7 @@ export default defineConfig({
       "/debug": apiProxy(),
       "/sources": apiProxy(),
       "/retrieve": apiProxy(),
-      "/admin": apiProxy(),
+      "/admin": adminApiProxy(),
     },
   },
   build: {

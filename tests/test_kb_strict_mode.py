@@ -29,3 +29,13 @@ def test_strict_kb_prompt_forbids_general_supplement():
     text = kb_system_prompt(strict_kb_only=True)
     assert "仅知识库模式" in text
     assert "禁止用通用常识" in text
+
+
+def test_kb_only_still_routes_noisy_voice_weather_to_tools():
+    from retrieval.query_normalize import clean_oral_user_message
+    from agent.tools.runtime.routing import question_needs_realtime_tools
+
+    noisy = "电脑。今日萧山区天气。我就。我就。"
+    cleaned = clean_oral_user_message(noisy)
+    assert question_needs_realtime_tools(cleaned)
+    assert cleaned == "今日萧山区天气"

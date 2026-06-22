@@ -46,6 +46,7 @@ from agent.conversation.rolling_summary import refresh_rolling_summary_for_sessi
 from api.connection_cache import get_cached_status, invalidate_status, set_cached_status
 from api.llm_resolve import resolve_llm_runtime
 from api.llm_test import test_llm_connection
+from api.speech_transcribe import ALLOWED_CONTENT_TYPES, transcribe_audio_bytes
 from api.model_profile_store import (
     delete_profile,
     effective_api_base,
@@ -89,6 +90,7 @@ from api.schemas import (
     RetrieveResponse,
     SourcePreviewResponse,
     SourceRef,
+    TranscribeResponse,
     VectorStoreCreate,
     VectorStoreListResponse,
     VectorStorePublic,
@@ -659,6 +661,21 @@ async def chat_document_upload(
     return EphemeralDocPublic(doc_id=doc.doc_id, filename=doc.filename, session_id=doc.session_id)
 
 
+@app.post("/chat/transcribe", response_model=TranscribeResponse)
+async def chat_transcribe(
+    file: UploadFile = File(...),
+    language: str = Query(default="zh", max_length=16),
+):
+    """Upload short audio and transcribe via Whisper (fallback when browser speech API unavailable)."""
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    if content_type and content_type not in ALLOWED_CONTENT_TYPES:
+        raise HTTPException(status_code=400, detail="不支持的音频格式")
+    raw = await file.read()
+    safe_name = _safe_upload_filename(file.filename) or "speech.webm"
+    text = transcribe_audio_bytes(raw, safe_name, language=language)
+    return TranscribeResponse(text=text)
+
+
 def _resolve_request_history(req: ChatRequest, mem: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     mem = mem or chat_memory_settings()
     req_hist = [h.model_dump() for h in req.history] if req.history else None
@@ -738,7 +755,7 @@ def chat(req: ChatRequest, background_tasks: BackgroundTasks):
     turn = _prepare_chat_turn(req, mem, runtime)
     rag_arch, _, _ = _resolve_chat_architecture(req, mem, runtime)
     out = run_agent(
-        question=req.message,
+        question=turn.message,
         user_id=req.user_id,
         user_department=req.user_department,
         allowed_sources=req.allowed_sources,
@@ -785,7 +802,7 @@ def chat_stream(req: ChatRequest):
     turn = _prepare_chat_turn(req, mem, runtime)
     history = turn.history_for_llm
     state: dict[str, Any] = {
-        "question": req.message,
+        "question": turn.message,
         "user_id": req.user_id,
         "user_department": req.user_department,
         "allowed_sources": req.allowed_sources,
@@ -1249,6 +1266,14 @@ def _ingest_text(
         logging.getLogger(__name__).warning("org chart import failed for %s", source, exc_info=True)
 
     _schedule_graph_extraction(parent_docs, source, dept, llm_runtime=llm_runtime)
+    try:
+        from retrieval.domain_lexicon import ingest_document_terms
+
+        ingest_document_terms(text, source=source)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).warning("domain lexicon ingest failed for %s", source, exc_info=True)
     doc_rec = finalize_document_registry(
         source, text, parent_count=len(parents), child_count=len(children)
     )

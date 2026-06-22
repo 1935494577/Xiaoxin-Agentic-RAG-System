@@ -241,6 +241,8 @@ def should_use_knowledge_base(
         topic_shift=topic_shift,
     )
     if confidence == "weak":
+        if kb_llm_judge and llm_runtime and bool(getattr(settings, "kb_weak_zone_llm_judge", True)):
+            return _llm_kb_relevant(question, contexts, llm_runtime)
         return False
     if confidence == "confident":
         if kb_llm_judge_always and kb_llm_judge and llm_runtime:

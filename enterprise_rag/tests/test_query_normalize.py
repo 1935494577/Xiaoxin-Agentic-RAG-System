@@ -9,9 +9,11 @@ import pytest
 
 from retrieval.query_normalize import (
     build_search_variants,
+    clean_oral_user_message,
     expand_bm25_query,
     invalidate_aliases_cache,
     load_query_aliases,
+    looks_like_voice_transcript,
     normalize_query,
 )
 
@@ -25,6 +27,13 @@ def _reset_alias_cache():
 
 def test_normalize_oral_and_whitespace():
     assert normalize_query("  咋整超脑阅读啊？  ") == "怎么超脑阅读?"
+
+
+def test_clean_oral_user_message_from_voice_noise():
+    noisy = "电脑。今日萧山区天气。我就。我就。"
+    assert looks_like_voice_transcript(noisy)
+    assert clean_oral_user_message(noisy) == "今日萧山区天气"
+    assert clean_oral_user_message("今日萧山区天气") == "今日萧山区天气"
 
 
 def test_normalize_fullwidth():

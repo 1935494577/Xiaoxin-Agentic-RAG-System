@@ -33,6 +33,20 @@ _DEFAULT_ALIASES: dict[str, list[str]] = {
 }
 
 _MULTI_SPACE = re.compile(r"\s+")
+_VOICE_SEGMENT_SPLIT = re.compile(r"[。！？!?；;]+")
+_VOICE_FILLER_SEG = re.compile(
+    r"^(?:嗯+|啊+|呃+|那个+|这个+|我就+|电脑+|帮我+|请+|然后+|就是+)$",
+    re.IGNORECASE,
+)
+_VOICE_FILLER_PREFIX = re.compile(
+    r"^(?:嗯+|啊+|呃+|那个+|这个+|我就+|电脑+|帮我+|请+|然后+|就是+)[。，,\.!！?？\s]*",
+    re.IGNORECASE,
+)
+_INTENT_HINT = re.compile(
+    r"天气|气温|温度|今天|今日|现在|几点|几号|星期|放假|新闻|关系|组织|汇报|"
+    r"超脑|阅读|训练|入库|文档|公司|部门",
+    re.IGNORECASE,
+)
 
 
 def _aliases_path() -> Path:
@@ -86,6 +100,51 @@ def normalize_query(text: str) -> str:
     out = re.sub(r"[嘛呗啦呀啊呢吧]+([？?。!！])", r"\1", out)
     out = _MULTI_SPACE.sub(" ", out).strip()
     return out or raw
+
+
+def looks_like_voice_transcript(text: str) -> bool:
+    """Heuristic: multi-segment ASR with short filler clauses."""
+    raw = unicodedata.normalize("NFKC", (text or "").strip())
+    if not raw:
+        return False
+    segments = [s.strip() for s in _VOICE_SEGMENT_SPLIT.split(raw) if s.strip()]
+    if len(segments) >= 2 and any(len(s) <= 4 for s in segments):
+        return True
+    return bool(_VOICE_FILLER_SEG.search(raw))
+
+
+def _score_voice_segment(segment: str) -> int:
+    seg = (segment or "").strip()
+    if not seg or _VOICE_FILLER_SEG.fullmatch(seg):
+        return -10
+    score = min(len(seg) // 4, 3)
+    if _INTENT_HINT.search(seg):
+        score += 8
+    return score
+
+
+def clean_oral_user_message(text: str) -> str:
+    """
+    Pick the most intent-like clause from noisy voice transcripts.
+    Used in prepare_turn before condense/routing — does not change answer formatting.
+    """
+    raw = unicodedata.normalize("NFKC", (text or "").strip())
+    if not raw:
+        return ""
+    if not looks_like_voice_transcript(raw):
+        return raw
+    segments = [s.strip() for s in _VOICE_SEGMENT_SPLIT.split(raw) if s.strip()]
+    candidates = segments if len(segments) > 1 else [raw]
+    best_seg = max(candidates, key=_score_voice_segment)
+    if _score_voice_segment(best_seg) <= 0:
+        best_seg = raw
+    cleaned = best_seg
+    while True:
+        nxt = _VOICE_FILLER_PREFIX.sub("", cleaned).strip(" ，,.!！?？")
+        if nxt == cleaned:
+            break
+        cleaned = nxt
+    return cleaned or raw
 
 
 def expand_bm25_query(text: str, *, aliases: dict[str, list[str]] | None = None) -> str:

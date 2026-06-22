@@ -125,6 +125,25 @@ def test_confident_rerank_skips_llm(mock_openai):
     mock_openai.assert_not_called()
 
 
+@patch("agent.kb_judge.OpenAI")
+def test_weak_zone_uses_llm_judge_when_enabled(mock_openai):
+    client = MagicMock()
+    mock_openai.return_value = client
+    client.chat.completions.create.return_value = MagicMock(
+        choices=[MagicMock(message=MagicMock(content="YES"))]
+    )
+    meta = [{"rerank_score": 0.00004, "hybrid_score": 1.0, "text": "感知力训练"}]
+    assert should_use_knowledge_base(
+        "什么是感知力",
+        ["感知力是..."],
+        meta,
+        kb_min_score=0.55,
+        kb_min_rerank_score=0.0,
+        kb_llm_judge=True,
+        llm_runtime={"llm_api_key": "sk-test", "llm_api_base": "http://x", "chat_model": "m"},
+    )
+
+
 def test_kb_miss_detection():
     assert answer_indicates_kb_miss("根据参考资料，资料不足，无法确认。")
     assert answer_indicates_kb_miss(

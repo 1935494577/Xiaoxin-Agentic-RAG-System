@@ -11,6 +11,10 @@ _REALTIME_RE = re.compile(
     r"实时|最新|新闻|放假|节假日|调休|天气怎么样|天气如何",
     re.IGNORECASE,
 )
+_WEATHER_RE = re.compile(
+    r"天气|气温|温度|下雨|降雨|下雪|风力|空气质量|几度|冷不冷|热不热|带伞",
+    re.IGNORECASE,
+)
 _RELATION_GRAPH_RE = re.compile(
     r"关系图|组织图|架构图|汇报关系|上下级|人物关系|谁向谁|组织关系|"
     r"公司关系|人员关系|团队关系|员工关系|组织架构|组织架|管理架构|"
@@ -99,10 +103,27 @@ def resolve_relationship_graph_query(
     return q
 
 
+from retrieval.query_normalize import clean_oral_user_message
+
+
+def normalize_tool_routing_question(question: str) -> str:
+    """Alias for routing/tests — same oral cleanup as prepare_turn."""
+    return clean_oral_user_message(question)
+
+
+def question_needs_realtime_tools(question: str) -> bool:
+    q = normalize_tool_routing_question(question)
+    if not q or is_relationship_graph_question(q):
+        return False
+    if _WEATHER_RE.search(q):
+        return True
+    return bool(_REALTIME_RE.search(q))
+
+
 def question_needs_agent_tools(question: str) -> bool:
     q = (question or "").strip()
     if not q:
         return False
     if is_relationship_graph_question(q):
         return True
-    return bool(_REALTIME_RE.search(q))
+    return question_needs_realtime_tools(q)

@@ -110,9 +110,17 @@ class Settings(BaseSettings):
     stream_context_max_chars: int = 700
     # 为 false 时跳过 LLM 查询改写，显著降低首 token 延迟
     query_rewrite_enabled: bool = False
+    query_rewrite_conditional_enabled: bool = True
     # 规则归一化 + 多路检索 RRF（口语/别名/错字，零 LLM）
     query_normalize_enabled: bool = True
     query_aliases_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "config" / "query_aliases.json"
+    domain_lexicon_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "config" / "domain_lexicon.json"
+    domain_fuzzy_pinyin_enabled: bool = True
+    domain_embedding_neighbors_enabled: bool = True
+    domain_embedding_neighbor_top_k: int = 2
+    domain_embedding_neighbor_min_sim: float = 0.72
+    domain_embedding_max_terms: int = 2000
+    kb_weak_zone_llm_judge: bool = True
     query_normalize_max_variants: int = 3
     # 多轮：L1 condense + 换题检测（见 docs/conversation-context.md）
     conversation_condense_enabled: bool = True

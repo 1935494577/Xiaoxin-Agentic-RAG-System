@@ -26,6 +26,7 @@ from agent.pipelines.relationship_graph import stream_relationship_graph_turn
 from agent.stream_verifier import run_stream_verifier
 from agent.tools.runtime.routing import (
     question_needs_agent_tools,
+    question_needs_realtime_tools,
     resolve_relationship_graph_query,
     should_use_relationship_graph_fast_path,
 )
@@ -76,6 +77,12 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
         yield from stream_relationship_graph_turn(graph_state, trace=trace, quiet=quiet, emit=_evt)
         return
 
+    raw_question = str(state["question"] or "")
+    realtime_tool_turn = is_tools_active() and question_needs_realtime_tools(raw_question)
+    if realtime_tool_turn:
+        state = dict(state)
+        state["_realtime_tool_turn"] = True
+
     input_mode, doc_task_type = resolve_input_mode(
         input_mode=state.get("input_mode"),
         doc_task_type=state.get("doc_task_type"),
@@ -113,9 +120,19 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
             }
         )
 
-    use_agentic_pipeline = rag_arch == "agentic"
+    use_agentic_pipeline = rag_arch == "agentic" and not realtime_tool_turn
 
-    if not quiet and not use_agentic_pipeline:
+    if not quiet and not use_agentic_pipeline and not realtime_tool_turn:
+        qu_meta = (state.get("turn_meta") or {}).get("query_understanding")
+        if isinstance(qu_meta, dict) and qu_meta:
+            yield _evt(
+                {
+                    "type": "status",
+                    "phase": "query_understanding",
+                    "query_understanding": qu_meta,
+                    "trace_id": trace.trace_id,
+                }
+            )
         yield _evt({"type": "status", "phase": "retrieving", "trace_id": trace.trace_id})
 
     ctx: list[str] = []
@@ -129,7 +146,7 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
             inputs={"question": state["question"], "rag_architecture": rag_arch},
         ):
             pass
-    else:
+    elif not realtime_tool_turn:
         try:
             with trace.span(
                 "retrieve",
@@ -191,7 +208,10 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
                 kb_llm_judge_always=bool(mem.get("kb_llm_judge_always", False)),
                 llm_runtime=llm_runtime,
             )
-            if hybrid and is_tools_active() and question_needs_agent_tools(state["question"]):
+            if realtime_tool_turn and is_tools_active():
+                answer_mode = "general"
+                route_out["tool_route_override"] = "realtime"
+            elif hybrid and is_tools_active() and question_needs_agent_tools(raw_question):
                 answer_mode = "general"
                 route_out["tool_route_override"] = True
         route_out["answer_mode"] = answer_mode
@@ -211,9 +231,8 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
             kb_llm_judge_always=bool(mem.get("kb_llm_judge_always", False)),
         )
         if not kb_ok:
-            ctx = []
-            meta = []
             state["_kb_strict_miss"] = True
+            # 灰/弱命中仍保留检索片段供 LLM 作答，不直接清空 ctx
 
     api_key = (state.get("llm_api_key") or "").strip() or settings.openai_api_key
     api_base = (state.get("llm_api_base") or "").strip() or settings.openai_api_base
