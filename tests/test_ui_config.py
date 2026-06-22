@@ -29,7 +29,29 @@ def test_ui_config_defaults(client: TestClient):
     body = r.json()
     assert body["logo_en"] == "JNAO"
     assert body["logo_cn"] == "劲脑"
+    assert body["agent_reasoning_mode"] == "direct"
+    assert body["scene_preset"] == "kb_frontline"
+    assert len(body.get("scene_presets") or []) >= 3
     assert "txt" in body["supported_upload_extensions"]
+
+
+def test_apply_scene_preset(client: TestClient):
+    r = client.post("/config/ui/scene-preset/internal_full")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["scene_preset"] == "internal_full"
+    assert body["hybrid_expert_mode"] is True
+    assert body["agent_reasoning_mode"] == "react"
+
+    r2 = client.post("/config/ui/scene-preset/kb_frontline")
+    assert r2.status_code == 200
+    assert r2.json()["hybrid_expert_mode"] is False
+    assert r2.json()["agent_reasoning_mode"] == "direct"
+
+
+def test_apply_unknown_scene_preset_400(client: TestClient):
+    r = client.post("/config/ui/scene-preset/not-a-preset")
+    assert r.status_code == 400
 
 
 def test_ui_config_update(client: TestClient):

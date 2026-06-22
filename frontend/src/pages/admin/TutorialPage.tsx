@@ -88,25 +88,49 @@ export default function TutorialPage() {
         <section>
           <h3 className="text-base font-semibold mb-2">5. 对话设置（管理员）</h3>
           <p className="text-sm text-text-muted">
-            <strong>对话设置</strong>页按标签分组：<strong>基础</strong>（记忆轮数、混合专家默认、推荐问题）、
-            <strong>检索与 KB</strong>（阈值与 LLM 判断）、<strong>多轮上下文</strong>（condense / 剪枝 / 滚动摘要）、
-            <strong>性能路由</strong>（fast / balanced / quality）。预处理模型在 <strong>模型</strong> 页配置。
+            <strong>对话设置</strong>页：顶部「业务场景预设」一键配置（一线 KB / 内测全功能 / LAN API），
+            Tab 分组为<strong>基础</strong>、<strong>检索与 KB</strong>、<strong>多轮上下文</strong>、<strong>性能路由</strong>。
           </p>
         </section>
 
         <section>
           <h3 className="text-base font-semibold mb-2">6. 提示词（管理员）</h3>
-          <p className="text-sm text-text-muted"><strong>提示词</strong>页：按 Prompt 工程分层配置 System Prompt（角色人设 → 约束 → 任务 → 输出），每层可独立启用/自定义。</p>
+          <p className="text-sm text-text-muted">
+            <strong>提示词</strong>页控制 AI「怎么说」：先选业务角色，再按「角色 → 约束 → 任务 → 输出」四层微调。
+            预览类型选「知识库回答」或「通用回答」分别编辑；不必理解英文内部标识。
+          </p>
         </section>
 
         <section>
-          <h3 className="text-base font-semibold mb-2">7. 工具（管理员）</h3>
+          <h3 className="text-base font-semibold mb-2">7. 用户反馈 → 评测闭环（管理员）</h3>
+          <p className="text-sm text-text-muted mb-2">
+            质量改进的推荐路径（各页顶部也有「怎么用」折叠说明）：
+          </p>
+          <ol className="list-decimal pl-5 text-sm text-text-muted space-y-1">
+            <li>
+              用户在 <strong>Jnao Chat</strong> 对回答点 👍/👎；点踩可填期望答案。
+            </li>
+            <li>
+              <strong>用户反馈</strong>页 →「规则研判」分类 bad case → 对「已分类」条目点「采纳并执行建议」。
+            </li>
+            <li>
+              系统自动执行改进（如加入标准评测集 golden、提议检索别名等），状态变为「已执行」。
+            </li>
+            <li>
+              <strong>评测报告</strong>页查看指标；采纳写入 golden 后会自动跑评测，也可手动「立即评测」。
+            </li>
+            <li>对比报告中的 Δ（相对上一份），确认忠实度/相关性是否提升。</li>
+          </ol>
+        </section>
+
+        <section>
+          <h3 className="text-base font-semibold mb-2">8. 工具（管理员）</h3>
           <p className="text-sm text-text-muted"><strong>工具</strong>页：入库清洗工具（Presidio 脱敏、语种检测等）开关、大模型选工具路由。</p>
         </section>
 
         <section>
-          <h3 className="text-base font-semibold mb-2">8. 链路 Trace（管理员）</h3>
-          <p className="text-sm text-text-muted">查看 LangSmith 云端 / 本地 JSONL 链路追踪状态与文件位置。</p>
+          <h3 className="text-base font-semibold mb-2">9. 链路 Trace（管理员）</h3>
+          <p className="text-sm text-text-muted">查看 LangSmith 云端 / 本地 JSONL 链路追踪状态与文件位置。反馈页「查看链路」依赖此功能。</p>
         </section>
 
         <hr className="border-border-light" />

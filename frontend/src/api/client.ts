@@ -221,10 +221,8 @@ export async function streamChat(
   if (!reader) return;
   const dec = new TextDecoder();
   let buf = "";
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += dec.decode(value, { stream: true });
+  const flushLines = (chunk: string) => {
+    buf += chunk;
     const lines = buf.split("\n");
     buf = lines.pop() || "";
     for (const line of lines) {
@@ -236,6 +234,17 @@ export async function streamChat(
         /* ignore malformed */
       }
     }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (value) {
+      flushLines(dec.decode(value, { stream: true }));
+    }
+    if (done) break;
+  }
+  if (buf.trim()) {
+    flushLines("\n");
   }
 }
 
@@ -543,5 +552,11 @@ export function saveUiConfig(patch: Record<string, unknown>): Promise<void> {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
+  });
+}
+
+export function applyScenePreset(presetId: string): Promise<UiConfig> {
+  return request<UiConfig>(`/config/ui/scene-preset/${encodeURIComponent(presetId)}`, {
+    method: "POST",
   });
 }

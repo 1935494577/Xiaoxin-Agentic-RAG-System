@@ -56,6 +56,8 @@ export type UiConfig = {
   graph_extraction_enabled?: boolean;
   agentic_max_turns?: number;
   agentic_max_kb_searches?: number;
+  scene_preset?: string;
+  scene_presets?: Array<{ id: string; label: string; description?: string }>;
 };
 
 // ===== Chat =====

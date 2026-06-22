@@ -1,4 +1,4 @@
-"""Ensure ui_config.json uses knowledge-base-only chat defaults (no hybrid/general fallback)."""
+"""Ensure ui_config.json uses api_kb_only scene preset."""
 
 from __future__ import annotations
 
@@ -8,32 +8,34 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 UI_PATH = ROOT / "enterprise_rag" / "data" / "ui_config.json"
+SRC = ROOT / "enterprise_rag" / "src"
+sys.path.insert(0, str(SRC))
 
-KB_ONLY_KEYS: dict[str, bool] = {
-    "hybrid_expert_mode": False,
-    "general_fallback_enabled": False,
-    "kb_post_stream_fallback": False,
-}
+from api.scene_presets import scene_preset_patch  # noqa: E402
 
 
 def main() -> int:
-    if not UI_PATH.is_file():
-        print(f"WARN: {UI_PATH} not found — using server defaults.")
-        return 0
-    data = json.loads(UI_PATH.read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        print("WARN: ui_config invalid — skip.")
+    patch = scene_preset_patch("api_kb_only")
+    if not patch:
+        print("ERROR: api_kb_only preset missing")
         return 1
+    if not UI_PATH.is_file():
+        print(f"WARN: {UI_PATH} not found — writing preset defaults.")
+        data: dict = {}
+    else:
+        raw = json.loads(UI_PATH.read_text(encoding="utf-8"))
+        data = raw if isinstance(raw, dict) else {}
     changed: list[str] = []
-    for key, val in KB_ONLY_KEYS.items():
-        if data.get(key) is not val:
+    for key, val in patch.items():
+        if data.get(key) != val:
             data[key] = val
             changed.append(key)
     if changed:
+        UI_PATH.parent.mkdir(parents=True, exist_ok=True)
         UI_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        print("Updated ui_config for KB-only chat:", ", ".join(changed))
+        print("Updated ui_config for api_kb_only:", ", ".join(changed))
     else:
-        print("ui_config already KB-only (hybrid/general fallback off).")
+        print("ui_config already matches api_kb_only preset.")
     return 0
 
 

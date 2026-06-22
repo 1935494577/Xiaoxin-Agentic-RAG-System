@@ -63,6 +63,7 @@ def prepare_turn(
     max_chars = _mem_int(mem, "max_history_chars", 6000)
     assistant_cap = _mem_int(mem, "history_assistant_max_chars", 600)
     raw = message.strip()
+    # Tier 0 语音清洗（condense 前）；完整 QU 在 condense 后统一走 understand_query
     msg_for_condense = raw
     if raw:
         from retrieval.query_normalize import clean_oral_user_message

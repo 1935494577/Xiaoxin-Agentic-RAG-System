@@ -155,6 +155,19 @@ def test_scenario_tag_prefers_graph(policy):
     assert meta.get("scenario_prefer") == "graph"
 
 
+def test_graph_and_agentic_signals_prefer_graph(policy):
+    arch, meta = resolve_rag_architecture(
+        "调查审批链上下游依赖的影响",
+        department="技术部",
+        input_mode="question",
+        policy=policy,
+        router_enabled=True,
+        llm_fallback=False,
+    )
+    assert arch == "graph"
+    assert meta.get("signal") == "graph+agentic"
+
+
 def test_resolve_input_mode_from_request():
     mode, task = resolve_input_mode(
         input_mode="doc_task",

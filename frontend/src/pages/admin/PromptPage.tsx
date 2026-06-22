@@ -3,6 +3,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchPrompts, savePrompts } from "../../api/client";
 import type { PersonaPreset, PromptSlot } from "../../api/types";
 import { PageHeader } from "../../components/admin/PageHeader";
+import { SectionGuide, ToolbarSection } from "../../components/admin/SectionGuide";
+import { PROMPT_PAGE_HELP } from "../../lib/adminHelp";
+import {
+  PREVIEW_MODE_LABELS,
+  displayCategoryLabel,
+  displaySlotLabel,
+} from "../../lib/promptDisplay";
 import { Button } from "../../components/ui/Button";
 import { Switch } from "../../components/ui/Switch";
 import { Textarea } from "../../components/ui/Textarea";
@@ -23,6 +30,7 @@ export default function PromptPage() {
   const [mode, setMode] = useState("kb");
   const [fast, setFast] = useState(true);
   const [expandAll, setExpandAll] = useState(false);
+  const [showTechnicalIds, setShowTechnicalIds] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["prompts", mode, fast],
@@ -136,13 +144,19 @@ export default function PromptPage() {
     <div className="p-6 max-w-[900px]">
       <PageHeader
         title="提示词"
-        description="按标准 Prompt 工程分层配置 System Prompt：角色人设 → 行为约束 → 任务指令 → 输出格式。各层可独立启用/禁用，保存后立即生效。"
+        description="分层配置 AI 的回答风格与人设。与「对话设置」配合：那边管检索策略，这里管怎么说。"
+      />
+
+      <SectionGuide
+        summary={PROMPT_PAGE_HELP.summary}
+        steps={PROMPT_PAGE_HELP.steps}
+        tips={PROMPT_PAGE_HELP.tips}
       />
 
       <div className="space-y-6">
         {/* Persona presets */}
         <div>
-          <h3 className="text-sm font-semibold text-text mb-2">角色人设（选项卡）</h3>
+          <h3 className="text-sm font-semibold text-text mb-2">第一步 · 选择业务角色</h3>
           <p className="text-xs text-text-muted mb-3">
             选择劲脑业务角色后，会自动填入下方「角色人设」层；你仍可微调文案再保存。
           </p>
@@ -169,14 +183,16 @@ export default function PromptPage() {
           </div>
         </div>
 
-        {/* Reasoning mode */}
-        <div>
-          <h3 className="text-sm font-semibold text-text mb-2">思考模式（Agent）</h3>
-          <p className="text-xs text-text-muted mb-3">
-            仅影响<strong className="font-medium text-text">通用回答 + 对话工具</strong>路径。
-            ReAct 为当前默认实现；Plan-and-Execute 会先规划再逐步调用工具。
+        {/* Reasoning mode — de-emphasized for KB-only users */}
+        <details className="rounded-xl border border-border bg-white/60 px-4 py-3">
+          <summary className="text-sm font-semibold text-text cursor-pointer select-none">
+            高级 · 思考方式（仅通用回答 / 工具路径）
+          </summary>
+          <p className="text-xs text-text-muted mt-2 mb-3">
+            纯知识库一线场景请在「对话设置 → 业务场景预设」选「一线 KB」，默认「直接回答」即可。
+            以下仅影响混合专家、实时工具等需要多步推理的路径。
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pb-1">
             {(data?.reasoning_modes || []).map((opt) => {
               const active = reasoningMode === opt.id;
               return (
@@ -197,47 +213,69 @@ export default function PromptPage() {
               );
             })}
           </div>
-        </div>
+        </details>
 
         {/* Toolbar */}
-        <div className="flex items-center gap-4 flex-wrap">
-          <label className="flex items-center gap-2">
-            <span className="text-sm text-text-muted">预览场景：</span>
-            <select
-              value={mode}
-              onChange={(e) => setMode(e.target.value)}
-              className="h-9 rounded-lg border border-border bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20"
-            >
-              <option value="kb">知识库</option>
-              <option value="general">通用回答</option>
-            </select>
-          </label>
-          {mode === "kb" && (
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <Switch checked={fast} onCheckedChange={setFast} id="fast-mode" />
-              <span className="text-sm text-text">快速流式</span>
+        <div className="rounded-xl border border-border bg-surface-muted/40 p-4 space-y-3">
+          <h3 className="text-sm font-semibold text-text">第二步 · 预览与编辑哪类回答</h3>
+          <ToolbarSection label="预览">
+            <label className="flex items-center gap-2">
+              <span className="text-sm text-text-muted">回答类型</span>
+              <select
+                value={mode}
+                onChange={(e) => setMode(e.target.value)}
+                className="h-9 rounded-lg border border-border bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20"
+              >
+                <option value="kb">{PREVIEW_MODE_LABELS.kb}</option>
+                <option value="general">{PREVIEW_MODE_LABELS.general}</option>
+              </select>
             </label>
-          )}
-          <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-text-muted">
-            <input
-              type="checkbox"
-              checked={expandAll}
-              onChange={(e) => setExpandAll(e.target.checked)}
-              className="w-4 h-4 rounded accent-brand"
-            />
-            全部展开
-          </label>
+            {mode === "kb" && (
+              <label className="flex items-center gap-2 cursor-pointer select-none" title="对应对话设置中的「快速流式检索」开启时使用的精简任务指令">
+                <Switch checked={fast} onCheckedChange={setFast} id="fast-mode" />
+                <span className="text-sm text-text">快速检索版提示词</span>
+              </label>
+            )}
+          </ToolbarSection>
+          <p className="text-xs text-text-muted">
+            {mode === "kb"
+              ? "编辑下方各层后，右侧「合成预览」展示知识库命中时模型收到的完整指令。"
+              : "编辑通用回答相关层（工具规则、通用任务等）；知识库专用层在此预览中不会出现。"}
+          </p>
+          <div className="flex flex-wrap gap-4 text-sm">
+            <label className="flex items-center gap-2 cursor-pointer select-none text-text-muted">
+              <input
+                type="checkbox"
+                checked={expandAll}
+                onChange={(e) => setExpandAll(e.target.checked)}
+                className="w-4 h-4 rounded accent-brand"
+              />
+              展开全部层级
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer select-none text-text-muted">
+              <input
+                type="checkbox"
+                checked={showTechnicalIds}
+                onChange={(e) => setShowTechnicalIds(e.target.checked)}
+                className="w-4 h-4 rounded accent-brand"
+              />
+              显示内部标识（开发用）
+            </label>
+          </div>
         </div>
 
         {/* Slot editors */}
+        <div>
+          <h3 className="text-sm font-semibold text-text mb-3">第三步 · 分层文案（由上到下合并进模型）</h3>
+        </div>
         {CATEGORY_ORDER.map((cat) => {
           const rows = grouped[cat];
           if (!rows?.length) return null;
           return (
             <div key={cat}>
-              <h3 className="text-sm font-semibold text-text mb-3">
-                {categories[cat] || cat}
-              </h3>
+              <h4 className="text-sm font-medium text-text-muted mb-3">
+                {displayCategoryLabel(cat, categories)}
+              </h4>
               <div className="space-y-3">
                 {rows.map((slot) => {
                   const isBuiltin = slot.builtin;
@@ -250,9 +288,16 @@ export default function PromptPage() {
                       <summary className="px-4 py-3 cursor-pointer select-none hover:bg-surface-muted rounded-xl">
                         <span className="text-sm font-medium text-text">
                           {isBuiltin ? "🔒 " : "➕ "}
-                          {slot.label}{" "}
-                          <code className="text-xs text-text-muted">({slot.id})</code>
+                          {displaySlotLabel(slot)}
+                          {showTechnicalIds && (
+                            <span className="text-xs text-text-muted ml-2">（{slot.id}）</span>
+                          )}
                         </span>
+                        {slot.variant && (
+                          <span className="ml-2 text-xs text-brand">
+                            {slot.variant === "fast" ? "快速检索" : slot.variant === "standard" ? "完整检索" : slot.variant}
+                          </span>
+                        )}
                       </summary>
                       <div className="px-4 pb-4 space-y-3">
                         {slot.description && (
@@ -366,18 +411,24 @@ export default function PromptPage() {
         {/* Composite preview */}
         {data && (
           <div>
-            <h3 className="text-sm font-semibold text-text mb-3">合成预览</h3>
+            <h3 className="text-sm font-semibold text-text mb-2">合成预览（保存前可先核对）</h3>
+            <p className="text-xs text-text-muted mb-3">
+              以下为当前预览类型下，启用层按顺序拼接后的完整 System Prompt。
+            </p>
             {Array.isArray(((data as Record<string, unknown>)?.preview as Record<string, unknown>)?.layers) && (
               <div className="space-y-2 mb-3">
                 {(
                   ((data as Record<string, unknown>)?.preview as Record<string, unknown>)
                     ?.layers as Array<{ label: string; category: string; content: string }>
                 ).map((layer, i) => (
-                  <details key={i} className="text-sm">
-                    <summary className="text-text-muted cursor-pointer">
-                      {layer.label} ({layer.category})
+                  <details key={i} className="text-sm border border-border rounded-lg bg-white">
+                    <summary className="px-3 py-2 cursor-pointer text-text">
+                      {layer.label}
+                      <span className="text-text-muted text-xs ml-2">
+                        · {displayCategoryLabel(layer.category, categories)}
+                      </span>
                     </summary>
-                    <pre className="mt-1 p-2 bg-surface-muted rounded text-xs text-text overflow-auto whitespace-pre-wrap">
+                    <pre className="mx-3 mb-3 p-2 bg-surface-muted rounded text-xs text-text overflow-auto whitespace-pre-wrap">
                       {layer.content}
                     </pre>
                   </details>

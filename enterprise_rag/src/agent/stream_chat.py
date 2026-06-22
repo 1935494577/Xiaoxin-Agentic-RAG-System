@@ -37,6 +37,19 @@ from evaluation.stream_langsmith import new_stream_tracer
 from openai import OpenAI
 
 
+def _is_realtime_tool_turn(state: dict[str, Any]) -> bool:
+    """Prefer QueryUnderstanding intent from prepare_turn; fallback for direct/test calls."""
+    if not is_tools_active():
+        return False
+    meta = state.get("turn_meta") or {}
+    intent = meta.get("query_intent")
+    if intent == "realtime":
+        return True
+    if intent in ("kb", "graph", "unknown"):
+        return False
+    return question_needs_realtime_tools(str(state.get("question") or ""))
+
+
 def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
     """Yield SSE lines: data: {json}\n\n"""
     init_state: dict[str, Any] = {
@@ -78,7 +91,7 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
         return
 
     raw_question = str(state["question"] or "")
-    realtime_tool_turn = is_tools_active() and question_needs_realtime_tools(raw_question)
+    realtime_tool_turn = _is_realtime_tool_turn(state)
     if realtime_tool_turn:
         state = dict(state)
         state["_realtime_tool_turn"] = True

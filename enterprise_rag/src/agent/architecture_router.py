@@ -232,7 +232,7 @@ def resolve_rag_architecture(
     if graph_s and agentic_s:
         meta["layer"] = "rules"
         meta["signal"] = "graph+agentic"
-        arch = "agentic"
+        arch = "graph"
         arch, clamped = _apply_department_policy(arch, department, pol)
         if clamped:
             meta["department_clamped"] = True

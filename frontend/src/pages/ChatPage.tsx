@@ -162,6 +162,7 @@ export default function ChatPage() {
     abortRef.current = ctrl;
 
     let assistant = "";
+    let streamError = "";
     let meta: ChatMessage["meta"] = {};
     let toolTrace: ToolTraceItem[] = [];
     let graphViz: GraphViz | undefined;
@@ -193,9 +194,10 @@ export default function ChatPage() {
           graphViz = evt.graph;
           setStreamGraphViz(evt.graph);
         } else if (evt.type === "error") {
+          streamError = evt.message;
           setError(evt.message);
         } else if (evt.type === "done") {
-          assistant = evt.answer;
+          assistant = evt.answer || assistant;
           meta = {
             sources: evt.sources,
             source_refs: evt.source_refs,
@@ -218,7 +220,7 @@ export default function ChatPage() {
     abortRef.current = null;
     setNewTopicPending(false);
 
-    const finalContent = assistant || error || "（无回复）";
+    const finalContent = assistant || streamError || "（无回复）";
     const assistantMsg: ChatMessage = {
       role: "assistant",
       content: finalContent,

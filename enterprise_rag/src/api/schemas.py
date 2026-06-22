@@ -185,6 +185,35 @@ class FeedbackStatsResponse(BaseModel):
     by_status: list[FeedbackStatsStatusCount] = Field(default_factory=list)
 
 
+class AliasCandidatePublic(BaseModel):
+    canonical: str
+    alias: str
+    count: int
+    confidence: float
+    sample_questions: list[str] = Field(default_factory=list)
+
+
+class MissQuestionClusterPublic(BaseModel):
+    normalized: str
+    count: int
+    samples: list[str] = Field(default_factory=list)
+
+
+class AliasProposalsResponse(BaseModel):
+    since_days: int
+    question_count: int
+    alias_candidates: list[AliasCandidatePublic] = Field(default_factory=list)
+    question_clusters: list[MissQuestionClusterPublic] = Field(default_factory=list)
+
+
+class DomainLexiconRebuildResponse(BaseModel):
+    term_count: int
+    ingested_rows: int
+    updated_at: str
+    lexicon_path: str
+    message: str
+
+
 class FeedbackTriageRequest(BaseModel):
     limit: int = Field(default=20, ge=1, le=50)
     use_llm: bool = True
@@ -439,8 +468,10 @@ class UiConfigPublic(BaseModel):
     ingest_tag_presets: list[str] = Field(default_factory=list)
     active_persona_id: str = "knowledge_consultant"
     active_persona_label: str = "劲脑知识顾问"
-    agent_reasoning_mode: str = "react"
-    agent_reasoning_mode_label: str = "ReAct（推理+行动）"
+    agent_reasoning_mode: str = "direct"
+    agent_reasoning_mode_label: str = "直接回答"
+    scene_preset: str = "kb_frontline"
+    scene_presets: list[dict[str, str]] = Field(default_factory=list)
     rag_arch_router_enabled: bool = True
     rag_arch_llm_fallback: bool = False
     default_rag_architecture: str = "auto"
@@ -487,6 +518,8 @@ class UiConfigUpdate(BaseModel):
     graph_extraction_enabled: bool | None = None
     agentic_max_turns: int | None = Field(default=None, ge=1, le=20)
     agentic_max_kb_searches: int | None = Field(default=None, ge=1, le=20)
+    agent_reasoning_mode: str | None = Field(default=None, pattern="^(direct|react|plan_execute)$")
+    scene_preset: str | None = Field(default=None, pattern="^(kb_frontline|internal_full|api_kb_only)$")
 
 
 class ProcessingToolPublic(BaseModel):

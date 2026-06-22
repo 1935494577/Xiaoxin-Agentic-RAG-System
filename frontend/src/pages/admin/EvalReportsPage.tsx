@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   exportEvalReports,
@@ -6,16 +7,13 @@ import {
   runFeedbackEvaluate,
 } from "../../api/client";
 import { PageHeader } from "../../components/admin/PageHeader";
+import { SectionGuide, ToolbarSection } from "../../components/admin/SectionGuide";
+import { EVAL_REPORTS_HELP, METRIC_LABELS_ZH } from "../../lib/adminHelp";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { toast } from "sonner";
 
-const METRIC_LABELS: Record<string, string> = {
-  naive_context_answer_overlap_rate: "上下文-答案重叠率",
-  faithfulness: "Faithfulness",
-  answer_relevancy: "Answer Relevancy",
-  rows: "样本数",
-};
+const METRIC_LABELS: Record<string, string> = METRIC_LABELS_ZH;
 
 function formatMetric(key: string, val: unknown): string {
   if (typeof val === "number") {
@@ -85,15 +83,21 @@ export default function EvalReportsPage() {
     <div className="p-6 max-w-[1100px]">
       <PageHeader
         title="评测报告"
-        description="基于 golden.jsonl 离线评测；采纳反馈写入 golden 后会自动异步跑评测并对比上一份指标。"
+        description="用标准问答集（golden.jsonl）离线测量 RAG 质量。与「用户反馈」闭环配合，验证改进是否有效。"
       />
 
-      <div className="flex flex-wrap gap-2 mb-4 items-center">
+      <SectionGuide
+        summary={EVAL_REPORTS_HELP.summary}
+        steps={EVAL_REPORTS_HELP.steps}
+        tips={EVAL_REPORTS_HELP.tips}
+      />
+
+      <ToolbarSection label="操作" className="mb-4">
         <Button type="button" variant="primary" disabled={running} onClick={handleRunEval}>
-          {running ? "评测中…" : "立即评测"}
+          {running ? "评测中…" : "立即评测 golden 集"}
         </Button>
         <Button type="button" variant="default" onClick={() => refetch()}>
-          刷新
+          刷新列表
         </Button>
         <Button type="button" variant="default" onClick={handleExport}>
           导出 JSON
@@ -101,13 +105,19 @@ export default function EvalReportsPage() {
         <span className="text-xs text-text-muted ml-auto">
           共 {total} 份 · 第 {page}/{totalPages} 页
         </span>
-      </div>
+      </ToolbarSection>
 
       {isLoading && <p className="text-sm text-text-muted">加载中...</p>}
       {error && <p className="text-sm text-warning">无法加载评测报告。</p>}
       {!isLoading && !error && items.length === 0 && (
-        <p className="text-sm text-text-muted py-8 text-center">
-          暂无报告。请先在反馈 Inbox 采纳坏例写入 golden，或确保 eval/golden.jsonl 有数据后点「立即评测」。
+        <p className="text-sm text-text-muted py-8 text-center max-w-lg mx-auto leading-relaxed">
+          暂无报告。请先在
+          <Link to="/admin/feedback" className="text-brand hover:underline mx-1">
+            用户反馈
+          </Link>
+          采纳 👎 坏例（会自动写入 golden），或确认
+          <code className="text-xs bg-surface-muted px-1 rounded mx-1">data/eval/golden.jsonl</code>
+          有数据后点「立即评测」。
         </p>
       )}
 
@@ -118,7 +128,7 @@ export default function EvalReportsPage() {
             <div key={item.id} className="border border-border rounded-lg p-4 bg-white shadow-sm">
               <div className="flex flex-wrap items-center gap-2 mb-2">
                 <Badge variant={item.mode === "ragas" ? "success" : "default"}>
-                  {item.mode === "ragas" ? "RAGAS" : "Naive 回退"}
+                  {item.mode === "ragas" ? "RAGAS 完整评测" : "简易重叠率（回退）"}
                 </Badge>
                 <span className="text-xs text-text-muted">{formatTime(item.created_at)}</span>
                 <span className="text-xs text-text-muted">golden {item.golden_rows} 条</span>

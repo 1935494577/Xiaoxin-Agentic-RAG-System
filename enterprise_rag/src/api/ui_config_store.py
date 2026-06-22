@@ -46,7 +46,8 @@ DEFAULT_UI_CONFIG: dict[str, Any] = {
     "chat_routing_tier": "balanced",
     "condense_llm_enabled": True,
     "kb_llm_judge_always": False,
-    "agent_reasoning_mode": "react",
+    "agent_reasoning_mode": "direct",
+    "scene_preset": "kb_frontline",
     "ingest_tag_presets": ["制度", "培训", "产品", "FAQ", "内部"],
     "rag_arch_router_enabled": True,
     "rag_arch_llm_fallback": False,
@@ -102,17 +103,34 @@ def save_ui_config(patch: dict[str, Any]) -> dict[str, Any]:
     return current
 
 
+def resolve_effective_reasoning_mode(
+    ui: dict[str, Any] | None = None,
+    *,
+    hybrid_expert: bool | None = None,
+) -> str:
+    """KB-only paths use direct (faster); hybrid/general paths keep configured react/plan."""
+    from agent.reasoning_modes import normalize_reasoning_mode
+
+    cfg = ui or load_ui_config()
+    configured = normalize_reasoning_mode(str(cfg.get("agent_reasoning_mode") or "direct"))
+    hybrid = bool(cfg.get("hybrid_expert_mode")) if hybrid_expert is None else bool(hybrid_expert)
+    if not hybrid and configured == "react":
+        return "direct"
+    return configured
+
+
 def public_ui_config() -> dict[str, Any]:
     from agent.persona_presets import PERSONA_PRESETS
     from agent.reasoning_modes import REASONING_MODES, normalize_reasoning_mode
     from api.prompt_config_store import load_active_persona_id
+    from api.scene_presets import list_scene_presets_public
 
     cfg = load_ui_config()
     logo_path = str(cfg.get("logo_image_path") or "").strip()
     has_logo_image = bool(logo_path and Path(logo_path).is_file())
     persona_id = load_active_persona_id()
     persona_meta = PERSONA_PRESETS.get(persona_id, {})
-    reasoning_mode = normalize_reasoning_mode(str(cfg.get("agent_reasoning_mode") or "react"))
+    reasoning_mode = resolve_effective_reasoning_mode(cfg)
     reasoning_meta = REASONING_MODES.get(reasoning_mode, {})
     return {
         **cfg,
@@ -123,6 +141,7 @@ def public_ui_config() -> dict[str, Any]:
         "active_persona_label": str(persona_meta.get("label") or persona_id),
         "agent_reasoning_mode": reasoning_mode,
         "agent_reasoning_mode_label": str(reasoning_meta.get("label") or reasoning_mode),
+        "scene_presets": list_scene_presets_public(),
     }
 
 

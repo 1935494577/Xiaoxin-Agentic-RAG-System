@@ -25,13 +25,6 @@ _DEFAULT_ORAL = {
     "俺": "我",
 }
 
-_DEFAULT_ALIASES: dict[str, list[str]] = {
-    "超脑阅读": ["超脑阅度", "超脑", "超脑速读"],
-    "极速运算": ["速算", "快速运算"],
-    "扫描速记": ["速记"],
-    "脑科学": ["脑力", "大脑科学"],
-}
-
 _MULTI_SPACE = re.compile(r"\s+")
 _VOICE_SEGMENT_SPLIT = re.compile(r"[。！？!?；;]+")
 _VOICE_FILLER_SEG = re.compile(
@@ -66,7 +59,7 @@ def load_query_aliases() -> dict[str, Any]:
             if isinstance(data, dict):
                 oral = dict(_DEFAULT_ORAL)
                 oral.update({str(k): str(v) for k, v in (data.get("oral_map") or {}).items()})
-                terms: dict[str, list[str]] = {k: list(v) for k, v in _DEFAULT_ALIASES.items()}
+                terms: dict[str, list[str]] = {}
                 for k, v in (data.get("term_aliases") or {}).items():
                     canon = str(k).strip()
                     if not canon:
@@ -76,7 +69,7 @@ def load_query_aliases() -> dict[str, Any]:
                 return {"oral_map": oral, "term_aliases": terms}
         except (OSError, json.JSONDecodeError):
             pass
-    return {"oral_map": dict(_DEFAULT_ORAL), "term_aliases": dict(_DEFAULT_ALIASES)}
+    return {"oral_map": dict(_DEFAULT_ORAL), "term_aliases": {}}
 
 
 def _apply_oral_map(text: str, oral_map: dict[str, str]) -> str:

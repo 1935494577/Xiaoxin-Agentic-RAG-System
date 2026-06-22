@@ -8,7 +8,6 @@ from config import settings
 from indexing.embeddings import embed_texts
 from indexing.es_indexer import bm25_parent_search, fetch_parents_by_ids
 from indexing.milvus_indexer import vector_search
-from retrieval.query_normalize import build_search_variants
 from retrieval.query_rewriter import rewrite_query
 from retrieval.reranker import rerank_parents
 from retrieval.result_dedup import deduplicate_retrieval_results

@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from retrieval.query_normalize import clean_oral_user_message
+
 _REALTIME_RE = re.compile(
     r"今天|今日|现在|当前|此刻|几点|几月|几号|日期|星期|礼拜|周几|"
     r"北京时间|什么时间|什么时候|哪年|哪一年|哪一月|哪个月|哪天|"
@@ -101,9 +103,6 @@ def resolve_relationship_graph_query(
     if hist and is_graph_visual_followup(q):
         return f"{hist}\n{q}"
     return q
-
-
-from retrieval.query_normalize import clean_oral_user_message
 
 
 def normalize_tool_routing_question(question: str) -> str:

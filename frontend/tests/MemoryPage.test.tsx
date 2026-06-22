@@ -7,6 +7,7 @@ import React from "react";
 vi.mock("../src/api/client", () => ({
   fetchUiConfig: vi.fn(),
   saveUiConfig: vi.fn(),
+  applyScenePreset: vi.fn(),
 }));
 
 import MemoryPage from "../src/pages/admin/MemoryPage";
@@ -39,6 +40,11 @@ const baseConfig = {
   conversation_condense_enabled: true,
   history_prune_enabled: true,
   chat_routing_tier: "balanced",
+  scene_preset: "kb_frontline",
+  scene_presets: [
+    { id: "kb_frontline", label: "一线 KB 问答", description: "KB only" },
+    { id: "internal_full", label: "内测全功能", description: "Hybrid" },
+  ],
 };
 
 describe("MemoryPage", () => {
@@ -92,6 +98,17 @@ describe("MemoryPage", () => {
       expect(screen.getByText("LLM 相关性判断")).toBeTruthy();
     });
     expect(screen.getByText("全局通用兜底")).toBeTruthy();
+  });
+
+  it("shows scene preset buttons", async () => {
+    vi.mocked(client.fetchUiConfig).mockResolvedValue(baseConfig);
+    render(wrapper(React.createElement(MemoryPage)));
+
+    await waitFor(() => {
+      expect(screen.getByText("业务场景预设")).toBeTruthy();
+    });
+    expect(screen.getByText(/一线 KB 问答/)).toBeTruthy();
+    expect(screen.getByText(/内测全功能/)).toBeTruthy();
   });
 
   it("links to models page for routing_model", async () => {

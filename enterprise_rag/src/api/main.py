@@ -65,6 +65,7 @@ from api.schemas import (
     ChatSessionCreate,
     ChatSessionPublic,
     ChatSessionUpdate,
+    DomainLexiconRebuildResponse,
     EphemeralDocPublic,
     IngestDedupStatsResponse,
     IngestedSourcePublic,
@@ -109,6 +110,7 @@ from api.vector_store_registry import (
     reload_all_indexes,
 )
 from api.ui_config_store import (
+    load_ui_config,
     public_ui_config,
     resolve_logo_file,
     save_logo_file,
@@ -270,14 +272,34 @@ def get_ui_config():
 def update_ui_config(body: UiConfigUpdate):
     patch = body.model_dump(exclude_unset=True)
     clear_logo = bool(patch.pop("clear_logo_image", False))
+    preset_id = patch.pop("scene_preset", None)
+    if preset_id:
+        from api.scene_presets import apply_scene_preset
+
+        try:
+            apply_scene_preset(str(preset_id))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     if clear_logo:
         p = resolve_logo_file()
         if p:
             p.unlink(missing_ok=True)
         patch["logo_image_path"] = ""
-    cfg = save_ui_config(patch)
+    if patch:
+        save_ui_config(patch)
     if clear_logo:
-        _ = cfg
+        _ = load_ui_config()
+    return UiConfigPublic.model_validate(public_ui_config())
+
+
+@app.post("/config/ui/scene-preset/{preset_id}", response_model=UiConfigPublic)
+def apply_ui_scene_preset(preset_id: str):
+    from api.scene_presets import apply_scene_preset
+
+    try:
+        apply_scene_preset(preset_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return UiConfigPublic.model_validate(public_ui_config())
 
 
@@ -1010,6 +1032,25 @@ def rebuild_relationships_from_source(
         people_imported=pc,
         relationships_imported=ec,
         message=f"已从 {source} 解析并导入 {pc} 个人物、{ec} 条关系",
+    )
+
+
+@app.post("/ingest/rebuild-domain-lexicon", response_model=DomainLexiconRebuildResponse)
+def rebuild_domain_lexicon(
+    replace: bool = Query(default=False, description="为 true 时清空后重建词表"),
+    max_terms_per_doc: int = Query(default=80, ge=10, le=200),
+):
+    """从 data/raw（及 chunks jsonl）重建 domain_lexicon.json。"""
+    from retrieval.domain_lexicon import rebuild_domain_lexicon_from_raw_dir
+
+    stats = rebuild_domain_lexicon_from_raw_dir(replace=replace, max_terms_per_doc=max_terms_per_doc)
+    path = settings.domain_lexicon_path
+    return DomainLexiconRebuildResponse(
+        term_count=int(stats.get("term_count") or 0),
+        ingested_rows=int(stats.get("ingested_rows") or 0),
+        updated_at=str(stats.get("updated_at") or ""),
+        lexicon_path=str(path),
+        message=f"已重建领域词表，共 {stats.get('term_count', 0)} 条术语",
     )
 
 

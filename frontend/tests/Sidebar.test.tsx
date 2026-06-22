@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { MemoryRouter } from "react-router-dom";
 import { Sidebar } from "../src/components/layout/Sidebar";
+import { getVisibleNavGroups } from "../src/lib/departmentAccess";
 
 vi.mock("../src/context/UserProfileContext", () => ({
   useUserProfile: () => ({
@@ -51,7 +52,7 @@ describe("Sidebar", () => {
     expect(screen.queryByText("用户反馈")).not.toBeInTheDocument();
   });
 
-  it("renders workspace and admin section labels", () => {
+  it("renders grouped nav sections", () => {
     render(
       <MemoryRouter initialEntries={["/admin/ingest"]}>
         <Sidebar />
@@ -59,7 +60,17 @@ describe("Sidebar", () => {
     );
 
     expect(screen.getByText("工作区")).toBeInTheDocument();
-    expect(screen.getByText("管理")).toBeInTheDocument();
+    expect(screen.getByText("日常运营")).toBeInTheDocument();
+    expect(screen.getByText("系统配置")).toBeInTheDocument();
+    expect(screen.queryByText("质量闭环")).not.toBeInTheDocument();
     expect(screen.getByText("管理后台")).toBeInTheDocument();
+  });
+
+  it("getVisibleNavGroups returns quality loop for 技术部", () => {
+    const groups = getVisibleNavGroups("技术部");
+    const labels = groups.map((g) => g.label);
+    expect(labels).toContain("日常运营");
+    expect(labels).toContain("质量闭环");
+    expect(labels).toContain("系统配置");
   });
 });

@@ -9,6 +9,8 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from tenant.context import get_tenant_id
 
 from api.schemas import (
+    AliasCandidatePublic,
+    AliasProposalsResponse,
     ConfigRevisionListResponse,
     ConfigRevisionPublic,
     EvalReportListResponse,
@@ -26,6 +28,7 @@ from api.schemas import (
     FeedbackSuggestedAction,
     FeedbackTriageRequest,
     FeedbackTriageResponse,
+    MissQuestionClusterPublic,
 )
 from feedback_loop.config_revisions import diff_revision, get_revision, list_revisions, rollback_revision
 from feedback_loop.eval_store import export_reports_json, get_eval_report, list_eval_reports
@@ -145,6 +148,34 @@ def admin_feedback_stats(
         pending_triage=int(raw["pending_triage"]),
         by_issue_type=[FeedbackStatsIssueCount(**x) for x in raw.get("by_issue_type") or []],
         by_status=[FeedbackStatsStatusCount(**x) for x in raw.get("by_status") or []],
+    )
+
+
+@router.get("/admin/feedback/alias-proposals", response_model=AliasProposalsResponse)
+def admin_feedback_alias_proposals(
+    request: Request,
+    since_days: int = Query(default=30, ge=1, le=365),
+    limit: int = Query(default=20, ge=1, le=50),
+):
+    """Rank alias candidates from negative / miss feedback questions."""
+    from retrieval.miss_query_analyzer import analyze_retrieval_misses
+
+    store = get_feedback_store()
+    rows, _ = store.list(
+        tenant_id=get_tenant_id(request),
+        rating=0,
+        since_days=since_days,
+        limit=100,
+        offset=0,
+    )
+    analysis = analyze_retrieval_misses(rows, alias_limit=limit, cluster_limit=limit)
+    return AliasProposalsResponse(
+        since_days=since_days,
+        question_count=int(analysis.get("question_count") or 0),
+        alias_candidates=[AliasCandidatePublic(**x) for x in analysis.get("alias_candidates") or []],
+        question_clusters=[
+            MissQuestionClusterPublic(**x) for x in analysis.get("question_clusters") or []
+        ],
     )
 
 

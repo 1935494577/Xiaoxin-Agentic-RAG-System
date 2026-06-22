@@ -95,3 +95,14 @@ def expand_query_with_embedding_neighbors(text: str) -> list[str]:
         if variant and variant not in out:
             out.append(variant)
     return out
+
+
+def warmup_term_embedding_cache(*, max_terms: int = 32) -> None:
+    """Pre-build a small term matrix slice so first QU request avoids cold embed batch."""
+    if not bool(getattr(settings, "domain_embedding_neighbors_enabled", True)):
+        return
+    terms = list_domain_terms(limit=max(1, max_terms))
+    if not terms:
+        return
+    embed_texts(terms[:max_terms])
+    _ensure_term_matrix()

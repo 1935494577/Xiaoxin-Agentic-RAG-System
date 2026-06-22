@@ -209,13 +209,13 @@ def save_prompt_config(
 def public_prompt_config(*, mode: str = "kb", fast: bool = False) -> dict[str, Any]:
     from agent.prompt_engine import compose_system_prompt, preview_layers
     from agent.reasoning_modes import list_reasoning_modes_public
-    from api.ui_config_store import load_ui_config
+    from api.ui_config_store import load_ui_config, resolve_effective_reasoning_mode
 
     cfg = load_prompt_config()
     slots = load_prompt_slots()
     m: str = mode if mode in ("kb", "general") else "kb"
     ui = load_ui_config()
-    reasoning_mode = str(ui.get("agent_reasoning_mode") or "react")
+    reasoning_mode = resolve_effective_reasoning_mode(ui)
     return {
         **cfg,
         "persona_presets": list_persona_presets_public(include_content=True),
