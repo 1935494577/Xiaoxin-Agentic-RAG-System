@@ -3,6 +3,10 @@ import type {
   ChatSession,
   FeedbackListResponse,
   FeedbackPayload,
+  FeedbackStats,
+  SourcePreview,
+  EphemeralDoc,
+  IngestedSource,
   ModelProfile,
   ModelProfilesData,
   NavConfig,
@@ -20,6 +24,7 @@ import type {
   VectorStore,
 } from "./types";
 import { AUTH_SESSION_KEY } from "../lib/constants";
+import { resolveAdminRole, type AdminRole } from "../lib/adminRoles";
 
 function readAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
@@ -27,13 +32,19 @@ function readAuthHeaders(): Record<string, string> {
     const raw =
       localStorage.getItem(AUTH_SESSION_KEY) ?? sessionStorage.getItem(AUTH_SESSION_KEY);
     if (!raw) return headers;
-    const session = JSON.parse(raw) as { username?: string; department?: string };
+    const session = JSON.parse(raw) as {
+      username?: string;
+      department?: string;
+      role?: AdminRole;
+    };
     if (session.department?.trim()) {
       headers["X-User-Department"] = encodeURIComponent(session.department.trim());
     }
     if (session.username?.trim()) {
       headers["X-User-Name"] = encodeURIComponent(session.username.trim());
     }
+    const role = session.role ?? resolveAdminRole(session.department ?? "");
+    headers["X-Admin-Role"] = role;
   } catch {
     /* ignore malformed session */
   }
@@ -48,6 +59,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     if (!headers.has(key)) headers.set(key, value);
   }
   const r = await fetch(path, { ...init, headers });
+  if (r.status === 401) {
+    localStorage.removeItem(AUTH_SESSION_KEY);
+    sessionStorage.removeItem(AUTH_SESSION_KEY);
+    const from = encodeURIComponent(window.location.pathname + window.location.search);
+    if (!window.location.pathname.startsWith("/login")) {
+      window.location.assign(`/login?from=${from}`);
+    }
+    throw new Error("Unauthorized");
+  }
   if (!r.ok) {
     const text = await r.text();
     throw new Error(text || r.statusText);
@@ -120,17 +140,77 @@ export function appendMessages(
   });
 }
 
+export function listIngestedSources(): Promise<IngestedSource[]> {
+  return request<IngestedSource[]>("/sources/list");
+}
+
+export async function uploadChatDocument(
+  file: File,
+  sessionId: string,
+  userId: string,
+  department?: string
+): Promise<EphemeralDoc> {
+  const form = new FormData();
+  form.append("file", file);
+  const q = new URLSearchParams({
+    session_id: sessionId,
+    user_id: userId,
+  });
+  if (department?.trim()) q.set("department", department.trim());
+  const authHeaders = readAuthHeaders();
+  const headers = new Headers(authHeaders);
+  const r = await fetch(`/chat/documents/upload?${q}`, { method: "POST", body: form, headers });
+  if (!r.ok) {
+    const text = await r.text();
+    throw new Error(text || r.statusText);
+  }
+  return r.json() as Promise<EphemeralDoc>;
+}
+
+export async function transcribeAudio(
+  blob: Blob,
+  language = "zh"
+): Promise<{ text: string }> {
+  const ext = blob.type.includes("mp4")
+    ? "m4a"
+    : blob.type.includes("mpeg")
+      ? "mp3"
+      : blob.type.includes("wav")
+        ? "wav"
+        : "webm";
+  const form = new FormData();
+  form.append("file", blob, `speech.${ext}`);
+  const authHeaders = readAuthHeaders();
+  const headers = new Headers(authHeaders);
+  const q = new URLSearchParams({ language });
+  const r = await fetch(`/chat/transcribe?${q}`, { method: "POST", body: form, headers });
+  if (!r.ok) {
+    const text = await r.text();
+    throw new Error(text || r.statusText);
+  }
+  return r.json() as Promise<{ text: string }>;
+}
+
 // ===== SSE Streaming =====
 export async function streamChat(
   payload: StreamPayload,
   onEvent: (evt: StreamEvent) => void,
   signal?: AbortSignal
 ): Promise<void> {
+  const authHeaders = readAuthHeaders();
+  const headers = new Headers({
+    "Content-Type": "application/json",
+    Accept: "text/event-stream",
+  });
+  for (const [key, value] of Object.entries(authHeaders)) {
+    headers.set(key, value);
+  }
   const r = await fetch("/chat/stream", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(payload),
     signal,
+    cache: "no-store",
   });
   if (!r.ok) {
     const text = await r.text();
@@ -141,10 +221,8 @@ export async function streamChat(
   if (!reader) return;
   const dec = new TextDecoder();
   let buf = "";
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += dec.decode(value, { stream: true });
+  const flushLines = (chunk: string) => {
+    buf += chunk;
     const lines = buf.split("\n");
     buf = lines.pop() || "";
     for (const line of lines) {
@@ -156,6 +234,17 @@ export async function streamChat(
         /* ignore malformed */
       }
     }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (value) {
+      flushLines(dec.decode(value, { stream: true }));
+    }
+    if (done) break;
+  }
+  if (buf.trim()) {
+    flushLines("\n");
   }
 }
 
@@ -199,6 +288,18 @@ export function fetchFeedbackList(params?: {
   if (params?.limit !== undefined) q.set("limit", String(params.limit));
   const qs = q.toString();
   return request<FeedbackListResponse>(`/admin/feedback${qs ? `?${qs}` : ""}`);
+}
+
+export function fetchFeedbackStats(sinceDays = 7): Promise<FeedbackStats> {
+  return request<FeedbackStats>(`/admin/feedback/stats?since_days=${sinceDays}`);
+}
+
+export function fetchSourcePreview(
+  parentId: string,
+  userDepartment: string
+): Promise<SourcePreview> {
+  const params = new URLSearchParams({ user_department: userDepartment });
+  return request<SourcePreview>(`/sources/preview/${encodeURIComponent(parentId)}?${params}`);
 }
 
 export function runFeedbackTriage(opts?: {
@@ -451,5 +552,11 @@ export function saveUiConfig(patch: Record<string, unknown>): Promise<void> {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
+  });
+}
+
+export function applyScenePreset(presetId: string): Promise<UiConfig> {
+  return request<UiConfig>(`/config/ui/scene-preset/${encodeURIComponent(presetId)}`, {
+    method: "POST",
   });
 }

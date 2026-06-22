@@ -1,25 +1,46 @@
-import { MessageSquarePlus, Info } from "lucide-react";
+import { MessageSquarePlus, Info, Download } from "lucide-react";
 import { HybridToggle } from "./HybridToggle";
 
 type Props = {
   hybridExpert: boolean;
   onHybridChange: (on: boolean) => void;
+  hybridUsesServerDefault?: boolean;
+  department?: string;
   newTopicPending: boolean;
   onNewTopicToggle: () => void;
   streaming: boolean;
+  onExport?: () => void;
+  exportDisabled?: boolean;
 };
 
 export function ChatToolbar({
   hybridExpert,
   onHybridChange,
+  hybridUsesServerDefault = true,
+  department,
   newTopicPending,
   onNewTopicToggle,
   streaming,
+  onExport,
+  exportDisabled,
 }: Props) {
   return (
     <div className="max-w-[768px] mx-auto space-y-2">
       <div className="flex items-center gap-3 flex-wrap rounded-xl border border-border bg-surface-muted/50 px-3 py-2">
         <HybridToggle enabled={hybridExpert} onChange={onHybridChange} disabled={streaming} />
+        {department ? (
+          <span
+            className="text-[11px] text-text-muted px-2 py-0.5 rounded-full bg-white border border-border"
+            title="检索权限按登录部门过滤；与同事不一致时回答可能不同"
+          >
+            部门：{department}
+          </span>
+        ) : null}
+        {!hybridUsesServerDefault ? (
+          <span className="text-[11px] text-brand">
+            {hybridExpert ? "本页已临时开启混合专家" : "本页已临时关闭混合专家（仅知识库）"}
+          </span>
+        ) : null}
         <span className="hidden sm:inline h-4 w-px bg-border" aria-hidden />
         <button
           type="button"
@@ -36,6 +57,21 @@ export function ChatToolbar({
           <MessageSquarePlus size={14} />
           {newTopicPending ? "下一条：新话题" : "新话题"}
         </button>
+        {onExport ? (
+          <>
+            <span className="hidden sm:inline h-4 w-px bg-border" aria-hidden />
+            <button
+              type="button"
+              disabled={streaming || exportDisabled}
+              onClick={onExport}
+              title="导出当前对话为 Markdown"
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-white px-3 py-1.5 text-xs font-medium text-text-muted hover:border-brand hover:text-brand transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Download size={14} />
+              导出
+            </button>
+          </>
+        ) : null}
       </div>
       {newTopicPending && (
         <p className="flex items-start gap-1.5 text-xs text-brand px-1">

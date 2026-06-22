@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+import logging
+
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
+
+from tenant.context import get_tenant_id
 
 from api.schemas import (
+    AliasCandidatePublic,
+    AliasProposalsResponse,
     ConfigRevisionListResponse,
     ConfigRevisionPublic,
     EvalReportListResponse,
@@ -15,21 +21,26 @@ from api.schemas import (
     FeedbackListResponse,
     FeedbackPublic,
     FeedbackRequest,
+    FeedbackStatsIssueCount,
+    FeedbackStatsResponse,
+    FeedbackStatsStatusCount,
     FeedbackStatusResponse,
     FeedbackSuggestedAction,
     FeedbackTriageRequest,
     FeedbackTriageResponse,
+    MissQuestionClusterPublic,
 )
 from feedback_loop.config_revisions import diff_revision, get_revision, list_revisions, rollback_revision
 from feedback_loop.eval_store import export_reports_json, get_eval_report, list_eval_reports
 from feedback_loop.evaluate import extract_revision_id, run_golden_evaluation, run_golden_evaluation_safe
 from feedback_loop.queue import InvalidTransitionError, approve_and_apply, reject_feedback
 from feedback_loop.service import enrich_feedback_from_trace, export_all_feedback_jsonl, submit_feedback_record
-from feedback_loop.store import get_feedback, list_feedback
-from feedback_loop.trace_loader import load_trace_by_id
+from feedback_loop.stats import feedback_stats
+from feedback_loop.stores import get_feedback_store, get_trace_store
 from feedback_loop.triage import run_triage_batch
 
 router = APIRouter(tags=["feedback"])
+_log = logging.getLogger(__name__)
 
 
 def _to_public(row: dict) -> FeedbackPublic:
@@ -100,25 +111,77 @@ def _to_status(row: dict) -> FeedbackStatusResponse:
 
 
 @router.post("/feedback")
-def submit_feedback(req: FeedbackRequest, background_tasks: BackgroundTasks):
+def submit_feedback(req: FeedbackRequest, background_tasks: BackgroundTasks, request: Request):
     """用户反馈：同步写入 SQLite，异步补全 trace 快照并导出 JSONL。"""
-    fid = submit_feedback_record(
-        user_id=req.user_id,
-        rating=req.rating,
-        trace_id=req.trace_id,
-        message_id=req.message_id,
-        session_id=req.session_id,
-        question=req.question,
-        answer_preview=req.answer_preview,
-        answer_mode=req.answer_mode,
-        correction=req.correction,
-    )
+    try:
+        fid = submit_feedback_record(
+            user_id=req.user_id,
+            rating=req.rating,
+            trace_id=req.trace_id,
+            message_id=req.message_id,
+            session_id=req.session_id,
+            question=req.question,
+            answer_preview=req.answer_preview,
+            answer_mode=req.answer_mode,
+            correction=req.correction,
+            tenant_id=get_tenant_id(request),
+        )
+    except Exception:
+        _log.exception("feedback submit failed for user=%s", req.user_id)
+        return {"ok": False, "error": "feedback_unavailable"}
     background_tasks.add_task(enrich_feedback_from_trace, fid)
     return {"ok": True, "id": fid}
 
 
+@router.get("/admin/feedback/stats", response_model=FeedbackStatsResponse)
+def admin_feedback_stats(
+    request: Request,
+    since_days: int = Query(default=7, ge=1, le=365),
+):
+    raw = feedback_stats(tenant_id=get_tenant_id(request), since_days=since_days)
+    return FeedbackStatsResponse(
+        since_days=int(raw["since_days"]),
+        tenant_id=str(raw["tenant_id"]),
+        total=int(raw["total"]),
+        positive=int(raw["positive"]),
+        negative=int(raw["negative"]),
+        pending_triage=int(raw["pending_triage"]),
+        by_issue_type=[FeedbackStatsIssueCount(**x) for x in raw.get("by_issue_type") or []],
+        by_status=[FeedbackStatsStatusCount(**x) for x in raw.get("by_status") or []],
+    )
+
+
+@router.get("/admin/feedback/alias-proposals", response_model=AliasProposalsResponse)
+def admin_feedback_alias_proposals(
+    request: Request,
+    since_days: int = Query(default=30, ge=1, le=365),
+    limit: int = Query(default=20, ge=1, le=50),
+):
+    """Rank alias candidates from negative / miss feedback questions."""
+    from retrieval.miss_query_analyzer import analyze_retrieval_misses
+
+    store = get_feedback_store()
+    rows, _ = store.list(
+        tenant_id=get_tenant_id(request),
+        rating=0,
+        since_days=since_days,
+        limit=100,
+        offset=0,
+    )
+    analysis = analyze_retrieval_misses(rows, alias_limit=limit, cluster_limit=limit)
+    return AliasProposalsResponse(
+        since_days=since_days,
+        question_count=int(analysis.get("question_count") or 0),
+        alias_candidates=[AliasCandidatePublic(**x) for x in analysis.get("alias_candidates") or []],
+        question_clusters=[
+            MissQuestionClusterPublic(**x) for x in analysis.get("question_clusters") or []
+        ],
+    )
+
+
 @router.get("/admin/feedback", response_model=FeedbackListResponse)
 def admin_list_feedback(
+    request: Request,
     user_id: str | None = Query(default=None, max_length=128),
     trace_id: str | None = Query(default=None, max_length=128),
     rating: int | None = Query(default=None, ge=-1, le=1),
@@ -128,7 +191,9 @@ def admin_list_feedback(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=50),
 ):
-    rows, total = list_feedback(
+    store = get_feedback_store()
+    rows, total = store.list(
+        tenant_id=get_tenant_id(request),
         user_id=user_id,
         trace_id=trace_id,
         rating=rating,
@@ -298,7 +363,7 @@ def admin_reject_feedback(feedback_id: str):
 
 @router.get("/admin/feedback/traces/{trace_id}")
 def admin_get_trace(trace_id: str):
-    trace = load_trace_by_id(trace_id)
+    trace = get_trace_store().load_by_id(trace_id)
     if not trace:
         raise HTTPException(status_code=404, detail="Trace not found")
     return trace
@@ -306,7 +371,7 @@ def admin_get_trace(trace_id: str):
 
 @router.get("/admin/feedback/{feedback_id}", response_model=FeedbackPublic)
 def admin_get_feedback(feedback_id: str):
-    row = get_feedback(feedback_id)
+    row = get_feedback_store().get(feedback_id)
     if not row:
         raise HTTPException(status_code=404, detail="Feedback not found")
     return _to_public(row)

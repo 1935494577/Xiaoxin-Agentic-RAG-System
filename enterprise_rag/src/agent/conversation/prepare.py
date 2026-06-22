@@ -8,6 +8,8 @@ from agent.conversation.history_prune import prune_history_by_embedding
 from agent.conversation.memory import trim_history, truncate_assistant_for_history
 from agent.conversation.query_condense import condense_turn
 from agent.conversation.types import CondenseResult, TurnContext
+from retrieval.query_understanding import understand_query
+from retrieval.query_normalize import normalize_query
 
 
 def _mem_bool(mem: dict[str, Any], key: str, default: bool) -> bool:
@@ -60,11 +62,17 @@ def prepare_turn(
     max_turns = _mem_int(mem, "max_history_turns", 6)
     max_chars = _mem_int(mem, "max_history_chars", 6000)
     assistant_cap = _mem_int(mem, "history_assistant_max_chars", 600)
-    msg = message.strip()
+    raw = message.strip()
+    # Tier 0 语音清洗（condense 前）；完整 QU 在 condense 后统一走 understand_query
+    msg_for_condense = raw
+    if raw:
+        from retrieval.query_normalize import clean_oral_user_message
+
+        msg_for_condense = clean_oral_user_message(raw) or raw
 
     if reset_context:
         trimmed: list[dict[str, Any]] = []
-        cond = CondenseResult(standalone_query=msg, topic_shift=True, used_llm=False)
+        cond = CondenseResult(standalone_query=msg_for_condense, topic_shift=True, used_llm=False)
         effective_summary = ""
     else:
         trimmed = trim_history(history, max_turns=max_turns, max_chars=max_chars)
@@ -72,14 +80,14 @@ def prepare_turn(
 
         if condense_on and trimmed:
             cond = condense_turn(
-                msg,
+                msg_for_condense,
                 trimmed,
                 llm_runtime=llm_runtime,
                 max_tokens=max_tokens_condense,
                 llm_enabled=_mem_bool(mem, "condense_llm_enabled", True),
             )
         else:
-            cond = CondenseResult(standalone_query=msg, topic_shift=False, used_llm=False)
+            cond = CondenseResult(standalone_query=msg_for_condense, topic_shift=False, used_llm=False)
 
         if cond.topic_shift:
             effective_summary = ""
@@ -103,13 +111,15 @@ def prepare_turn(
 
     history_for_llm = _soften_history(history_for_llm, assistant_max_chars=assistant_cap)
 
+    retrieval_q = cond.standalone_query or msg_for_condense
+    qu = understand_query(raw, retrieval_query=retrieval_q)
     return TurnContext(
-        message=msg,
-        retrieval_query=cond.standalone_query or msg,
+        message=qu.message,
+        retrieval_query=qu.retrieval_query,
         topic_shift=bool(reset_context or cond.topic_shift),
         history_for_llm=history_for_llm,
         condense_used_llm=cond.used_llm,
-        skip_retrieval_rewrite=True,
+        skip_retrieval_rewrite=not qu.needs_llm_rewrite,
         rolling_summary=effective_summary,
         reset_context=bool(reset_context),
         meta={
@@ -118,5 +128,12 @@ def prepare_turn(
             "history_turns_out": len(history_for_llm),
             "reset_context": bool(reset_context),
             "has_rolling_summary": bool(effective_summary),
+            "retrieval_query_normalized": normalize_query(qu.retrieval_query),
+            "search_variants": qu.search_variants,
+            "query_intent": qu.intent,
+            "rule_confidence": qu.rule_confidence,
+            "needs_llm_rewrite": qu.needs_llm_rewrite,
+            "query_understanding_signals": qu.signals,
+            "query_understanding": qu.to_dict(),
         },
     )

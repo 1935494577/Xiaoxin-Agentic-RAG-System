@@ -50,6 +50,14 @@ export type UiConfig = {
   active_persona_label?: string;
   agent_reasoning_mode?: string;
   agent_reasoning_mode_label?: string;
+  rag_arch_router_enabled?: boolean;
+  rag_arch_llm_fallback?: boolean;
+  default_rag_architecture?: string;
+  graph_extraction_enabled?: boolean;
+  agentic_max_turns?: number;
+  agentic_max_kb_searches?: number;
+  scene_preset?: string;
+  scene_presets?: Array<{ id: string; label: string; description?: string }>;
 };
 
 // ===== Chat =====
@@ -78,6 +86,37 @@ export type UserProfileUpdate = {
   ai_avatar_url?: string;
 };
 
+export type ToolTraceItem = {
+  tool: string;
+  arguments?: Record<string, unknown>;
+  output?: string;
+  ok?: boolean;
+};
+
+export type GraphVizNode = {
+  id: string;
+  label: string;
+  type?: string;
+  title?: string;
+  department?: string;
+  bio?: string;
+};
+
+export type GraphVizEdge = {
+  from: string;
+  to: string;
+  from_label: string;
+  to_label: string;
+  label: string;
+};
+
+export type GraphViz = {
+  center_id: string;
+  nodes: GraphVizNode[];
+  edges: GraphVizEdge[];
+  summary_lines?: string[];
+};
+
 export type ChatMessage = {
   id?: string;
   role: "user" | "assistant";
@@ -89,22 +128,26 @@ export type ChatMessage = {
     verified?: boolean;
     trace_id?: string;
     tool_trace?: ToolTraceItem[];
+    graph_viz?: GraphViz;
+    rag_architecture?: string;
   };
 };
 
-export type ToolTraceItem = {
-  tool: string;
-  arguments?: Record<string, unknown>;
-  output?: string;
-  ok?: boolean;
-};
-
 export type StreamEvent =
-  | { type: "status"; phase: string; answer_mode?: string; trace_id?: string }
+  | {
+      type: "status";
+      phase: string;
+      answer_mode?: string;
+      rag_architecture?: string;
+      input_mode?: string;
+      doc_task_type?: string;
+      trace_id?: string;
+    }
   | { type: "stream_reset" }
   | { type: "token"; content: string }
   | { type: "tool_call"; tool: string; arguments: Record<string, unknown> }
   | { type: "tool_result"; tool: string; output: string; ok: boolean }
+  | { type: "graph_viz"; graph: GraphViz }
   | { type: "error"; message: string; trace_id?: string }
   | {
       type: "done";
@@ -113,9 +156,12 @@ export type StreamEvent =
       sources?: string[];
       source_refs?: Array<{ source?: string; parent_id?: string; department?: string }>;
       answer_mode?: string;
+      rag_architecture?: string;
+      input_mode?: string;
       verified?: boolean;
       trace_id?: string;
       tool_trace?: ToolTraceItem[];
+      graph_viz?: GraphViz;
       topic_shift?: boolean;
       retrieval_query?: string;
       routing_model?: string;
@@ -128,10 +174,29 @@ export type StreamPayload = {
   user_id: string;
   user_department?: string;
   hybrid_expert_mode?: boolean;
+  stream_fast_mode?: boolean;
   skip_query_rewrite?: boolean;
   session_id?: string;
   history?: Array<{ role: string; content: string }>;
   reset_context?: boolean;
+  rag_architecture?: "auto" | "classic" | "graph" | "agentic";
+  input_mode?: "question" | "temp_document" | "doc_task";
+  doc_task_type?: "summary" | "compare" | "extract" | "annotate";
+  temp_document_id?: string;
+  allowed_sources?: string[] | null;
+  scenario_tags?: string[];
+};
+
+export type IngestedSource = {
+  source: string;
+  parent_count: number;
+  child_count: number;
+};
+
+export type EphemeralDoc = {
+  doc_id: string;
+  filename: string;
+  session_id: string;
 };
 
 // ===== Model Profiles =====
@@ -290,4 +355,23 @@ export type FeedbackListResponse = {
   total: number;
   limit: number;
   offset: number;
+};
+
+export type FeedbackStats = {
+  since_days: number;
+  tenant_id: string;
+  total: number;
+  positive: number;
+  negative: number;
+  pending_triage: number;
+  by_issue_type: Array<{ issue_type: string; count: number }>;
+  by_status: Array<{ status: string; count: number }>;
+};
+
+export type SourcePreview = {
+  parent_id: string;
+  source: string;
+  department: string;
+  permission_label: string;
+  text: string;
 };

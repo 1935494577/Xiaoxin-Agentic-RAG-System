@@ -11,6 +11,7 @@ from threading import Lock
 from typing import Any
 
 from config import settings
+from tenant.context import DEFAULT_TENANT
 
 _lock = Lock()
 
@@ -33,6 +34,7 @@ def init_chat_session_db() -> None:
                 """
                 CREATE TABLE IF NOT EXISTS chat_sessions (
                     id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL DEFAULT 'internal',
                     user_id TEXT NOT NULL,
                     title TEXT NOT NULL DEFAULT '新对话',
                     created_at TEXT NOT NULL,
@@ -62,6 +64,13 @@ def init_chat_session_db() -> None:
                 conn.commit()
             except sqlite3.OperationalError:
                 pass
+            try:
+                conn.execute(
+                    "ALTER TABLE chat_sessions ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'internal'"
+                )
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass
         finally:
             conn.close()
 
@@ -73,36 +82,39 @@ def _connect() -> sqlite3.Connection:
     return conn
 
 
-def list_sessions(user_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+def list_sessions(user_id: str, *, tenant_id: str = DEFAULT_TENANT, limit: int = 50) -> list[dict[str, Any]]:
     uid = user_id.strip()
     if not uid:
         return []
+    tid = (tenant_id or DEFAULT_TENANT).strip() or DEFAULT_TENANT
     with _lock:
         conn = _connect()
         try:
             rows = conn.execute(
                 """
-                SELECT id, user_id, title, created_at, updated_at
+                SELECT id, user_id, title, created_at, updated_at, tenant_id
                 FROM chat_sessions
-                WHERE user_id = ?
+                WHERE user_id = ? AND tenant_id = ?
                 ORDER BY updated_at DESC
                 LIMIT ?
                 """,
-                (uid, max(1, min(limit, 200))),
+                (uid, tid, max(1, min(limit, 200))),
             ).fetchall()
             return [dict(r) for r in rows]
         finally:
             conn.close()
 
 
-def create_session(user_id: str, *, title: str = "新对话") -> dict[str, Any]:
+def create_session(user_id: str, *, title: str = "新对话", tenant_id: str = DEFAULT_TENANT) -> dict[str, Any]:
     uid = user_id.strip()
     if not uid:
         raise ValueError("user_id required")
+    tid = (tenant_id or DEFAULT_TENANT).strip() or DEFAULT_TENANT
     sid = uuid.uuid4().hex
     now = _utc_now()
     row = {
         "id": sid,
+        "tenant_id": tid,
         "user_id": uid,
         "title": (title or "新对话").strip()[:128] or "新对话",
         "created_at": now,
@@ -113,10 +125,10 @@ def create_session(user_id: str, *, title: str = "新对话") -> dict[str, Any]:
         try:
             conn.execute(
                 """
-                INSERT INTO chat_sessions (id, user_id, title, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO chat_sessions (id, tenant_id, user_id, title, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (row["id"], row["user_id"], row["title"], row["created_at"], row["updated_at"]),
+                (row["id"], row["tenant_id"], row["user_id"], row["title"], row["created_at"], row["updated_at"]),
             )
             conn.commit()
         finally:
@@ -124,17 +136,21 @@ def create_session(user_id: str, *, title: str = "新对话") -> dict[str, Any]:
     return row
 
 
-def get_session(session_id: str, user_id: str) -> dict[str, Any] | None:
+def get_session(session_id: str, user_id: str, *, tenant_id: str = DEFAULT_TENANT) -> dict[str, Any] | None:
     sid = session_id.strip()
     uid = user_id.strip()
+    tid = (tenant_id or DEFAULT_TENANT).strip() or DEFAULT_TENANT
     if not sid or not uid:
         return None
     with _lock:
         conn = _connect()
         try:
             row = conn.execute(
-                "SELECT id, user_id, title, created_at, updated_at, rolling_summary FROM chat_sessions WHERE id = ? AND user_id = ?",
-                (sid, uid),
+                """
+                SELECT id, user_id, title, created_at, updated_at, rolling_summary, tenant_id
+                FROM chat_sessions WHERE id = ? AND user_id = ? AND tenant_id = ?
+                """,
+                (sid, uid, tid),
             ).fetchone()
             if not row:
                 return None
@@ -145,8 +161,10 @@ def get_session(session_id: str, user_id: str) -> dict[str, Any] | None:
             conn.close()
 
 
-def update_session_title(session_id: str, user_id: str, title: str) -> dict[str, Any] | None:
-    sess = get_session(session_id, user_id)
+def update_session_title(
+    session_id: str, user_id: str, title: str, *, tenant_id: str = DEFAULT_TENANT
+) -> dict[str, Any] | None:
+    sess = get_session(session_id, user_id, tenant_id=tenant_id)
     if not sess:
         return None
     new_title = (title or "").strip()[:128] or sess["title"]
@@ -166,17 +184,18 @@ def update_session_title(session_id: str, user_id: str, title: str) -> dict[str,
     return sess
 
 
-def delete_session(session_id: str, user_id: str) -> bool:
+def delete_session(session_id: str, user_id: str, *, tenant_id: str = DEFAULT_TENANT) -> bool:
     sid = session_id.strip()
     uid = user_id.strip()
+    tid = (tenant_id or DEFAULT_TENANT).strip() or DEFAULT_TENANT
     if not sid or not uid:
         return False
     with _lock:
         conn = _connect()
         try:
             cur = conn.execute(
-                "DELETE FROM chat_sessions WHERE id = ? AND user_id = ?",
-                (sid, uid),
+                "DELETE FROM chat_sessions WHERE id = ? AND user_id = ? AND tenant_id = ?",
+                (sid, uid, tid),
             )
             conn.commit()
             deleted = cur.rowcount > 0
@@ -185,8 +204,8 @@ def delete_session(session_id: str, user_id: str) -> bool:
     return deleted
 
 
-def list_messages(session_id: str, user_id: str) -> list[dict[str, Any]]:
-    if not get_session(session_id, user_id):
+def list_messages(session_id: str, user_id: str, *, tenant_id: str = DEFAULT_TENANT) -> list[dict[str, Any]]:
+    if not get_session(session_id, user_id, tenant_id=tenant_id):
         return []
 
     with _lock:
@@ -224,13 +243,14 @@ def append_messages(
     messages: list[dict[str, Any]],
     *,
     auto_title_from: str | None = None,
+    tenant_id: str = DEFAULT_TENANT,
 ) -> list[dict[str, Any]]:
-    sess = get_session(session_id, user_id)
+    sess = get_session(session_id, user_id, tenant_id=tenant_id)
     if not sess:
         raise ValueError("session not found")
 
     if not messages:
-        return list_messages(session_id, user_id)
+        return list_messages(session_id, user_id, tenant_id=tenant_id)
 
     now = _utc_now()
     with _lock:
@@ -264,18 +284,20 @@ def append_messages(
         finally:
             conn.close()
 
-    return list_messages(session_id, user_id)
+    return list_messages(session_id, user_id, tenant_id=tenant_id)
 
 
-def get_rolling_summary(session_id: str, user_id: str) -> str:
-    sess = get_session(session_id, user_id)
+def get_rolling_summary(session_id: str, user_id: str, *, tenant_id: str = DEFAULT_TENANT) -> str:
+    sess = get_session(session_id, user_id, tenant_id=tenant_id)
     if not sess:
         return ""
     return str(sess.get("rolling_summary") or "").strip()
 
 
-def set_rolling_summary(session_id: str, user_id: str, summary: str) -> bool:
-    sess = get_session(session_id, user_id)
+def set_rolling_summary(
+    session_id: str, user_id: str, summary: str, *, tenant_id: str = DEFAULT_TENANT
+) -> bool:
+    sess = get_session(session_id, user_id, tenant_id=tenant_id)
     if not sess:
         return False
     text = (summary or "").strip()[:4000]
@@ -295,5 +317,5 @@ def set_rolling_summary(session_id: str, user_id: str, summary: str) -> bool:
     return True
 
 
-def clear_rolling_summary(session_id: str, user_id: str) -> bool:
-    return set_rolling_summary(session_id, user_id, "")
+def clear_rolling_summary(session_id: str, user_id: str, *, tenant_id: str = DEFAULT_TENANT) -> bool:
+    return set_rolling_summary(session_id, user_id, "", tenant_id=tenant_id)

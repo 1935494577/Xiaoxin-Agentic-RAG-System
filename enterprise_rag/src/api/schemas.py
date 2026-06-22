@@ -49,6 +49,23 @@ class ChatRequest(BaseModel):
         default=None,
         description="混合专家模式：true=RAG 未命中可走通用；false=仅 RAG；None 使用 UI 默认",
     )
+    rag_architecture: str | None = Field(
+        default=None,
+        pattern="^(auto|classic|graph|agentic)$",
+        description="RAG 架构：auto=自动路由；classic/graph/agentic=手动指定",
+    )
+    input_mode: str | None = Field(
+        default=None,
+        pattern="^(question|temp_document|doc_task)$",
+        description="输入形态：提问 / 临时文档 / 文档任务",
+    )
+    doc_task_type: str | None = Field(
+        default=None,
+        pattern="^(summary|compare|extract|annotate)$",
+        description="文档任务类型（input_mode=doc_task 时）",
+    )
+    temp_document_id: str | None = Field(default=None, max_length=128)
+    scenario_tags: list[str] | None = Field(default=None, max_length=20)
 
 
 class SourceRef(BaseModel):
@@ -145,6 +162,56 @@ class FeedbackListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class FeedbackStatsIssueCount(BaseModel):
+    issue_type: str
+    count: int
+
+
+class FeedbackStatsStatusCount(BaseModel):
+    status: str
+    count: int
+
+
+class FeedbackStatsResponse(BaseModel):
+    since_days: int
+    tenant_id: str = "internal"
+    total: int
+    positive: int
+    negative: int
+    pending_triage: int
+    by_issue_type: list[FeedbackStatsIssueCount] = Field(default_factory=list)
+    by_status: list[FeedbackStatsStatusCount] = Field(default_factory=list)
+
+
+class AliasCandidatePublic(BaseModel):
+    canonical: str
+    alias: str
+    count: int
+    confidence: float
+    sample_questions: list[str] = Field(default_factory=list)
+
+
+class MissQuestionClusterPublic(BaseModel):
+    normalized: str
+    count: int
+    samples: list[str] = Field(default_factory=list)
+
+
+class AliasProposalsResponse(BaseModel):
+    since_days: int
+    question_count: int
+    alias_candidates: list[AliasCandidatePublic] = Field(default_factory=list)
+    question_clusters: list[MissQuestionClusterPublic] = Field(default_factory=list)
+
+
+class DomainLexiconRebuildResponse(BaseModel):
+    term_count: int
+    ingested_rows: int
+    updated_at: str
+    lexicon_path: str
+    message: str
 
 
 class FeedbackTriageRequest(BaseModel):
@@ -276,6 +343,35 @@ class IngestTextRequest(BaseModel):
     use_presidio: bool = True
 
 
+class RelationshipPerson(BaseModel):
+    name: str = Field(..., min_length=1, max_length=64)
+    title: str = Field(default="", max_length=128)
+    department: str | None = Field(default=None, max_length=64)
+    entity_type: str = Field(default="person", max_length=32)
+    bio: str = Field(default="", max_length=2000)
+
+
+class RelationshipEdge(BaseModel):
+    from_name: str = Field(..., min_length=1, max_length=64)
+    to_name: str = Field(..., min_length=1, max_length=64)
+    relation: str = Field(default="相关", max_length=64)
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class RelationshipImportRequest(BaseModel):
+    source: str = Field(default="relationship_bundle", max_length=256)
+    department: str = Field(..., min_length=1, max_length=64)
+    people: list[RelationshipPerson] = Field(default_factory=list, max_length=500)
+    relationships: list[RelationshipEdge] = Field(default_factory=list, max_length=2000)
+
+
+class RelationshipImportResponse(BaseModel):
+    source: str
+    people_imported: int
+    relationships_imported: int
+    message: str
+
+
 class PublicConfigResponse(BaseModel):
     embedding_model: str
     reranker_model: str
@@ -372,8 +468,16 @@ class UiConfigPublic(BaseModel):
     ingest_tag_presets: list[str] = Field(default_factory=list)
     active_persona_id: str = "knowledge_consultant"
     active_persona_label: str = "劲脑知识顾问"
-    agent_reasoning_mode: str = "react"
-    agent_reasoning_mode_label: str = "ReAct（推理+行动）"
+    agent_reasoning_mode: str = "direct"
+    agent_reasoning_mode_label: str = "直接回答"
+    scene_preset: str = "kb_frontline"
+    scene_presets: list[dict[str, str]] = Field(default_factory=list)
+    rag_arch_router_enabled: bool = True
+    rag_arch_llm_fallback: bool = False
+    default_rag_architecture: str = "auto"
+    graph_extraction_enabled: bool = True
+    agentic_max_turns: int = 6
+    agentic_max_kb_searches: int = 4
 
 
 class UiConfigUpdate(BaseModel):
@@ -408,6 +512,14 @@ class UiConfigUpdate(BaseModel):
     rolling_summary_every_n_turns: int | None = Field(default=None, ge=2, le=30)
     rolling_summary_min_chars: int | None = Field(default=None, ge=500, le=100000)
     ingest_tag_presets: list[str] | None = None
+    rag_arch_router_enabled: bool | None = None
+    rag_arch_llm_fallback: bool | None = None
+    default_rag_architecture: str | None = Field(default=None, pattern="^(auto|classic|graph|agentic)$")
+    graph_extraction_enabled: bool | None = None
+    agentic_max_turns: int | None = Field(default=None, ge=1, le=20)
+    agentic_max_kb_searches: int | None = Field(default=None, ge=1, le=20)
+    agent_reasoning_mode: str | None = Field(default=None, pattern="^(direct|react|plan_execute)$")
+    scene_preset: str | None = Field(default=None, pattern="^(kb_frontline|internal_full|api_kb_only)$")
 
 
 class ProcessingToolPublic(BaseModel):
@@ -518,6 +630,22 @@ class ChatMessagesAppend(BaseModel):
     user_id: str = Field(..., min_length=1, max_length=128)
     messages: list[ChatMessagePublic] = Field(..., min_length=1, max_length=50)
     auto_title_from: str | None = Field(default=None, max_length=80)
+
+
+class EphemeralDocPublic(BaseModel):
+    doc_id: str
+    filename: str
+    session_id: str
+
+
+class TranscribeResponse(BaseModel):
+    text: str = Field(default="", max_length=8000)
+
+
+class IngestedSourcePublic(BaseModel):
+    source: str
+    parent_count: int = 0
+    child_count: int = 0
 
 
 class UserProfilePublic(BaseModel):

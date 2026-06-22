@@ -1,0 +1,5 @@
+{"question": "产品 A 的保修期多久？", "expected_rag_architecture": "classic", "notes": "单跳事实题"}
+{"question": "年假申请截止日期是什么时候？", "expected_rag_architecture": "classic", "notes": "单跳事实题"}
+{"question": "哪些产品依赖某个组件？", "expected_rag_architecture": "graph", "notes": "关系链"}
+{"question": "分析销量下降原因", "expected_rag_architecture": "agentic", "notes": "开放调查"}
+{"question": "排查线上故障的可能原因", "expected_rag_architecture": "agentic", "notes": "排查类"}

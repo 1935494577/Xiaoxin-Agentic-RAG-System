@@ -11,14 +11,15 @@
 | **文档处理** | 解析与清洗（`document_loader`）、父子分块与持久化（`chunker`） |
 | **索引** | 向量写入 Milvus Lite（或 numpy 回退）、父文档 BM25（`indexing`）；可选 Elasticsearch 父索引 |
 | **嵌入与重排** | FlagEmbedding / sentence-transformers、CrossEncoder 重排；可选 **ModelScope** 下载到 `enterprise_rag/data/models` |
-| **检索** | 查询改写、向量 + BM25 混合检索、重排；**L3 检索去重**（文本相似度 + MMR）；**检索结果缓存**（Redis 或进程内 TTL 回退） |
+| **检索** | 查询改写、向量 + BM25 混合检索、重排；**L3 检索去重**（文本相似度 + MMR）；**检索结果缓存**（Redis 或进程内 TTL 回退）；**Query Understanding 分层**（口语/语音清洗 → 手动 alias canonical 纠错 → 领域词表 fuzzy variant → embedding 近邻 → 条件 LLM rewrite → 多路 RRF）；**灰区/弱命中 LLM judge**（strict KB 保留 ctx）；反馈闭环 **apply_query_alias** |
 | **入库去重** | **L1** 文档 content_hash 别名跳过重复嵌入；**L2** 父块 simhash 近似去重（`indexing/ingest_dedup`） |
-| **对话智能体** | LangGraph / SSE；混合专家；**检索置信度路由**（rerank confident/gray/weak，引用仅 confident）；**多轮上下文** L1–L4（见 `docs/conversation-context.md`）；**routing_model** 预处理与生成模型分离；**chat_routing_tier**（fast/balanced/quality）；`reset_context` / 滚动摘要；**角色人设预设**（劲脑脑科教育 7 套，管理端选项卡切换）；**思考模式**（直接回答 / ReAct / Plan-and-Execute，可配置是否走工具循环） |
-| **HTTP API** | FastAPI：健康检查、入库、检索调试、流式对话、会话记忆、可插拔提示词、模型/向量库/UI 配置（`api`） |
-| **安全** | 可选 `RAG_API_SECRET`、CORS、可信 Host、安全头；注入检测；**部门 + 可见范围 ACL**（内部仅本部门、公开全员可见，向量/BM25 检索层过滤） |
-| **前端** | **Jnao Chat** React SPA（8502）：**欢迎页**（液态玻璃登录按钮）、**登录页**（思→德→学→行→赢 漫画 Q 版 mascot 互动）、流式对话、**当前角色人设**工具栏展示、**用户资料**（昵称/头像）、**新话题** / 混合专家；**部门功能门控**（管理端导航按部门可见性）；**React 管理后台**（`/admin`）：入库、工具、**提示词**（人设选项卡 + 思考模式）、模型、**对话设置**、**评测报告**、Trace 等 |
-| **用户反馈（Sprint A–D）** | 👍👎 反馈 → Triage → 采纳 → **Actuator**（golden / 重入库工单 / 配置补丁）→ **golden 评测**（RAGAS 或 naive 回退，对比上一份 Δ）；`config_revisions` 可回滚；Admin **评测报告**页 |
-| **评测与追踪** | 可选 LangSmith / 本地 JSONL trace；`scripts/eval_ingest_dedup.py` 检索去重 A/B 评估 |
+| **对话智能体** | LangGraph / SSE；**多架构 RAG 调度**（Classic / Graph / Agentic 自动或手动路由，见 `docs/rag_architecture_router.md`）；**graph+agentic 双信号优先 Graph**；混合专家；**KB-only 默认 direct 推理**（`resolve_effective_reasoning_mode`）；**业务场景预设**（一线 KB / 内测全功能 / LAN API，Admin 一键应用）；**检索置信度路由**（rerank confident/gray/weak，引用仅 confident）；**多轮上下文** L1–L4（见 `docs/conversation-context.md`）；**routing_model** 预处理与生成模型分离；**chat_routing_tier**（fast/balanced/quality）；`reset_context` / 滚动摘要；**角色人设预设**（劲脑脑科教育 7 套，管理端选项卡切换）；**思考模式**（直接回答 / ReAct / Plan-and-Execute）；**kb_search** 工具（Agentic 多轮检索）；**人物关系图**（`show_relationship_graph` 快路径 + SQLite 知识图谱） |
+| **HTTP API** | FastAPI：健康检查、入库、**关系入库**、**领域词表重建**、**语音转写**、检索调试、流式对话、会话记忆、可插拔提示词、**场景预设 API**（`POST /config/ui/scene-preset/{id}`）、模型/向量库/UI 配置（`api`） |
+| **安全** | 可选 `RAG_API_SECRET`、**`RAG_ADMIN_API_SECRET`**（管理 API 独立密钥）、CORS、可信 Host、安全头；**Admin 角色**（`X-Admin-Role`：viewer/operator/admin）；**前端 RequireAuth**（未登录跳转 `/login`）；注入检测；**部门 + 可见范围 ACL** |
+| **租户预留（Sprint E）** | `X-Tenant-ID` 中间件（默认 `internal`）；`/api/v1/*` 路由别名；`FeedbackStore` / `TraceStore` 抽象 |
+| **前端** | **Jnao Chat** React SPA（8502）：流式对话；**语音输入**；**Chat 内交互关系图**（ECharts）；**用户资料**、**新话题** / 混合专家；**部门功能门控**；**React 管理后台**（`/admin`）：侧边栏分组（日常运营 / 质量闭环 / 系统配置）、各页「怎么用」指南、**结构化链路详情**（反馈 Trace）；入库、工具、提示词、模型、对话设置（含场景预设）、评测报告等 |
+| **用户反馈（Sprint A–D）** | 👍👎 反馈 → Triage → 采纳 → **Actuator**（golden / 重入库工单 / 配置补丁 / **query alias**）→ **alias 候选排序**（`GET /admin/feedback/alias-proposals`）→ **golden 评测**（RAGAS 或 naive 回退，对比上一份 Δ）；`config_revisions` 可回滚；Admin **评测报告**页；Feedback 故障时 **Chat 热路径不受影响** |
+| **评测与追踪** | 可选 LangSmith / 本地 JSONL trace；`scripts/eval_ingest_dedup.py` 检索去重 A/B；`scripts/eval_query_robustness.py`（分 scenario 汇总）/ `scripts/query_verify.ps1`；`docs/query-understanding.md` |
 | **容器与脚本** | `Dockerfile`、`docker-compose.yml`、`Makefile`；Windows `.ps1` 与 **macOS/Linux `.sh`** 一键启停；**生产启动** `run-api-prod.ps1` / `run-api-prod.sh`；**缓存清理** `clean-cache.ps1` |
 
 ---
@@ -30,7 +31,7 @@
 - **`.env`**（从 `.env.example` 复制后本地填写密钥与模型服务地址）
 - **内部规划稿**：`PROJECT_PLAN.md`、`plan1.md`、`project.txt`
 - **虚拟环境与缓存**：`.venv/`、`__pycache__/`、`.pytest_cache/` 等
-- **运行期索引与数据产物**：`enterprise_rag/data/milvus_lite/`、`bm25_index.json`、`numpy_vectors.json`、`chunks_*.jsonl`、`processed/**`（除 `.gitkeep`）、`feedback.jsonl`、`golden.jsonl` 等
+- **运行期索引与数据产物**：`enterprise_rag/data/milvus_lite/`、`bm25_index.json`、`numpy_vectors.json`、`chunks_*.jsonl`、`processed/**`（除 `.gitkeep`）、`feedback.jsonl`、`golden.jsonl`、`knowledge_graph.db` 等
 - **本地调试/审计产物**：`debug-*.log`、`.codegraph/`、`enterprise_rag/data/_audit_tmp/`、`enterprise_rag/data/_bench_tmp/`
 
 **嵌入与重排模型**默认下载到 `enterprise_rag/data/models/`，**不纳入 Git**（由 `.gitignore` 排除）；克隆仓库后请在本地按上文「模型获取」方式自行下载权重。
@@ -53,7 +54,9 @@ xiaoxin_RAG/
 ├── requirements-gpu.txt
 ├── docs/
 │   ├── conversation-context.md  # 多轮上下文 L1–L4 架构说明
-│   └── deploy_security.md       # 部署与安全建议
+│   ├── query-understanding.md   # Query Understanding 分层与治理
+│   ├── deploy_security.md       # 部署与安全建议
+│   └── phase1_acceptance.md     # 阶段 1 总验收清单
 ├── deploy/
 │   └── nginx-api.conf.example
 ├── enterprise_rag/
@@ -92,6 +95,8 @@ xiaoxin_RAG/
 | 平台 | 一键开发 | 仅 API | 管理后台 | 停止服务 |
 |------|----------|--------|----------|----------|
 | **Windows** | `.\scripts\run-dev.ps1` | `.\scripts\run-api.ps1` | `.\scripts\run_frontend.ps1` | `.\scripts\stop-dev.ps1` |
+| **Windows（局域网分享 Chat 页面）** | `.\scripts\run-chat-lan-kb.ps1` | — | 同端口 `/admin/` | `.\scripts\stop-dev.ps1` |
+| **Windows（局域网暴露 RAG API）** | `.\scripts\run-api-lan.ps1` | 同事直连 `:8010` | — | `.\scripts\stop-dev.ps1` |
 | **macOS / Linux** | `./scripts/run-dev.sh` | `./scripts/run-api.sh` | `./scripts/run_frontend.sh` | `./scripts/stop-dev.sh` |
 
 > macOS 不能直接运行 `.ps1`（除非单独安装 PowerShell）。克隆后先赋予执行权限：  
@@ -107,6 +112,30 @@ cp .env.example .env           # 编辑 API Key 等
 ```
 
 依赖：**Python 3.10+**、**Node.js LTS**（Chat SPA）、可选 **Homebrew** 安装 `python3` / `node`。
+
+#### 局域网同事调用 RAG API（推荐：自有客户端 / 脚本）
+
+不开放前端，仅暴露后端 FastAPI，同事请求你本机的 **8010** 端口：
+
+```powershell
+.\scripts\stop-dev.ps1
+.\scripts\run-api-lan.ps1 -KbOnly
+# 首次连不上（管理员）：.\scripts\run-api-lan.ps1 -KbOnly -OpenFirewall
+```
+
+接口说明与 curl/Python 示例见 **[docs/lan_api_chat.md](docs/lan_api_chat.md)**。核心端点：
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/health` | 连通性 |
+| POST | `/chat` | 一次性 JSON 回答 |
+| POST | `/chat/stream` | SSE 流式（与前端相同协议） |
+
+请求体需含 `message`、`user_id`、`user_department`；知识库专用请加 `"hybrid_expert_mode": false`。
+
+#### 局域网同事访问 Chat 页面（可选）
+
+若同事用浏览器而非 API，见 `run-chat-lan-kb.ps1`（端口 **8502**）。
 
 ---
 

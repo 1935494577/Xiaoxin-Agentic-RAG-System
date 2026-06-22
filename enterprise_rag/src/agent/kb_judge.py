@@ -241,6 +241,8 @@ def should_use_knowledge_base(
         topic_shift=topic_shift,
     )
     if confidence == "weak":
+        if kb_llm_judge and llm_runtime and bool(getattr(settings, "kb_weak_zone_llm_judge", True)):
+            return _llm_kb_relevant(question, contexts, llm_runtime)
         return False
     if confidence == "confident":
         if kb_llm_judge_always and kb_llm_judge and llm_runtime:
@@ -267,7 +269,21 @@ def resolve_answer_mode(
     kb_llm_judge_always: bool = False,
 ) -> str:
     if not general_fallback_enabled:
-        return "kb" if has_usable_context(contexts, contexts_meta) else "kb"
+        if not has_usable_context(contexts, contexts_meta):
+            return "kb"
+        if should_use_knowledge_base(
+            question,
+            contexts,
+            contexts_meta,
+            kb_min_score=kb_min_score,
+            kb_min_rerank_score=kb_min_rerank_score,
+            kb_llm_judge=kb_llm_judge,
+            llm_runtime=llm_runtime,
+            topic_shift=topic_shift,
+            kb_llm_judge_always=kb_llm_judge_always,
+        ):
+            return "kb"
+        return "kb"
 
     if should_use_knowledge_base(
         question,

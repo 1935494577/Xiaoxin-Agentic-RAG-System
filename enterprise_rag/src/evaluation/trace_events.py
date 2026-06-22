@@ -17,6 +17,8 @@ from typing import Any, Iterator, Literal
 
 from config import settings
 
+from tenant.context import DEFAULT_TENANT
+
 SpanType = Literal[
     "run",
     "graph_node",
@@ -81,6 +83,7 @@ class TraceRun:
     """Top-level record for one user request."""
 
     trace_id: str
+    tenant_id: str = DEFAULT_TENANT
     session_id: str | None = None
     user_id: str | None = None
     question: str = ""
@@ -93,6 +96,7 @@ class TraceRun:
     def to_record(self) -> dict[str, Any]:
         return {
             "trace_id": self.trace_id,
+            "tenant_id": self.tenant_id,
             "session_id": self.session_id,
             "user_id": self.user_id,
             "question": self.question,
@@ -111,12 +115,14 @@ class TraceCollector:
         self,
         *,
         trace_id: str | None = None,
+        tenant_id: str = DEFAULT_TENANT,
         session_id: str | None = None,
         user_id: str | None = None,
         question: str = "",
     ) -> None:
         self.run = TraceRun(
             trace_id=trace_id or new_trace_id(),
+            tenant_id=(tenant_id or DEFAULT_TENANT).strip() or DEFAULT_TENANT,
             session_id=session_id,
             user_id=user_id,
             question=question,

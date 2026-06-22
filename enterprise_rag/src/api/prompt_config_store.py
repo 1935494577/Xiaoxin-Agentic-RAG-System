@@ -103,7 +103,10 @@ def load_active_persona_id() -> str:
 
 
 def load_prompt_slots() -> list[dict[str, Any]]:
-    return load_prompt_config()["slots"]
+    from agent.persona_presets import apply_active_persona
+
+    cfg = load_prompt_config()
+    return apply_active_persona(cfg["slots"], cfg.get("active_persona_id"))
 
 
 def _normalize_slot(row: dict[str, Any], *, allow_new: bool = False) -> dict[str, Any] | None:
@@ -191,14 +194,10 @@ def save_prompt_config(
 
     if active_persona_id is not None:
         persona_id = str(active_persona_id).strip() or DEFAULT_PERSONA_ID
-        from agent.persona_presets import get_persona_content
 
-        preset_content = get_persona_content(persona_id)
-        if preset_content:
-            for slot in merged:
-                if slot.get("id") == "persona":
-                    slot["content"] = preset_content
-                    break
+    from agent.persona_presets import apply_active_persona
+
+    merged = apply_active_persona(merged, persona_id)
 
     payload = {"version": 1, "active_persona_id": persona_id, "slots": merged}
     path = _config_path()
@@ -210,13 +209,13 @@ def save_prompt_config(
 def public_prompt_config(*, mode: str = "kb", fast: bool = False) -> dict[str, Any]:
     from agent.prompt_engine import compose_system_prompt, preview_layers
     from agent.reasoning_modes import list_reasoning_modes_public
-    from api.ui_config_store import load_ui_config
+    from api.ui_config_store import load_ui_config, resolve_effective_reasoning_mode
 
     cfg = load_prompt_config()
-    slots = cfg["slots"]
+    slots = load_prompt_slots()
     m: str = mode if mode in ("kb", "general") else "kb"
     ui = load_ui_config()
-    reasoning_mode = str(ui.get("agent_reasoning_mode") or "react")
+    reasoning_mode = resolve_effective_reasoning_mode(ui)
     return {
         **cfg,
         "persona_presets": list_persona_presets_public(include_content=True),

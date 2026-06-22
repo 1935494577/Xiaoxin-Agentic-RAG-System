@@ -9,12 +9,13 @@ import {
   loadMessages,
   streamChat,
 } from "../api/client";
-import { HYBRID_MODE_KEY } from "../lib/constants";
+import { resolveHybridExpertMode, resolveStreamFastMode } from "../lib/chatDefaults";
 import { useAuth } from "../hooks/useAuth";
-import { useLocalStorage } from "../hooks/useLocalStorage";
 import { useUserProfile } from "../context/UserProfileContext";
-import type { ChatMessage, ChatSession, StreamEvent, ToolTraceItem } from "../api/types";
+import type { ChatMessage, ChatSession, GraphViz, StreamEvent, ToolTraceItem } from "../api/types";
 import { applyToolStreamEvent } from "../lib/streamTools";
+import { downloadMarkdown, messagesToMarkdown } from "../lib/exportChatMarkdown";
+import { toast } from "sonner";
 import { PanelLeftClose, PanelLeftOpen, Sparkles } from "lucide-react";
 import { ChatInput } from "../components/chat/ChatInput";
 import { ChatToolbar } from "../components/chat/ChatToolbar";
@@ -41,6 +42,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState("");
+  const [streamGraphViz, setStreamGraphViz] = useState<GraphViz | null>(null);
   const [error, setError] = useState("");
 
   const abortRef = useRef<AbortController | null>(null);
@@ -49,13 +51,16 @@ export default function ChatPage() {
 
   const [input, setInput] = useState("");
   const [newTopicPending, setNewTopicPending] = useState(false);
-  const [hybridExpert, setHybridExpert] = useLocalStorage<boolean>(HYBRID_MODE_KEY, false);
+  /** Session-only override; defaults come from server uiConfig so LAN users stay aligned. */
+  const [hybridOverride, setHybridOverride] = useState<boolean | null>(null);
 
   const { data: uiConfig } = useQuery({
     queryKey: ["uiConfig"],
     queryFn: fetchUiConfig,
     staleTime: 300_000,
   });
+
+  const hybridExpert = resolveHybridExpertMode(uiConfig, hybridOverride);
 
   // ---- refresh sessions imperatively (like old App.tsx) ----
   const refreshSessions = useCallback(async () => {
@@ -73,10 +78,6 @@ export default function ChatPage() {
   useEffect(() => {
     if (initDone.current) return;
 
-    const stored = localStorage.getItem(HYBRID_MODE_KEY);
-    if (stored === "1") setHybridExpert(true);
-    else if (stored === "0") setHybridExpert(false);
-
     refreshSessions().then((rows) => {
       if (rows && rows.length && !sessionId) {
         setSessionId(rows[0].id);
@@ -86,14 +87,9 @@ export default function ChatPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Apply uiConfig hybrid default on first load
   useEffect(() => {
-    if (!uiConfig || typeof uiConfig.hybrid_expert_mode !== "boolean") return;
-    const stored = localStorage.getItem(HYBRID_MODE_KEY);
-    if (stored === null) {
-      setHybridExpert(uiConfig.hybrid_expert_mode);
-    }
-  }, [uiConfig, setHybridExpert]);
+    setHybridOverride(null);
+  }, [uiConfig?.hybrid_expert_mode]);
 
   // ---- load messages when session changes (like old App.tsx) ----
   useEffect(() => {
@@ -110,6 +106,18 @@ export default function ChatPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamText, streaming]);
+
+  const handleExport = useCallback(() => {
+    if (!messages.length) {
+      toast.message("当前对话为空，无法导出");
+      return;
+    }
+    const session = sessions.find((s) => s.id === sessionId);
+    const md = messagesToMarkdown(messages, session);
+    const name = (session?.title || "对话").replace(/[\\/:*?"<>|]/g, "_").slice(0, 40);
+    downloadMarkdown(`${name}.md`, md);
+    toast.success("已导出 Markdown");
+  }, [messages, sessionId, sessions]);
 
   // ---- session CRUD ----
   const handleNew = async () => {
@@ -148,13 +156,16 @@ export default function ChatPage() {
     // 2. Start streaming
     setStreaming(true);
     setStreamText("");
+    setStreamGraphViz(null);
 
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
     let assistant = "";
+    let streamError = "";
     let meta: ChatMessage["meta"] = {};
     let toolTrace: ToolTraceItem[] = [];
+    let graphViz: GraphViz | undefined;
     const priorHistory = newTopicPending
       ? []
       : messages.map((m) => ({ role: m.role, content: m.content }));
@@ -166,10 +177,12 @@ export default function ChatPage() {
         user_id: userId,
         user_department: department,
         hybrid_expert_mode: hybridExpert,
+        stream_fast_mode: resolveStreamFastMode(uiConfig),
         skip_query_rewrite: true,
         session_id: sid,
         history: priorHistory,
         reset_context: resetContext,
+        rag_architecture: "auto",
       },
       (evt: StreamEvent) => {
         if (evt.type === "token") {
@@ -177,17 +190,23 @@ export default function ChatPage() {
           setStreamText(assistant);
         } else if (evt.type === "tool_call" || evt.type === "tool_result") {
           toolTrace = applyToolStreamEvent(toolTrace, evt);
+        } else if (evt.type === "graph_viz") {
+          graphViz = evt.graph;
+          setStreamGraphViz(evt.graph);
         } else if (evt.type === "error") {
+          streamError = evt.message;
           setError(evt.message);
         } else if (evt.type === "done") {
-          assistant = evt.answer;
+          assistant = evt.answer || assistant;
           meta = {
             sources: evt.sources,
             source_refs: evt.source_refs,
             answer_mode: evt.answer_mode,
+            rag_architecture: evt.rag_architecture,
             verified: evt.verified,
             trace_id: evt.trace_id,
             tool_trace: evt.tool_trace?.length ? evt.tool_trace : toolTrace,
+            graph_viz: evt.graph_viz ?? graphViz,
           };
         }
       },
@@ -197,10 +216,11 @@ export default function ChatPage() {
     // 3. Stream finished
     setStreaming(false);
     setStreamText("");
+    setStreamGraphViz(null);
     abortRef.current = null;
     setNewTopicPending(false);
 
-    const finalContent = assistant || error || "（无回复）";
+    const finalContent = assistant || streamError || "（无回复）";
     const assistantMsg: ChatMessage = {
       role: "assistant",
       content: finalContent,
@@ -337,7 +357,13 @@ export default function ChatPage() {
                   userDisplayName={displayName}
                   aiAvatar={aiAvatarUrl}
                   aiDisplayName={aiDisplayName}
+                  userDepartment={department}
                   streaming={streaming && i === displayMessages.length - 1 && m.role === "assistant"}
+                  graphViz={
+                    streaming && i === displayMessages.length - 1 && m.role === "assistant"
+                      ? streamGraphViz
+                      : undefined
+                  }
                 />
               );
             })}
@@ -349,10 +375,14 @@ export default function ChatPage() {
           <div className="mb-2.5">
             <ChatToolbar
               hybridExpert={hybridExpert}
-              onHybridChange={setHybridExpert}
+              onHybridChange={setHybridOverride}
+              hybridUsesServerDefault={hybridOverride === null}
+              department={department}
               newTopicPending={newTopicPending}
               onNewTopicToggle={() => setNewTopicPending((v) => !v)}
               streaming={streaming}
+              onExport={handleExport}
+              exportDisabled={!messages.length}
             />
           </div>
           <ChatInput

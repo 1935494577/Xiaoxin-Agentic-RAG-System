@@ -134,6 +134,50 @@ def action_add_to_golden(row: dict[str, Any], action: dict[str, Any], *, manual:
     return {"action": "add_to_golden", "ok": True, "golden_path": str(path)}
 
 
+def action_propose_query_alias(row: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
+    from retrieval.query_aliases_store import alias_patch_from_question, append_alias_proposal
+
+    patch = action.get("patch")
+    if not isinstance(patch, dict):
+        patch = alias_patch_from_question(str(row.get("question") or ""))
+    if not isinstance(patch, dict) or not patch.get("canonical"):
+        return {
+            "action": "propose_query_alias",
+            "ok": False,
+            "skipped": True,
+            "reason": "no alias patch inferred",
+        }
+    canonical = str(patch.get("canonical") or "").strip()
+    aliases = [str(a).strip() for a in (patch.get("aliases") or []) if str(a).strip()]
+    proposal = append_alias_proposal(
+        canonical=canonical,
+        aliases=aliases,
+        question=str(row.get("question") or ""),
+        feedback_id=str(row.get("id") or ""),
+        detail=str(action.get("detail") or ""),
+    )
+    return {"action": "propose_query_alias", "ok": True, "proposal": proposal}
+
+
+def action_apply_query_alias(row: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
+    from retrieval.query_aliases_store import alias_patch_from_question, merge_term_aliases
+
+    patch = action.get("patch")
+    if not isinstance(patch, dict):
+        patch = alias_patch_from_question(str(row.get("question") or ""))
+    if not isinstance(patch, dict) or not patch.get("canonical"):
+        return {
+            "action": "apply_query_alias",
+            "ok": False,
+            "skipped": True,
+            "reason": "no alias patch",
+        }
+    canonical = str(patch.get("canonical") or "").strip()
+    aliases = [str(a).strip() for a in (patch.get("aliases") or []) if str(a).strip()]
+    applied = merge_term_aliases(canonical, aliases)
+    return {"action": "apply_query_alias", "ok": bool(applied.get("ok")), "applied": applied}
+
+
 def action_propose_reingest(row: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
     proposal = {
         "id": uuid.uuid4().hex,
@@ -298,6 +342,10 @@ def execute_single_action(
         return action_add_to_golden(row, action, manual=manual)
     if name == "propose_reingest":
         return action_propose_reingest(row, action)
+    if name == "propose_query_alias":
+        return action_propose_query_alias(row, action)
+    if name == "apply_query_alias":
+        return action_apply_query_alias(row, action)
     if name == "apply_config_patch":
         return action_apply_config_patch(row, action)
     return {"action": name, "ok": False, "error": "unknown action"}

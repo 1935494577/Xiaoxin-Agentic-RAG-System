@@ -42,6 +42,33 @@ export const STANDARD_DEPARTMENT_FEATURES: ReadonlySet<AdminFeature> = new Set([
   "models",
 ]);
 
+export type NavGroupId = "daily" | "quality" | "system";
+
+export type NavGroup = {
+  id: NavGroupId;
+  label: string;
+  featureIds: AdminFeature[];
+};
+
+/** 管理后台侧边栏分组（Chat 单独在「工作区」） */
+export const NAV_GROUPS: NavGroup[] = [
+  {
+    id: "daily",
+    label: "日常运营",
+    featureIds: ["ingest", "tutorial"],
+  },
+  {
+    id: "quality",
+    label: "质量闭环",
+    featureIds: ["feedback", "eval_reports", "trace"],
+  },
+  {
+    id: "system",
+    label: "系统配置",
+    featureIds: ["memory", "prompts", "models", "processing", "vector_store"],
+  },
+];
+
 export type NavItem = {
   id: AdminFeature;
   label: string;
@@ -90,6 +117,21 @@ export function shouldEnforceDepartmentAccess(department: string): boolean {
   return Boolean(department.trim()) && isKnownDepartment(department.trim());
 }
 
+/** 登录会话部门优先于服务端 profile，避免登录选「技术部」但 profile 仍是旧部门导致权限丢失。 */
+export function resolveEffectiveDepartment(
+  authDepartment: string,
+  profileDepartment: string,
+  isAuthenticated: boolean
+): string {
+  if (isAuthenticated && authDepartment.trim()) {
+    return authDepartment.trim();
+  }
+  if (profileDepartment.trim()) {
+    return profileDepartment.trim();
+  }
+  return FULL_ACCESS_DEPARTMENT;
+}
+
 export function canAccessFeature(department: string, feature: AdminFeature): boolean {
   if (!shouldEnforceDepartmentAccess(department)) return true;
   if (hasFullDepartmentAccess(department)) return true;
@@ -116,6 +158,21 @@ export function canAccessAdminPath(department: string, pathname: string): boolea
 
 export function getVisibleNavItems(department: string): NavItem[] {
   return ALL_NAV_ITEMS.filter((item) => canAccessFeature(department, item.id));
+}
+
+export type VisibleNavGroup = NavGroup & { items: NavItem[] };
+
+export function getVisibleNavGroups(department: string): VisibleNavGroup[] {
+  const visible = new Set(getVisibleNavItems(department).map((item) => item.id));
+  const byId = Object.fromEntries(ALL_NAV_ITEMS.map((item) => [item.id, item])) as Record<
+    AdminFeature,
+    NavItem
+  >;
+
+  return NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.featureIds.map((id) => byId[id]).filter((item) => item && visible.has(item.id)),
+  })).filter((group) => group.items.length > 0);
 }
 
 export function getDefaultAdminPath(department: string): string {

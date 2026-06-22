@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from agent.prompt_engine import compose_system_prompt
+from agent.prompt_engine import KB_TASK_STRICT, KB_TASK_STRICT_FAST, compose_system_prompt
 from agent.reasoning_modes import reasoning_policy
 
 GENERAL_WORLD_USER_HINT = (
@@ -42,8 +42,15 @@ def kb_system_prompt(
     slots: list[dict[str, Any]] | None = None,
     persona: str | None = None,
     reasoning_mode: str | None = None,
+    strict_kb_only: bool = False,
 ) -> str:
     resolved = _resolve_slots(slots, persona)
+    if strict_kb_only:
+        resolved = [dict(s) for s in resolved]
+        strict_text = KB_TASK_STRICT_FAST if fast else KB_TASK_STRICT
+        for slot in resolved:
+            if str(slot.get("id") or "") in ("kb_task", "kb_task_fast"):
+                slot["content"] = strict_text
     text = compose_system_prompt(resolved, mode="kb", fast=fast)
     policy = reasoning_policy(reasoning_mode)
     return f"{text}\n\n{policy}" if policy else text

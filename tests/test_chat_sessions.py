@@ -6,6 +6,7 @@ from api.chat_session_store import (
     append_messages,
     create_session,
     delete_session,
+    get_session,
     init_chat_session_db,
     list_messages,
     list_sessions,
@@ -56,3 +57,16 @@ def test_delete_session(session_db):
     append_messages(sess["id"], "u1", [{"role": "user", "content": "x"}])
     assert delete_session(sess["id"], "u1")
     assert list_sessions("u1") == []
+
+
+def test_session_tenant_isolation(session_db):
+    s_internal = create_session("u1", title="internal-chat")
+    s_other = create_session("u1", title="acme-chat", tenant_id="acme")
+
+    internal_rows = list_sessions("u1", tenant_id="internal")
+    acme_rows = list_sessions("u1", tenant_id="acme")
+    assert len(internal_rows) == 1
+    assert len(acme_rows) == 1
+    assert internal_rows[0]["id"] == s_internal["id"]
+    assert acme_rows[0]["id"] == s_other["id"]
+    assert get_session(s_other["id"], "u1", tenant_id="internal") is None

@@ -1,14 +1,18 @@
 import { useRef, useState } from "react";
-import { MoreHorizontal } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { LogOut, MoreHorizontal } from "lucide-react";
 import { Dialog } from "../ui/Dialog";
 import { Label } from "../ui/Label";
 import { ChatAvatar } from "../chat/ChatAvatar";
+import { useAuth } from "../../hooks/useAuth";
 import { useUserProfile } from "../../context/UserProfileContext";
 import { DEPT_OPTIONS } from "../../lib/constants";
 import { fileToAvatarDataUrl, profileLabel } from "../../lib/avatarImage";
 import { toast } from "sonner";
 
 export function SidebarUserProfile() {
+  const navigate = useNavigate();
+  const { logout } = useAuth();
   const {
     loading,
     displayName,
@@ -69,9 +73,14 @@ export function SidebarUserProfile() {
 
   const label = profileLabel(displayName);
 
+  const handleLogout = () => {
+    logout();
+    navigate("/login", { replace: true });
+  };
+
   return (
     <>
-      <div className="px-2 py-2 border-t border-border">
+      <div className="px-2 py-2 border-t border-border space-y-1">
         <button
           type="button"
           onClick={openDialog}
@@ -92,6 +101,14 @@ export function SidebarUserProfile() {
             size={16}
             className="shrink-0 text-text-muted opacity-60 group-hover:opacity-100"
           />
+        </button>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-text-muted hover:text-brand hover:bg-white/80 transition-colors cursor-pointer"
+        >
+          <LogOut size={14} />
+          退出登录
         </button>
       </div>
 

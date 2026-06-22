@@ -1,0 +1,29 @@
+{
+  "departments": {
+    "运营部": {
+      "allowed": ["classic", "agentic"],
+      "default": "classic"
+    },
+    "技术部": {
+      "allowed": ["classic", "graph", "agentic"],
+      "default": "auto"
+    },
+    "媒体部": {
+      "allowed": ["classic", "graph", "agentic"],
+      "default": "auto"
+    },
+    "剪辑部": {
+      "allowed": ["classic", "agentic"],
+      "default": "classic"
+    }
+  },
+  "scenarios": {
+    "制度": { "prefer": "classic" },
+    "policy": { "prefer": "classic" },
+    "培训": { "prefer": "classic" },
+    "产品": { "prefer": "classic" },
+    "supply_chain": { "prefer": "graph" },
+    "供应链": { "prefer": "graph" }
+  },
+  "force_classic_patterns": []
+}

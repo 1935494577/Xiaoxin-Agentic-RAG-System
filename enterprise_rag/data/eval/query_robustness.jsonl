@@ -1,0 +1,6 @@
+{"raw": "咋整超脑阅度", "scenario": "oral_typo", "expect_variant_contains": "超脑阅读", "expect_intent": "kb"}
+{"raw": "超脑阅度有啥要求", "scenario": "training_kb", "expect_variant_contains": "超脑阅读", "expect_intent": "kb"}
+{"raw": "电脑。今日萧山区天气。我就。我就。", "scenario": "speech_noise", "expect_message": "今日萧山区天气", "expect_intent": "realtime"}
+{"raw": "什么是感知力", "scenario": "training_kb", "expect_message": "什么是感知力", "expect_intent": "kb"}
+{"raw": "展示一下公司关系", "scenario": "graph_signal", "expect_intent": "graph"}
+{"raw": "扫描速记注意事项", "scenario": "training_kb", "expect_intent": "kb", "expect_variant_contains": "扫描速记"}

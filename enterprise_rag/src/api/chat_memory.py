@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from api.ui_config_store import load_ui_config
+from api.ui_config_store import load_ui_config, resolve_effective_reasoning_mode
 
 
 def chat_memory_settings() -> dict[str, Any]:
@@ -37,6 +37,12 @@ def chat_memory_settings() -> dict[str, Any]:
         "chat_routing_tier": str(ui.get("chat_routing_tier") or "balanced"),
         "condense_llm_enabled": bool(ui.get("condense_llm_enabled", True)),
         "kb_llm_judge_always": bool(ui.get("kb_llm_judge_always", False)),
-        "agent_reasoning_mode": str(ui.get("agent_reasoning_mode") or "react"),
+        "agent_reasoning_mode": resolve_effective_reasoning_mode(ui),
         "prompt_slots": load_prompt_slots(),
+        "rag_arch_router_enabled": bool(ui.get("rag_arch_router_enabled", True)),
+        "rag_arch_llm_fallback": bool(ui.get("rag_arch_llm_fallback", False)),
+        "default_rag_architecture": str(ui.get("default_rag_architecture") or "auto"),
+        "graph_extraction_enabled": bool(ui.get("graph_extraction_enabled", True)),
+        "agentic_max_turns": int(ui.get("agentic_max_turns") or 6),
+        "agentic_max_kb_searches": int(ui.get("agentic_max_kb_searches") or 4),
     }

@@ -38,6 +38,12 @@ def warmup_models_in_memory() -> None:
     from indexing.embeddings import embed_texts
 
     embed_texts(["warmup"], batch_size=1)
+    try:
+        from retrieval.term_embeddings import warmup_term_embedding_cache
+
+        warmup_term_embedding_cache(max_terms=32)
+    except Exception:
+        logger.debug("Term embedding warmup skipped", exc_info=True)
     if settings.warmup_reranker_on_startup:
         from retrieval.reranker import rerank_parents
 

@@ -1,8 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchUiConfig, saveUiConfig } from "../../api/client";
+import { fetchUiConfig, saveUiConfig, applyScenePreset } from "../../api/client";
 import { PageHeader } from "../../components/admin/PageHeader";
+import { SectionGuide } from "../../components/admin/SectionGuide";
+import { MEMORY_PAGE_HELP } from "../../lib/adminHelp";
 import { Button } from "../../components/ui/Button";
 import { Switch } from "../../components/ui/Switch";
 import { Slider } from "../../components/ui/Slider";
@@ -111,6 +113,15 @@ export default function MemoryPage() {
     onError: (e: Error) => toast.error(e.message || "保存失败"),
   });
 
+  const presetMutation = useMutation({
+    mutationFn: (presetId: string) => applyScenePreset(presetId),
+    onSuccess: () => {
+      toast.success("已应用场景预设");
+      queryClient.invalidateQueries({ queryKey: ["uiConfig"] });
+    },
+    onError: (e: Error) => toast.error(e.message || "应用预设失败"),
+  });
+
   const set = (key: string, val: unknown) => setForm((f) => ({ ...f, [key]: val }));
 
   const handleSave = () => {
@@ -138,6 +149,10 @@ export default function MemoryPage() {
 
   const f = (key: string): boolean => Boolean(form[key]);
   const n = (key: string): number => Number(form[key] ?? 0);
+  const activePreset = String((ui as Record<string, unknown>)?.scene_preset || "kb_frontline");
+  const presetOptions = Array.isArray((ui as Record<string, unknown>)?.scene_presets)
+    ? ((ui as Record<string, unknown>).scene_presets as Array<{ id: string; label: string; description?: string }>)
+    : [];
 
   const inputCls =
     "mt-1 flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand";
@@ -416,6 +431,39 @@ export default function MemoryPage() {
         title="对话设置"
         description="服务端默认与阈值。Chat 页仅暴露「混合专家」与「新话题」；其余在此分 Tab 管理。"
       />
+
+      <SectionGuide
+        summary={MEMORY_PAGE_HELP.summary}
+        steps={MEMORY_PAGE_HELP.steps}
+        tips={MEMORY_PAGE_HELP.tips}
+        defaultOpen={false}
+      />
+
+      {presetOptions.length > 0 && (
+        <section className="mt-4 rounded-lg border border-border bg-white/70 p-4">
+          <h2 className="text-sm font-semibold text-text">业务场景预设</h2>
+          <p className="text-xs text-text-muted mt-1 mb-3">
+            一键写入混合专家、推理模式、流式检索等组合。应用后可在下方 Tab 微调并保存。
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {presetOptions.map((preset) => {
+              const active = preset.id === activePreset;
+              return (
+                <Button
+                  key={preset.id}
+                  variant={active ? "primary" : "secondary"}
+                  disabled={presetMutation.isPending}
+                  onClick={() => presetMutation.mutate(preset.id)}
+                  title={preset.description || preset.label}
+                >
+                  {preset.label}
+                  {active ? "（当前）" : ""}
+                </Button>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       <Tabs
         defaultTab="basic"

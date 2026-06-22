@@ -10,9 +10,16 @@ import {
   runFeedbackTriage,
 } from "../../api/client";
 import type { FeedbackItem } from "../../api/types";
+import { FeedbackStatsPanel } from "../../components/admin/FeedbackStatsPanel";
+import { FeedbackTracePanel } from "../../components/admin/FeedbackTracePanel";
 import { PageHeader } from "../../components/admin/PageHeader";
+import { SectionGuide, ToolbarSection } from "../../components/admin/SectionGuide";
+import { ACTION_LABELS_ZH, FEEDBACK_PAGE_HELP } from "../../lib/adminHelp";
+import { parseFeedbackTrace } from "../../lib/traceView";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
+import { useAuth } from "../../hooks/useAuth";
+import { canPerformAdminAction } from "../../lib/adminRoles";
 import { toast } from "sonner";
 
 const PAGE_SIZE = 20;
@@ -42,8 +49,9 @@ const SEVERITY_LABELS: Record<string, string> = {
 };
 
 const ACTION_LABELS: Record<string, string> = {
-  add_to_golden: "加入评测集",
-  propose_reingest: "建议重入库",
+  ...ACTION_LABELS_ZH,
+  add_to_golden: "加入标准评测集",
+  propose_reingest: "建议重新入库",
   apply_config_patch: "调整配置",
 };
 
@@ -69,12 +77,15 @@ function formatTime(iso: string): string {
 
 export default function FeedbackInboxPage() {
   const queryClient = useQueryClient();
+  const { role } = useAuth();
+  const canTriage = canPerformAdminAction(role, "triage");
   const [offset, setOffset] = useState(0);
   const [ratingFilter, setRatingFilter] = useState<"" | "0" | "1">("");
   const [statusFilter, setStatusFilter] = useState("");
   const [sort, setSort] = useState<"created_desc" | "severity_desc">("severity_desc");
   const [sinceDays, setSinceDays] = useState(7);
   const [traceDetail, setTraceDetail] = useState<Record<string, unknown> | null>(null);
+  const traceView = traceDetail ? parseFeedbackTrace(traceDetail) : null;
   const [traceLoading, setTraceLoading] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
 
@@ -176,92 +187,114 @@ export default function FeedbackInboxPage() {
     <div className="p-6 max-w-[1100px]">
       <PageHeader
         title="用户反馈"
-        description="对话点赞/点踩与可选纠错 → 规则或大模型研判分类 → 运营采纳/驳回。负反馈优先按严重度排序。"
+        description="Chat 点赞/点踩与纠错入口。按下方流程处理 bad case，驱动检索与提示词持续改进。"
       />
 
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        <label className="text-sm text-text-muted">
-          时间
-          <select
-            className="ml-2 border border-border rounded-md px-2 py-1 text-sm bg-white"
-            value={sinceDays}
-            onChange={(e) => {
-              setSinceDays(Number(e.target.value));
-              setOffset(0);
-            }}
+      <SectionGuide
+        summary={FEEDBACK_PAGE_HELP.summary}
+        steps={FEEDBACK_PAGE_HELP.steps}
+        tips={FEEDBACK_PAGE_HELP.tips}
+      />
+
+      <FeedbackStatsPanel sinceDays={sinceDays} />
+
+      <div className="space-y-3 mb-4">
+        <ToolbarSection label="筛选">
+          <label className="text-sm text-text-muted">
+            时间
+            <select
+              className="ml-2 border border-border rounded-md px-2 py-1 text-sm bg-white"
+              value={sinceDays}
+              onChange={(e) => {
+                setSinceDays(Number(e.target.value));
+                setOffset(0);
+              }}
+            >
+              <option value={7}>近 7 天</option>
+              <option value={30}>近 30 天</option>
+              <option value={90}>近 90 天</option>
+            </select>
+          </label>
+          <label className="text-sm text-text-muted">
+            评分
+            <select
+              className="ml-2 border border-border rounded-md px-2 py-1 text-sm bg-white"
+              value={ratingFilter}
+              onChange={(e) => {
+                setRatingFilter(e.target.value as "" | "0" | "1");
+                setOffset(0);
+              }}
+            >
+              <option value="">全部</option>
+              <option value="1">👍 有帮助</option>
+              <option value="0">👎 没帮助</option>
+            </select>
+          </label>
+          <label className="text-sm text-text-muted">
+            状态
+            <select
+              className="ml-2 border border-border rounded-md px-2 py-1 text-sm bg-white"
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setOffset(0);
+              }}
+            >
+              <option value="">全部</option>
+              <option value="pending">待研判</option>
+              <option value="triaged">已分类（待你采纳/驳回）</option>
+              <option value="approved">已采纳</option>
+              <option value="applied">已执行改进</option>
+              <option value="evaluated">已跑评测</option>
+              <option value="rejected">已驳回</option>
+            </select>
+          </label>
+          <label className="text-sm text-text-muted">
+            排序
+            <select
+              className="ml-2 border border-border rounded-md px-2 py-1 text-sm bg-white"
+              value={sort}
+              onChange={(e) => setSort(e.target.value as "created_desc" | "severity_desc")}
+            >
+              <option value="severity_desc">严重度优先</option>
+              <option value="created_desc">时间最新</option>
+            </select>
+          </label>
+        </ToolbarSection>
+
+        <ToolbarSection label="批量处理">
+          <Button type="button" variant="primary" disabled={!canTriage} onClick={() => handleTriage(false)}>
+            规则研判（推荐）
+          </Button>
+          <Button type="button" variant="default" disabled={!canTriage} onClick={() => handleTriage(true)}>
+            大模型研判
+          </Button>
+        </ToolbarSection>
+
+        <ToolbarSection label="其他">
+          <Button type="button" variant="default" onClick={() => refetch()}>
+            刷新
+          </Button>
+          <Button type="button" variant="default" onClick={handleExport}>
+            导出备份
+          </Button>
+          <Link
+            to="/admin/eval-reports"
+            className="text-sm text-brand hover:underline px-2 py-1"
           >
-            <option value={7}>近 7 天</option>
-            <option value={30}>近 30 天</option>
-            <option value={90}>近 90 天</option>
-          </select>
-        </label>
-        <label className="text-sm text-text-muted">
-          评分
-          <select
-            className="ml-2 border border-border rounded-md px-2 py-1 text-sm bg-white"
-            value={ratingFilter}
-            onChange={(e) => {
-              setRatingFilter(e.target.value as "" | "0" | "1");
-              setOffset(0);
-            }}
-          >
-            <option value="">全部</option>
-            <option value="1">👍</option>
-            <option value="0">👎</option>
-          </select>
-        </label>
-        <label className="text-sm text-text-muted">
-          状态
-          <select
-            className="ml-2 border border-border rounded-md px-2 py-1 text-sm bg-white"
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setOffset(0);
-            }}
-          >
-            <option value="">全部</option>
-            <option value="pending">待研判</option>
-            <option value="triaged">已分类</option>
-            <option value="approved">已采纳</option>
-            <option value="applied">已执行</option>
-            <option value="evaluated">已评测</option>
-            <option value="rejected">已驳回</option>
-          </select>
-        </label>
-        <label className="text-sm text-text-muted">
-          排序
-          <select
-            className="ml-2 border border-border rounded-md px-2 py-1 text-sm bg-white"
-            value={sort}
-            onChange={(e) => setSort(e.target.value as "created_desc" | "severity_desc")}
-          >
-            <option value="severity_desc">严重度优先</option>
-            <option value="created_desc">时间最新</option>
-          </select>
-        </label>
-        <Button type="button" variant="primary" onClick={() => handleTriage(false)}>
-          规则研判
-        </Button>
-        <Button type="button" variant="default" onClick={() => handleTriage(true)}>
-          大模型研判
-        </Button>
-        <Button type="button" variant="default" onClick={() => refetch()}>
-          刷新
-        </Button>
-        <Button type="button" variant="default" onClick={handleExport}>
-          导出 JSONL
-        </Button>
-        <Link
-          to="/admin/eval-reports"
-          className="text-sm text-brand hover:underline px-2 py-1"
-        >
-          评测报告 →
-        </Link>
-        <span className="text-xs text-text-muted ml-auto">
-          共 {total} 条 · 第 {page}/{totalPages} 页
-        </span>
+            查看评测报告 →
+          </Link>
+          <span className="text-xs text-text-muted ml-auto">
+            共 {total} 条 · 第 {page}/{totalPages} 页
+          </span>
+        </ToolbarSection>
       </div>
+
+      {!canTriage && (
+        <p className="text-xs text-text-muted mb-4 -mt-2">
+          当前账号无「研判/采纳」权限，仅可查看与导出。请联系技术部管理员。
+        </p>
+      )}
 
       {isLoading && <p className="text-sm text-text-muted">加载中...</p>}
       {error && (
@@ -343,7 +376,7 @@ export default function FeedbackInboxPage() {
                 </p>
               )}
               <div className="flex flex-wrap gap-2 mt-2">
-                {item.status === "triaged" && (
+                {item.status === "triaged" && canTriage && (
                   <>
                     <Button
                       type="button"
@@ -352,7 +385,7 @@ export default function FeedbackInboxPage() {
                       disabled={actionId === item.id}
                       onClick={() => handleApprove(item.id)}
                     >
-                      采纳建议
+                      采纳并执行建议
                     </Button>
                     <Button
                       type="button"
@@ -376,8 +409,8 @@ export default function FeedbackInboxPage() {
                     查看链路
                   </Button>
                 )}
-                <code className="text-[11px] text-text-muted bg-surface-muted px-2 py-1 rounded">
-                  {item.trace_id || item.id}
+                <code className="text-[11px] text-text-muted bg-surface-muted px-2 py-1 rounded" title="链路追踪 ID">
+                  追踪 {item.trace_id ? `${item.trace_id.slice(0, 8)}…` : item.id.slice(0, 8)}
                 </code>
               </div>
             </div>
@@ -406,20 +439,8 @@ export default function FeedbackInboxPage() {
         </div>
       )}
 
-      {traceDetail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-xl max-w-3xl w-full max-h-[80vh] overflow-hidden flex flex-col shadow-xl">
-            <div className="px-4 py-3 border-b border-border flex justify-between items-center">
-              <h3 className="font-semibold text-sm">链路详情</h3>
-              <Button type="button" variant="default" onClick={() => setTraceDetail(null)}>
-                关闭
-              </Button>
-            </div>
-            <pre className="p-4 text-xs overflow-auto flex-1 font-mono bg-surface-muted">
-              {JSON.stringify(traceDetail, null, 2)}
-            </pre>
-          </div>
-        </div>
+      {traceDetail && traceView && (
+        <FeedbackTracePanel view={traceView} raw={traceDetail} onClose={() => setTraceDetail(null)} />
       )}
     </div>
   );

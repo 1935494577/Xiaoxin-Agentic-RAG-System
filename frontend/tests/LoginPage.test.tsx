@@ -15,6 +15,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import "@testing-library/jest-dom/vitest";
 
 import LoginPage from "../src/pages/LoginPage";
+import { AuthProvider } from "../src/context/AuthContext";
 
 
 
@@ -97,21 +98,15 @@ Object.defineProperty(window, "sessionStorage", { value: localStorageMock });
 function renderLogin(initial = "/login") {
 
   return render(
-
-    <MemoryRouter initialEntries={[initial]}>
-
-      <Routes>
-
-        <Route path="/login" element={<LoginPage />} />
-
-        <Route path="/admin/ingest" element={<div>Admin Ingest</div>} />
-
-        <Route path="/" element={<div>Chat Home</div>} />
-
-      </Routes>
-
-    </MemoryRouter>
-
+    <AuthProvider>
+      <MemoryRouter initialEntries={[initial]}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/admin/ingest" element={<div>Admin Ingest</div>} />
+          <Route path="/" element={<div>Chat Home</div>} />
+        </Routes>
+      </MemoryRouter>
+    </AuthProvider>
   );
 
 }

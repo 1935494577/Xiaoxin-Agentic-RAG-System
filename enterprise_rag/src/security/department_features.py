@@ -39,6 +39,8 @@ def feature_for_request(method: str, path: str) -> str | None:
     """Map API path (+ method) to an admin feature id, or None if unrestricted."""
     m = (method or "GET").upper()
     p = path.split("?", 1)[0].rstrip("/") or "/"
+    if p.startswith("/api/v1"):
+        p = p[len("/api/v1") :] or "/"
 
     if p == "/health" or p == "/config/nav" or p == "/config/public":
         return None

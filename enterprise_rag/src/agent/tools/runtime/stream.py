@@ -44,15 +44,23 @@ def stream_general_answer(
     mem = state.get("memory_config") or {}
     reasoning_mode = str(state.get("agent_reasoning_mode") or mem.get("agent_reasoning_mode") or "react")
     use_tools = should_use_tool_loop(reasoning_mode, tools_enabled=bool(enabled) and is_tools_active())
+    if bool(state.get("_realtime_tool_turn")):
+        use_tools = bool(enabled) and is_tools_active()
 
     system = general_system_prompt(slots=prompt_slots, reasoning_mode=reasoning_mode)
     if use_tools:
         from agent.tools.builtins.datetime_cn import format_beijing_time_anchor
+        from agent.tools.builtins.relationship_graph import set_relationship_graph_context
         from agent.tools.runtime.prompt import AGENT_TOOLS_REALTIME_POLICY
 
+        set_relationship_graph_context(
+            user_department=state.get("user_department"),
+            max_hops=3,
+        )
         system = (
             f"{system}\n\n{AGENT_TOOLS_REALTIME_POLICY}\n\n{format_beijing_time_anchor()}"
         )
+        enabled = enabled | {"show_relationship_graph"}
     system = augment_system_with_summary(system, state.get("rolling_summary"))
     user_content = general_user_content(state["question"])
     messages = build_llm_messages(system=system, history=history, user_content=user_content)

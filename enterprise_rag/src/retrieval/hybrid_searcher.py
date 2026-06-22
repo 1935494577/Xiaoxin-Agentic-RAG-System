@@ -14,7 +14,9 @@ from retrieval.result_dedup import deduplicate_retrieval_results
 from retrieval.search_cache import build_search_cache_key, get_search_cache
 from chunker.utils import tags_from_store_value
 
-_search_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="hybrid-search")
+_search_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="hybrid-search")
+
+_RRF_K = 60
 
 
 def _norm_map(scores: dict[str, float], higher_is_better: bool) -> dict[str, float]:
@@ -33,73 +35,33 @@ def _norm_map(scores: dict[str, float], higher_is_better: bool) -> dict[str, flo
     return out
 
 
-def hybrid_search(
+def _rrf_fuse(rankings: list[list[str]], *, k: int = _RRF_K) -> dict[str, float]:
+    scores: dict[str, float] = defaultdict(float)
+    for ranking in rankings:
+        for rank, pid in enumerate(ranking):
+            if pid:
+                scores[pid] += 1.0 / (k + rank + 1)
+    return dict(scores)
+
+
+def _hybrid_scores_for_query(
     query: str,
-    user_department: str,
-    top_k: int = 5,
-    chat_model: str | None = None,
+    q_emb: list[float],
     *,
-    llm_api_base: str | None = None,
-    llm_api_key: str | None = None,
-    llm_max_tokens_rewrite: int | None = None,
-    llm_extra_headers: dict[str, Any] | None = None,
-    skip_query_rewrite: bool | None = None,
-    retrieve_top_k: int | None = None,
-    skip_rerank: bool = False,
-    rerank_top_k: int | None = None,
-    pre_rerank_k: int | None = None,
-    retrieval_dedup: bool | None = None,
-) -> tuple[str, list[dict[str, Any]]]:
-    """
-    步骤4：改写 → Milvus(部门过滤) + 本地 rank-bm25 父块 → 按 parent_id 融合 → Rerank → Top 父块。
-    返回 (rewritten_query, parents)。
-    """
-    from security.access_control import normalize_department
-
-    user_department = normalize_department(user_department)
-    cache_params = {
-        "top_k": top_k,
-        "skip_query_rewrite": skip_query_rewrite,
-        "retrieve_top_k": retrieve_top_k,
-        "skip_rerank": skip_rerank,
-        "rerank_top_k": rerank_top_k,
-        "pre_rerank_k": pre_rerank_k,
-        "retrieval_dedup": retrieval_dedup,
-        "query_rewrite_enabled": settings.query_rewrite_enabled,
-    }
-    cache_key = build_search_cache_key(query, user_department, **cache_params)
-    cache = get_search_cache()
-    cached = cache.get(cache_key)
-    if cached is not None:
-        return cached
-
-    do_rewrite = settings.query_rewrite_enabled if skip_query_rewrite is None else not skip_query_rewrite
-    if do_rewrite:
-        rewritten = rewrite_query(
-            query,
-            chat_model=chat_model,
-            api_base=llm_api_base,
-            api_key=llm_api_key,
-            max_tokens=llm_max_tokens_rewrite,
-            default_headers=llm_extra_headers,
-        )
-    else:
-        rewritten = query
-    rk = retrieve_top_k if retrieve_top_k is not None else settings.retrieve_top_k
-    q_emb = embed_texts([rewritten])[0].tolist()
-
+    user_department: str | None,
+    rk: int,
+) -> tuple[dict[str, float], dict[str, dict[str, Any]], list[dict[str, Any]]]:
     dept = user_department or None
     f_vec = _search_pool.submit(vector_search, q_emb, rk, user_department=dept)
-    f_bm25 = _search_pool.submit(bm25_parent_search, rewritten, rk, user_department=dept)
+    f_bm25 = _search_pool.submit(bm25_parent_search, query, rk, user_department=dept)
     vec_hits = f_vec.result()
     es_hits = f_bm25.result()
 
     v_score: dict[str, float] = defaultdict(float)
     for h in vec_hits:
         pid = str(h.get("parent_id") or "")
-        if not pid:
-            continue
-        v_score[pid] = max(v_score[pid], float(h.get("score", 0.0)))
+        if pid:
+            v_score[pid] = max(v_score[pid], float(h.get("score", 0.0)))
 
     e_score: dict[str, float] = {}
     e_row: dict[str, dict[str, Any]] = {}
@@ -112,17 +74,28 @@ def hybrid_search(
 
     v_n = _norm_map(dict(v_score), higher_is_better=True)
     e_n = _norm_map(e_score, higher_is_better=True)
-
     all_pids = set(v_n) | set(e_n)
-    combined: dict[str, float] = {}
+
     from retrieval.retrieval_tuning_store import get_hybrid_weights
 
     wv, wb = get_hybrid_weights()
+    combined: dict[str, float] = {}
     for pid in all_pids:
         combined[pid] = wv * v_n.get(pid, 0.0) + wb * e_n.get(pid, 0.0)
+    return combined, e_row, vec_hits
 
-    missing = [pid for pid in all_pids if pid not in e_row]
+
+def _collect_candidates(
+    combined: dict[str, float],
+    *,
+    e_row: dict[str, dict[str, Any]],
+    vec_hits: list[dict[str, Any]],
+    user_department: str,
+    v_score_backup: dict[str, float] | None = None,
+) -> list[dict[str, Any]]:
+    missing = [pid for pid in combined if pid not in e_row]
     fetched = fetch_parents_by_ids(missing)
+    v_backup = v_score_backup or {}
 
     candidates: list[dict[str, Any]] = []
     for pid, hy in sorted(combined.items(), key=lambda x: -x[1]):
@@ -142,7 +115,7 @@ def hybrid_search(
                 tags = [str(t) for t in raw_tags if str(t).strip()]
             elif raw_tags:
                 tags = tags_from_store_value(str(raw_tags))
-        if not text and pid in v_score:
+        if not text and (pid in v_backup or any(str(h.get("parent_id")) == pid for h in vec_hits)):
             vrows = [h for h in vec_hits if str(h.get("parent_id")) == pid]
             if vrows:
                 text = "\n".join(str(h.get("text") or "") for h in vrows[:3])
@@ -163,6 +136,105 @@ def hybrid_search(
                 "hybrid_score": float(hy),
             }
         )
+    return candidates
+
+
+def hybrid_search(
+    query: str,
+    user_department: str,
+    top_k: int = 5,
+    chat_model: str | None = None,
+    *,
+    llm_api_base: str | None = None,
+    llm_api_key: str | None = None,
+    llm_max_tokens_rewrite: int | None = None,
+    llm_extra_headers: dict[str, Any] | None = None,
+    skip_query_rewrite: bool | None = None,
+    retrieve_top_k: int | None = None,
+    skip_rerank: bool = False,
+    rerank_top_k: int | None = None,
+    pre_rerank_k: int | None = None,
+    retrieval_dedup: bool | None = None,
+) -> tuple[str, list[dict[str, Any]]]:
+    """
+    步骤4：改写 → 规则归一化多路检索 → Milvus + BM25 → RRF 融合 → Rerank → Top 父块。
+    返回 (rewritten_query, parents)。
+    """
+    from security.access_control import normalize_department
+
+    user_department = normalize_department(user_department)
+    cache_params = {
+        "top_k": top_k,
+        "skip_query_rewrite": skip_query_rewrite,
+        "retrieve_top_k": retrieve_top_k,
+        "skip_rerank": skip_rerank,
+        "rerank_top_k": rerank_top_k,
+        "pre_rerank_k": pre_rerank_k,
+        "retrieval_dedup": retrieval_dedup,
+        "query_rewrite_enabled": settings.query_rewrite_enabled,
+        "query_normalize_enabled": settings.query_normalize_enabled,
+    }
+    cache_key = build_search_cache_key(query, user_department, **cache_params)
+    cache = get_search_cache()
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    do_rewrite = settings.query_rewrite_enabled if skip_query_rewrite is None else not skip_query_rewrite
+    if do_rewrite:
+        rewritten = rewrite_query(
+            query,
+            chat_model=chat_model,
+            api_base=llm_api_base,
+            api_key=llm_api_key,
+            max_tokens=llm_max_tokens_rewrite,
+            default_headers=llm_extra_headers,
+        )
+    else:
+        rewritten = query
+
+    rk = retrieve_top_k if retrieve_top_k is not None else settings.retrieve_top_k
+    if settings.query_normalize_enabled:
+        from retrieval.query_understanding import build_search_variants_enriched
+
+        variants = build_search_variants_enriched(
+            rewritten,
+            max_variants=int(settings.query_normalize_max_variants),
+        )
+    else:
+        variants = [rewritten]
+
+    if not variants:
+        cache.set(cache_key, rewritten, [])
+        return rewritten, []
+
+    embeddings = embed_texts(variants)
+    rankings: list[list[str]] = []
+    merged_e_row: dict[str, dict[str, Any]] = {}
+    merged_vec_hits: list[dict[str, Any]] = []
+    per_variant_combined: list[dict[str, float]] = []
+
+    for variant, q_emb in zip(variants, embeddings):
+        combined, e_row, vec_hits = _hybrid_scores_for_query(
+            variant,
+            q_emb.tolist(),
+            user_department=user_department or None,
+            rk=rk,
+        )
+        per_variant_combined.append(combined)
+        ordered = [pid for pid, _ in sorted(combined.items(), key=lambda x: -x[1])]
+        rankings.append(ordered)
+        merged_e_row.update(e_row)
+        merged_vec_hits.extend(vec_hits)
+
+    fused = per_variant_combined[0] if len(variants) == 1 else _rrf_fuse(rankings)
+
+    candidates = _collect_candidates(
+        fused,
+        e_row=merged_e_row,
+        vec_hits=merged_vec_hits,
+        user_department=user_department,
+    )
 
     final_k = rerank_top_k if rerank_top_k is not None else settings.rerank_top_k
     dedup_pool = final_k * 3 if (retrieval_dedup if retrieval_dedup is not None else settings.retrieval_dedup_enabled) else final_k
