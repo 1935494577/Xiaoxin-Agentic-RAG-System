@@ -26,6 +26,8 @@ ADMIN_PAGES: list[AdminPageSpec] = [
     {"id": "eval_reports", "label": "评测报告", "url_path": "eval-reports", "module": "pages/eval_reports.py"},
     {"id": "trace", "label": "链路 Trace", "url_path": "trace", "module": "pages/trace_config.py"},
     {"id": "tutorial", "label": "教程", "url_path": "tutorial", "module": "pages/tutorial.py"},
+    {"id": "scenarios", "label": "业务场景", "url_path": "scenarios", "module": "pages/scenarios.py"},
+    {"id": "users", "label": "账号管理", "url_path": "users", "module": "pages/users.py"},
 ]
 
 ADMIN_PAGE_IDS = frozenset(p["id"] for p in ADMIN_PAGES)

@@ -17,6 +17,7 @@ modelscope>=1.14.0
 llama-parse>=0.5.0
 # Avoid unstructured[pdf] extras (onnx/opencv); PDF parsing uses pdfplumber first (document_loader/parser.py).
 unstructured>=0.15.7
+python-docx>=1.1.0
 pdfplumber>=0.11.0
 
 # Fallback embedder

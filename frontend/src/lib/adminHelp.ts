@@ -89,7 +89,8 @@ export const MEMORY_PAGE_HELP = {
   steps: [
     {
       title: "选场景预设",
-      detail: "一线 KB / 内测全功能 / LAN API — 一键写入混合专家、推理模式、流式等组合。",
+      detail:
+        "一线 KB / 新媒体内容分析 / 内测全功能 / LAN API — 运营与媒体部建议「新媒体 / 内容分析」。",
     },
     {
       title: "基础",
@@ -104,7 +105,30 @@ export const MEMORY_PAGE_HELP = {
       detail: "Condense / 剪枝 / 摘要控制长对话；性能路由选 fast/balanced/quality。",
     },
   ] satisfies HelpStep[],
-  tips: ["一线老师用「一线 KB 问答」即可；坏例分析再切「内测全功能」。"],
+  tips: ["一线老师用「一线 KB 问答」；运营/媒体/剪辑用「新媒体 / 内容分析」— 详见「业务场景」页。"],
+};
+
+export const SCENARIOS_PAGE_HELP = {
+  summary:
+    "按部门列出可用的卖课 / 内容场景：每个场景含目标、操作步骤；技术部可开「开发视图」看 API 与代码路径。",
+  steps: [
+    {
+      title: "选对部门登录",
+      detail: "登录时选运营部 / 媒体部 / 剪辑部，本页只显示该部门相关场景。",
+    },
+    {
+      title: "展开场景卡片",
+      detail: "点击卡片查看逐步操作；到 Jnao Chat 按步骤提问即可。",
+    },
+    {
+      title: "技术部开发视图",
+      detail: "切换右上角按钮，查看 stream API 参数、content-kit、源码路径；改 catalog JSON 后刷新即生效。",
+    },
+  ] satisfies HelpStep[],
+  tips: [
+    "catalog 文件：enterprise_rag/data/config/scenario_catalog.json",
+    "新增场景时同步更新 API 与前端无需改代码，除非新增全新能力。",
+  ],
 };
 
 export const METRIC_LABELS_ZH: Record<string, string> = {

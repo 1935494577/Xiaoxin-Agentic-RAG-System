@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchAgentTools, saveAgentTools } from "../../../api/client";
 import type { AgentToolsSave } from "../../../api/types";
+import { formatAdminLoadError } from "../../../lib/adminLoadError";
 import { Button } from "../../ui/Button";
 import { Switch } from "../../ui/Switch";
 import { toast } from "sonner";
@@ -11,10 +12,12 @@ export function AgentToolsTab() {
   const [enabled, setEnabled] = useState(true);
   const [toggles, setToggles] = useState<Record<string, boolean>>({});
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["agent-tools"],
     queryFn: fetchAgentTools,
     staleTime: 60_000,
+    retry: 2,
+    retryDelay: 1500,
   });
 
   useEffect(() => {
@@ -53,7 +56,18 @@ export function AgentToolsTab() {
   }
 
   if (error) {
-    return <p className="text-error text-sm">无法加载对话工具配置，请确认 API 已启动。</p>;
+    const msg = formatAdminLoadError(
+      error,
+      "无法加载对话工具配置，请确认 API 已启动。"
+    );
+    return (
+      <div className="space-y-3">
+        <p className="text-error text-sm">{msg}</p>
+        <Button variant="secondary" onClick={() => refetch()} disabled={isFetching}>
+          {isFetching ? "重试中…" : "重试"}
+        </Button>
+      </div>
+    );
   }
 
   return (

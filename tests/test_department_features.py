@@ -27,6 +27,8 @@ def test_non_tech_limited_features():
         assert can_access_feature(dept, "ingest") is True
         assert can_access_feature(dept, "prompts") is True
         assert can_access_feature(dept, "models") is True
+        assert can_access_feature(dept, "scenarios") is True
+        assert can_access_feature(dept, "tutorial") is True
         assert can_access_feature(dept, "processing") is False
         assert can_access_feature(dept, "memory") is False
 

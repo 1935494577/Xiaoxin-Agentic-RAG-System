@@ -55,6 +55,23 @@ SCENE_PRESETS: dict[str, dict[str, Any]] = {
             "condense_llm_enabled": True,
         },
     },
+    "analyst": {
+        "label": "新媒体 / 内容分析",
+        "description": "企业微信、视频号、抖音等卖课场景：多轮查库 + ReAct + 结构化卖点/话术/脚本；意图不清时引导选题。",
+        "patch": {
+            "hybrid_expert_mode": False,
+            "general_fallback_enabled": False,
+            "kb_post_stream_fallback": False,
+            "agent_reasoning_mode": "react",
+            "stream_fast_mode": False,
+            "rag_arch_router_enabled": True,
+            "rag_arch_llm_fallback": False,
+            "default_rag_architecture": "auto",
+            "kb_llm_judge": True,
+            "condense_llm_enabled": True,
+            "clarify_enabled": True,
+        },
+    },
 }
 
 DEFAULT_SCENE_PRESET: ScenePresetId = "kb_frontline"

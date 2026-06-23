@@ -1,4 +1,5 @@
 import type {
+  LoginResponse,
   ChatMessage,
   ChatSession,
   FeedbackListResponse,
@@ -17,6 +18,7 @@ import type {
   PromptData,
   StreamEvent,
   StreamPayload,
+  ScenarioCatalogResponse,
   TraceStatus,
   UiConfig,
   UserProfile,
@@ -36,7 +38,11 @@ function readAuthHeaders(): Record<string, string> {
       username?: string;
       department?: string;
       role?: AdminRole;
+      token?: string;
     };
+    if (session.token?.trim()) {
+      headers["Authorization"] = `Bearer ${session.token.trim()}`;
+    }
     if (session.department?.trim()) {
       headers["X-User-Department"] = encodeURIComponent(session.department.trim());
     }
@@ -76,8 +82,91 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 // ===== UI & Nav =====
+export function authLogin(
+  username: string,
+  password: string,
+  remember = true
+): Promise<LoginResponse> {
+  return request<LoginResponse>("/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password, remember }),
+  });
+}
+
+export function authLogout(): Promise<{ ok: boolean }> {
+  return request<{ ok: boolean }>("/auth/logout", { method: "POST" });
+}
+
+export function authChangePassword(
+  currentPassword: string,
+  newPassword: string
+): Promise<{ ok: boolean }> {
+  return request<{ ok: boolean }>("/auth/change-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
+  });
+}
+
+export type AdminUserRow = {
+  id: string;
+  username: string;
+  department: string;
+  display_name: string;
+  is_active: boolean;
+};
+
+export function fetchAdminUsers(): Promise<AdminUserRow[]> {
+  return request<{ users: AdminUserRow[] }>("/auth/admin/users").then((r) => r.users);
+}
+
+export function createAdminUser(body: {
+  username: string;
+  password: string;
+  department: string;
+  display_name?: string;
+}): Promise<AdminUserRow> {
+  return request<AdminUserRow>("/auth/admin/users", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function setAdminUserActive(userId: string, isActive: boolean): Promise<void> {
+  return request(`/auth/admin/users/${encodeURIComponent(userId)}/active`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ is_active: isActive }),
+  });
+}
+
+export function resetAdminUserPassword(userId: string, newPassword: string): Promise<void> {
+  return request(`/auth/admin/users/${encodeURIComponent(userId)}/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ new_password: newPassword }),
+  });
+}
+
 export function fetchUiConfig(): Promise<UiConfig> {
   return request<UiConfig>("/config/ui");
+}
+
+export function fetchScenarioCatalog(options?: {
+  department?: string;
+  includeTech?: boolean;
+}): Promise<ScenarioCatalogResponse> {
+  const q = new URLSearchParams();
+  if (options?.department?.trim()) q.set("department", options.department.trim());
+  if (options?.includeTech === true) q.set("include_tech", "true");
+  if (options?.includeTech === false) q.set("include_tech", "false");
+  const suffix = q.toString() ? `?${q}` : "";
+  return request<ScenarioCatalogResponse>(`/config/scenario-catalog${suffix}`);
 }
 
 export function fetchNav(): Promise<NavConfig> {
@@ -98,6 +187,14 @@ export function saveUserProfile(body: UserProfileUpdate): Promise<UserProfile> {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+  });
+}
+
+export function mergeLegacyUserProfile(legacyUserId: string): Promise<UserProfile> {
+  return request<UserProfile>("/users/profile/merge-legacy", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ legacy_user_id: legacyUserId }),
   });
 }
 
@@ -142,6 +239,10 @@ export function appendMessages(
 
 export function listIngestedSources(): Promise<IngestedSource[]> {
   return request<IngestedSource[]>("/sources/list");
+}
+
+export function deleteIngestedSource(source: string): Promise<void> {
+  return request(`/sources/${encodeURIComponent(source)}`, { method: "DELETE" });
 }
 
 export async function uploadChatDocument(
@@ -205,13 +306,19 @@ export async function streamChat(
   for (const [key, value] of Object.entries(authHeaders)) {
     headers.set(key, value);
   }
-  const r = await fetch("/chat/stream", {
-    method: "POST",
-    headers,
-    body: JSON.stringify(payload),
-    signal,
-    cache: "no-store",
-  });
+  let r: Response;
+  try {
+    r = await fetch("/chat/stream", {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+      signal,
+      cache: "no-store",
+    });
+  } catch (err) {
+    if (signal?.aborted) return;
+    throw err;
+  }
   if (!r.ok) {
     const text = await r.text();
     onEvent({ type: "error", message: text || "请求失败" });
@@ -236,15 +343,27 @@ export async function streamChat(
     }
   };
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (value) {
-      flushLines(dec.decode(value, { stream: true }));
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (value) {
+        flushLines(dec.decode(value, { stream: true }));
+      }
+      if (done) break;
     }
-    if (done) break;
-  }
-  if (buf.trim()) {
-    flushLines("\n");
+    if (buf.trim()) {
+      flushLines("\n");
+    }
+  } catch (err) {
+    if (signal?.aborted) {
+      try {
+        await reader.cancel();
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    throw err;
   }
 }
 

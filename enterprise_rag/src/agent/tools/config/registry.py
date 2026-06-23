@@ -105,6 +105,44 @@ TOOL_DEFINITIONS: dict[str, dict[str, Any]] = {
             "required": ["query"],
         },
     },
+    "list_kb_sources": {
+        "label": "知识库文档列表",
+        "description": (
+            "列出已入库文档名称与块数量。用户问「库里有什么」「有哪些文档/课程资料」"
+            "或不确定查哪个主题时先调用，再针对性 kb_search。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "description": "返回条数，1-50，默认 30",
+                },
+            },
+            "required": [],
+        },
+    },
+    "format_structured_output": {
+        "label": "结构化排版",
+        "description": (
+            "将已有要点按指定模板整理为卖点清单、私聊话术、短视频脚本、FAQ 等。"
+            "在 kb_search 收集完事实后，需要输出固定格式时调用。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "description": "待整理的要点或草稿正文",
+                },
+                "schema_id": {
+                    "type": "string",
+                    "description": "模板：selling_points | parent_dm_script | short_video_script | compare_table | faq_bullets | checklist",
+                },
+            },
+            "required": ["content", "schema_id"],
+        },
+    },
 }
 
 DEFAULT_CONFIG: dict[str, Any] = {

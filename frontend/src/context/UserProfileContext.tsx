@@ -27,7 +27,7 @@ type Ctx = {
 const UserProfileContext = createContext<Ctx | null>(null);
 
 export function UserProfileProvider({ children }: { children: ReactNode }) {
-  const { userId, isAuthenticated, department: authDepartment, updateDepartment } = useAuth();
+  const { userId, isAuthenticated, department: authDepartment } = useAuth();
   const queryClient = useQueryClient();
   const [syncedAuthDept, setSyncedAuthDept] = useState(false);
 
@@ -35,6 +35,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
     queryKey: ["userProfile", userId],
     queryFn: () => fetchUserProfile(userId),
     staleTime: 60_000,
+    enabled: Boolean(userId),
   });
 
   useEffect(() => {
@@ -57,22 +58,23 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       });
   }, [syncedAuthDept, isAuthenticated, authDepartment, profile, userId, queryClient]);
 
-  const saveProfile = useCallback(
-    async (patch: Omit<UserProfileUpdate, "user_id">) => {
-      const next = await saveUserProfile({ user_id: userId, ...patch });
-      queryClient.setQueryData(["userProfile", userId], next);
-      if (patch.department?.trim()) {
-        updateDepartment(patch.department.trim());
-      }
-      return next;
-    },
-    [userId, queryClient, updateDepartment]
-  );
-
   const effectiveDepartment = resolveEffectiveDepartment(
     authDepartment,
     profile?.department ?? "",
     isAuthenticated
+  );
+
+  const saveProfile = useCallback(
+    async (patch: Omit<UserProfileUpdate, "user_id" | "department">) => {
+      const next = await saveUserProfile({
+        user_id: userId,
+        department: effectiveDepartment,
+        ...patch,
+      });
+      queryClient.setQueryData(["userProfile", userId], next);
+      return next;
+    },
+    [userId, queryClient, effectiveDepartment]
   );
 
   const value = useMemo<Ctx>(

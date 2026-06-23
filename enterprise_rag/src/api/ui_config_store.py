@@ -55,6 +55,7 @@ DEFAULT_UI_CONFIG: dict[str, Any] = {
     "graph_extraction_enabled": True,
     "agentic_max_turns": 6,
     "agentic_max_kb_searches": 4,
+    "clarify_enabled": False,
 }
 
 SUPPORTED_UPLOAD_EXTENSIONS = ("txt", "md", "pdf", "docx", "html")

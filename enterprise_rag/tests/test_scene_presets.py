@@ -38,6 +38,15 @@ def test_internal_full_preset_hybrid_react():
     assert patch["stream_fast_mode"] is False
 
 
+def test_analyst_preset_clarify_react():
+    patch = scene_preset_patch("analyst")
+    assert patch is not None
+    assert patch["clarify_enabled"] is True
+    assert patch["agent_reasoning_mode"] == "react"
+    assert patch["hybrid_expert_mode"] is False
+    assert patch["stream_fast_mode"] is False
+
+
 def test_unknown_preset_returns_none():
     assert scene_preset_patch("missing") is None
 

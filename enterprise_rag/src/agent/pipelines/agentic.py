@@ -65,14 +65,20 @@ def run_agentic_retrieval(
 
     cfg = load_tools_config()
     enabled = enabled_tool_ids(cfg)
-    enabled = enabled | {"kb_search", "show_relationship_graph"}
+    enabled = enabled | {"kb_search", "show_relationship_graph", "list_kb_sources", "format_structured_output"}
 
     system = augment_system_with_summary(
         general_system_prompt(slots=prompt_slots, reasoning_mode=reasoning_mode)
         + "\n\n【Agentic RAG】你是调查分析助手。必须先用 kb_search 检索内部知识库，"
-        "根据结果决定是否继续检索或补充 web_search。综合多轮结果给出结构化结论。",
+        "不确定主题时可先 list_kb_sources。收集事实后若需固定格式（卖点/话术/脚本），"
+        "可调用 format_structured_output。根据结果决定是否继续检索。综合多轮结果给出结构化结论。",
         rolling_summary,
     )
+    from agent.output_schemas import output_schema_instruction
+
+    schema_extra = output_schema_instruction(str(state.get("output_schema_id") or ""))
+    if schema_extra:
+        system += f"\n\n{schema_extra}"
     user_content = general_user_content(state["question"])
     messages = build_llm_messages(system=system, history=history, user_content=user_content)
 

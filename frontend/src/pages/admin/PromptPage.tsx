@@ -99,6 +99,15 @@ export default function PromptPage() {
     );
   };
 
+  const removeSlot = (id: string) => {
+    setSlots((prev) => {
+      const target = prev.find((s) => s.id === id);
+      if (!target || target.builtin) return prev;
+      return prev.filter((s) => s.id !== id);
+    });
+    toast.success("已移除自定义层（需点「保存全部」生效）");
+  };
+
   const applyPersonaPreset = (preset: PersonaPreset) => {
     setActivePersonaId(preset.id);
     if (preset.content) {
@@ -285,18 +294,30 @@ export default function PromptPage() {
                       open={expandAll || cat === "persona"}
                       className="border border-border rounded-xl bg-white"
                     >
-                      <summary className="px-4 py-3 cursor-pointer select-none hover:bg-surface-muted rounded-xl">
+                      <summary className="px-4 py-3 cursor-pointer select-none hover:bg-surface-muted rounded-xl flex items-center justify-between gap-2">
                         <span className="text-sm font-medium text-text">
                           {isBuiltin ? "🔒 " : "➕ "}
                           {displaySlotLabel(slot)}
                           {showTechnicalIds && (
                             <span className="text-xs text-text-muted ml-2">（{slot.id}）</span>
                           )}
+                          {slot.variant && (
+                            <span className="ml-2 text-xs text-brand">
+                              {slot.variant === "fast" ? "快速检索" : slot.variant === "standard" ? "完整检索" : slot.variant}
+                            </span>
+                          )}
                         </span>
-                        {slot.variant && (
-                          <span className="ml-2 text-xs text-brand">
-                            {slot.variant === "fast" ? "快速检索" : slot.variant === "standard" ? "完整检索" : slot.variant}
-                          </span>
+                        {!isBuiltin && (
+                          <button
+                            type="button"
+                            className="shrink-0 text-xs text-error hover:underline px-2 py-1"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              removeSlot(slot.id);
+                            }}
+                          >
+                            删除
+                          </button>
                         )}
                       </summary>
                       <div className="px-4 pb-4 space-y-3">

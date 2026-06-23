@@ -117,6 +117,18 @@ export type GraphViz = {
   summary_lines?: string[];
 };
 
+export type AuthUserPublic = {
+  id: string;
+  username: string;
+  department: string;
+  display_name: string;
+};
+
+export type LoginResponse = {
+  token: string;
+  user: AuthUserPublic;
+};
+
 export type ChatMessage = {
   id?: string;
   role: "user" | "assistant";
@@ -131,6 +143,13 @@ export type ChatMessage = {
     graph_viz?: GraphViz;
     rag_architecture?: string;
   };
+};
+
+export type ClarifyOption = {
+  id: string;
+  label: string;
+  hint?: string;
+  output_schema_id?: string | null;
 };
 
 export type StreamEvent =
@@ -148,10 +167,17 @@ export type StreamEvent =
   | { type: "tool_call"; tool: string; arguments: Record<string, unknown> }
   | { type: "tool_result"; tool: string; output: string; ok: boolean }
   | { type: "graph_viz"; graph: GraphViz }
+  | {
+      type: "clarify";
+      prompt: string;
+      channel?: string;
+      options: ClarifyOption[];
+    }
   | { type: "error"; message: string; trace_id?: string }
   | {
       type: "done";
       answer: string;
+      needs_clarify?: boolean;
       rewritten_query?: string;
       sources?: string[];
       source_refs?: Array<{ source?: string; parent_id?: string; department?: string }>;
@@ -185,6 +211,10 @@ export type StreamPayload = {
   temp_document_id?: string;
   allowed_sources?: string[] | null;
   scenario_tags?: string[];
+  channel?: "wecom" | "wechat" | "miniprogram" | "channels" | "douyin";
+  output_schema_id?: string;
+  skip_clarify?: boolean;
+  clarify_choice_id?: string;
 };
 
 export type IngestedSource = {
@@ -374,4 +404,37 @@ export type SourcePreview = {
   department: string;
   permission_label: string;
   text: string;
+};
+
+export type ScenarioCatalogItem = {
+  id: string;
+  label: string;
+  department: string[];
+  channel: string | null;
+  channel_label: string;
+  user_goal: string;
+  steps: string[];
+  scene_preset: string | null;
+  clarify_option_id: string | null;
+  output_schema_id: string | null;
+  tools: string[];
+  tech_setup?: string;
+  tech?: Record<string, unknown>;
+};
+
+export type ScenarioCatalogResponse = {
+  title: string;
+  department: string;
+  department_info: {
+    label?: string;
+    summary?: string;
+    admin_features?: string[];
+    default_scene_preset?: string;
+    chat_channels?: string[];
+    chat_note?: string;
+  } | null;
+  chat_note?: string;
+  show_tech: boolean;
+  scenarios: ScenarioCatalogItem[];
+  departments: Record<string, { label?: string; summary?: string }>;
 };

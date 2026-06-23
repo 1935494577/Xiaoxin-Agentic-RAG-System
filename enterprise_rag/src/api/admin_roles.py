@@ -65,7 +65,11 @@ class AdminRoleMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         required = required_admin_role(request.method, request.url.path)
-        role = parse_admin_role(request.headers.get(ADMIN_ROLE_HEADER))
+        state_role = getattr(request.state, STATE_KEY, None)
+        if isinstance(state_role, str) and state_role in ROLE_LEVEL:
+            role = state_role  # type: ignore[assignment]
+        else:
+            role = parse_admin_role(request.headers.get(ADMIN_ROLE_HEADER))
         setattr(request.state, STATE_KEY, role)
         if required and not role_allows(role, required):
             return JSONResponse(

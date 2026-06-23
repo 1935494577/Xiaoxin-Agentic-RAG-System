@@ -21,6 +21,18 @@ from agent.stream_chat import stream_rag_chat
 from agent.conversation_context import resolve_chat_history
 from agent.conversation.prepare import prepare_turn
 from api.chat_memory import chat_memory_settings
+from account_config.store import init_platform_config_db
+
+
+def _memory_for_user(request: Request | None, user_id: str | None) -> dict[str, Any]:
+    from account_config.request_auth import resolve_config_actor
+
+    auth_uid, is_admin = resolve_config_actor(request) if request else (None, False)
+    actor = auth_uid or ((user_id or "").strip() or None)
+    return chat_memory_settings(actor, is_admin)
+
+
+from api.department_chat_profile import apply_department_chat_profile
 from api.prompt_config_store import public_prompt_config, save_prompt_config
 from api.chat_routing import apply_routing_tier
 from api.routing_mode import apply_hybrid_expert_memory, resolve_hybrid_expert_mode
@@ -28,6 +40,10 @@ from api.stream_retrieval import build_stream_retrieval_state, resolve_stream_fa
 from api.admin_roles import AdminRoleMiddleware
 from api.auth_middleware import APIAuthMiddleware, SecurityHeadersMiddleware
 from api.department_auth import DepartmentFeatureMiddleware
+from auth.middleware import SessionAuthMiddleware
+from auth.router import router as auth_router
+from auth.service import seed_default_users_if_empty
+from auth.store import init_auth_db
 from api.feedback_router import router as feedback_router
 from tenant.context import TenantContextMiddleware, get_tenant_id
 from api.chat_session_store import (
@@ -100,6 +116,7 @@ from api.schemas import (
     UiConfigUpdate,
     UserProfilePublic,
     UserProfileUpdate,
+    LegacyProfileMergeRequest,
 )
 from api.vector_store_registry import (
     activate_store,
@@ -141,6 +158,7 @@ from indexing.document_registry import get_document_registry
 from api.user_profile_store import (
     get_profile as get_user_profile,
     init_user_profile_db,
+    merge_legacy_user,
     upsert_profile as upsert_user_profile,
 )
 from indexing.milvus_indexer import delete_by_source as milvus_delete_by_source, init_vector_db, insert_child_vectors
@@ -154,6 +172,9 @@ async def lifespan(app: FastAPI):
     init_vector_db()
     init_chat_session_db()
     init_user_profile_db()
+    init_platform_config_db()
+    init_auth_db()
+    seed_default_users_if_empty()
     init_feedback_db()
     ensure_default_registry()
     reload_all_indexes()
@@ -198,14 +219,16 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_allow_origins,
     allow_credentials=_allow_creds,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
 )
+app.add_middleware(SessionAuthMiddleware)
 
 _hosts = [h.strip() for h in settings.trusted_hosts.split(",") if h.strip()]
 if _hosts:
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=_hosts)
 
+app.include_router(auth_router)
 app.include_router(agent_tools_router)
 app.include_router(feedback_router)
 app.include_router(feedback_router, prefix="/api/v1")
@@ -264,32 +287,109 @@ def public_config():
 
 
 @app.get("/config/ui", response_model=UiConfigPublic)
-def get_ui_config():
-    return UiConfigPublic.model_validate(public_ui_config())
+def get_ui_config(request: Request):
+    from account_config.store import effective_ui_config
+    from account_config.request_auth import resolve_config_actor
+
+    user_id, is_admin = resolve_config_actor(request)
+    return UiConfigPublic.model_validate(effective_ui_config(user_id, is_admin))
+
+
+@app.get("/config/layer-status")
+def get_config_layer_status(request: Request):
+    """平台配置版本与用户私有覆盖（调试 / 管理）。"""
+    from account_config.store import get_platform_version, list_user_config_scopes
+    from account_config.request_auth import resolve_config_actor
+
+    user_id, is_admin = resolve_config_actor(request)
+    scopes = ["ui", "processing_tools", "agent_tools", "prompts:kb:std", "prompts:general:std"]
+    return {
+        "user_id": user_id,
+        "is_platform_admin": is_admin,
+        "platform_versions": {s: get_platform_version(s) for s in scopes},
+        "user_override_scopes": list_user_config_scopes(user_id) if user_id else [],
+    }
+
+
+@app.get("/config/content-kit")
+def get_content_kit(channel: str | None = Query(default=None, max_length=32)):
+    """新媒体/小程序集成：引导选项 + 结构化输出模板（企微、视频号、抖音等）。"""
+    from agent.clarify import list_clarify_options, normalize_channel
+    from agent.output_schemas import list_output_schemas_public
+
+    ch = normalize_channel(channel)
+    return {
+        "channel": ch,
+        "clarify_options": list_clarify_options(channel=ch),
+        "output_schemas": list_output_schemas_public(channel=ch),
+    }
+
+
+@app.get("/config/scenario-catalog")
+def get_scenario_catalog(
+    department: str | None = Query(default=None, max_length=64),
+    include_tech: bool | None = Query(default=None),
+):
+    """业务场景目录：各部门可见自己的功能说明；技术部默认含开发指标与 API。"""
+    from api.scenario_catalog import public_scenario_catalog
+
+    return public_scenario_catalog(department, include_tech=include_tech)
+
+
+@app.post("/admin/eval/kb-health")
+def admin_kb_health_probe(
+    limit: int = Query(default=30, ge=5, le=80),
+    use_llm_judge: bool = Query(default=False),
+):
+    """零 golden 知识库健康探针：自动问句 → 检索命中率。"""
+    from evaluation.kb_health_probe import run_kb_health_probe, write_kb_health_report
+
+    llm_runtime = None
+    if use_llm_judge:
+        from api.llm_resolve import resolve_llm_runtime
+        from api.schemas import ChatRequest
+
+        llm_runtime = resolve_llm_runtime(ChatRequest(message=".", user_id="kb_health"))
+    report = run_kb_health_probe(limit=limit, use_llm_judge=use_llm_judge, llm_runtime=llm_runtime)
+    if report.get("ok"):
+        write_kb_health_report(report)
+    return report
 
 
 @app.put("/config/ui", response_model=UiConfigPublic)
-def update_ui_config(body: UiConfigUpdate):
+def update_ui_config(body: UiConfigUpdate, request: Request):
+    from account_config.store import effective_ui_config, save_platform_scope, save_user_scope_patch
+    from account_config.request_auth import resolve_config_actor
+
+    user_id, is_admin = resolve_config_actor(request)
     patch = body.model_dump(exclude_unset=True)
     clear_logo = bool(patch.pop("clear_logo_image", False))
     preset_id = patch.pop("scene_preset", None)
-    if preset_id:
+    if preset_id and is_admin:
         from api.scene_presets import apply_scene_preset
 
         try:
             apply_scene_preset(str(preset_id))
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if clear_logo:
+    elif preset_id and user_id:
+        save_user_scope_patch(user_id, "ui", {"scene_preset": str(preset_id)})
+    if clear_logo and is_admin:
         p = resolve_logo_file()
         if p:
             p.unlink(missing_ok=True)
         patch["logo_image_path"] = ""
     if patch:
-        save_ui_config(patch)
-    if clear_logo:
+        if is_admin:
+            save_ui_config(patch)
+            save_platform_scope("ui", updated_by=user_id or "")
+        elif user_id:
+            save_user_scope_patch(user_id, "ui", patch)
+        else:
+            raise HTTPException(status_code=401, detail="登录后才能保存个人配置")
+    if clear_logo and is_admin:
         _ = load_ui_config()
-    return UiConfigPublic.model_validate(public_ui_config())
+    return UiConfigPublic.model_validate(effective_ui_config(user_id, is_admin))
 
 
 @app.post("/config/ui/scene-preset/{preset_id}", response_model=UiConfigPublic)
@@ -304,46 +404,96 @@ def apply_ui_scene_preset(preset_id: str):
 
 
 @app.get("/config/processing-tools", response_model=ProcessingToolsPublic)
-def get_processing_tools_config():
-    return ProcessingToolsPublic.model_validate(public_processing_config())
+def get_processing_tools_config(request: Request):
+    from account_config.store import effective_processing_tools
+    from account_config.request_auth import resolve_config_actor
+
+    user_id, is_admin = resolve_config_actor(request)
+    return ProcessingToolsPublic.model_validate(effective_processing_tools(user_id, is_admin))
 
 
 @app.put("/config/processing-tools", response_model=ProcessingToolsPublic)
-def update_processing_tools_config(body: ProcessingToolsUpdate):
+def update_processing_tools_config(body: ProcessingToolsUpdate, request: Request):
+    from account_config.store import effective_processing_tools, save_platform_scope, save_user_scope_patch
+    from account_config.request_auth import resolve_config_actor
+
+    user_id, is_admin = resolve_config_actor(request)
     patch = body.model_dump(exclude_unset=True)
-    save_processing_config(patch)
-    return ProcessingToolsPublic.model_validate(public_processing_config())
+    if patch:
+        if is_admin:
+            save_processing_config(patch)
+            save_platform_scope("processing_tools", updated_by=user_id or "")
+        elif user_id:
+            save_user_scope_patch(user_id, "processing_tools", patch)
+        else:
+            raise HTTPException(status_code=401, detail="登录后才能保存个人配置")
+    return ProcessingToolsPublic.model_validate(effective_processing_tools(user_id, is_admin))
 
 
 @app.get("/config/prompts", response_model=PromptConfigPublic)
 def get_prompt_config(
+    request: Request,
     mode: str = Query(default="kb", pattern="^(kb|general)$"),
     fast: bool = Query(default=False),
 ):
-    return PromptConfigPublic.model_validate(public_prompt_config(mode=mode, fast=fast))
+    from account_config.store import effective_prompt_bundle
+    from account_config.request_auth import resolve_config_actor
+
+    user_id, is_admin = resolve_config_actor(request)
+    return PromptConfigPublic.model_validate(
+        effective_prompt_bundle(user_id, is_admin, mode=mode, fast=fast)
+    )
 
 
 @app.put("/config/prompts", response_model=PromptConfigPublic)
 def update_prompt_config(
     body: PromptConfigUpdate,
+    request: Request,
     mode: str = Query(default="kb", pattern="^(kb|general)$"),
     fast: bool = Query(default=False),
 ):
+    from account_config.store import (
+        effective_prompt_bundle,
+        save_platform_scope,
+        save_user_scope_patch,
+    )
+    from account_config.request_auth import resolve_config_actor
+
+    user_id, is_admin = resolve_config_actor(request)
+    scope = f"prompts:{mode}:{'fast' if fast else 'std'}"
     raw_slots = None
     if body.slots is not None:
         raw_slots = [s.model_dump(exclude_unset=True) for s in body.slots]
-    if body.agent_reasoning_mode is not None:
-        from api.ui_config_store import load_ui_config, save_ui_config
 
-        ui = load_ui_config()
-        ui["agent_reasoning_mode"] = body.agent_reasoning_mode
-        save_ui_config(ui)
-    save_prompt_config(
-        slots=raw_slots,
-        reset_defaults=bool(body.reset_defaults),
-        active_persona_id=body.active_persona_id,
+    if is_admin:
+        if body.agent_reasoning_mode is not None:
+            ui = load_ui_config()
+            ui["agent_reasoning_mode"] = body.agent_reasoning_mode
+            save_ui_config(ui)
+        save_prompt_config(
+            slots=raw_slots,
+            reset_defaults=bool(body.reset_defaults),
+            active_persona_id=body.active_persona_id,
+        )
+        save_platform_scope(scope, updated_by=user_id or "")
+    elif user_id:
+        user_patch: dict = {}
+        if raw_slots is not None:
+            user_patch["slots"] = raw_slots
+        if body.active_persona_id is not None:
+            user_patch["active_persona_id"] = body.active_persona_id
+        if body.agent_reasoning_mode is not None:
+            user_patch["agent_reasoning_mode"] = body.agent_reasoning_mode
+        if body.reset_defaults:
+            user_patch["reset_defaults"] = True
+        if user_patch:
+            save_user_scope_patch(user_id, scope, user_patch)
+    else:
+        raise HTTPException(status_code=401, detail="登录后才能保存个人配置")
+
+    return PromptConfigPublic.model_validate(
+        effective_prompt_bundle(user_id, is_admin, mode=mode, fast=fast)
     )
-    return PromptConfigPublic.model_validate(public_prompt_config(mode=mode, fast=fast))
 
 
 @app.get("/config/vector-stores", response_model=VectorStoreListResponse)
@@ -651,6 +801,16 @@ def sources_list():
     return sorted(rows, key=lambda r: r.source)
 
 
+@app.delete("/sources/{source:path}")
+def sources_delete(source: str):
+    """Remove an ingested document and its vectors from the knowledge base."""
+    from indexing.source_delete import delete_ingested_source
+
+    if not delete_ingested_source(source):
+        raise HTTPException(status_code=404, detail="文档不存在")
+    return {"ok": True}
+
+
 @app.post("/chat/documents/upload", response_model=EphemeralDocPublic)
 async def chat_document_upload(
     file: UploadFile = File(...),
@@ -764,7 +924,7 @@ def _resolve_chat_architecture(req: ChatRequest, mem: dict[str, Any], runtime: d
 
 
 @app.post("/chat", response_model=ChatResponse)
-def chat(req: ChatRequest, background_tasks: BackgroundTasks):
+def chat(req: ChatRequest, background_tasks: BackgroundTasks, request: Request):
     """步骤7：对话入口。"""
     runtime = resolve_llm_runtime(req)
     if not (runtime.get("llm_api_key") or "").strip():
@@ -772,8 +932,9 @@ def chat(req: ChatRequest, background_tasks: BackgroundTasks):
             status_code=400,
             detail="未配置 API Key：请在「模型配置」中保存密钥，或在 .env 中设置 OPENAI_API_KEY。",
         )
-    mem = chat_memory_settings()
-    mem = apply_routing_tier(mem)
+    mem = apply_routing_tier(
+        apply_department_chat_profile(_memory_for_user(request, req.user_id), req.user_department)
+    )
     turn = _prepare_chat_turn(req, mem, runtime)
     rag_arch, _, _ = _resolve_chat_architecture(req, mem, runtime)
     out = run_agent(
@@ -809,7 +970,7 @@ def chat(req: ChatRequest, background_tasks: BackgroundTasks):
 
 
 @app.post("/chat/stream")
-def chat_stream(req: ChatRequest):
+def chat_stream(req: ChatRequest, request: Request):
     """SSE 流式对话：检索完成后逐 token 返回答案，末尾返回引用。"""
     runtime = resolve_llm_runtime(req)
     if not (runtime.get("llm_api_key") or "").strip():
@@ -820,9 +981,17 @@ def chat_stream(req: ChatRequest):
 
     fast = resolve_stream_fast_mode(req.stream_fast_mode)
     hybrid = resolve_hybrid_expert_mode(req.hybrid_expert_mode)
-    mem = apply_routing_tier(apply_hybrid_expert_memory(chat_memory_settings(), hybrid))
+    mem = apply_routing_tier(
+        apply_hybrid_expert_memory(
+            apply_department_chat_profile(_memory_for_user(request, req.user_id), req.user_department),
+            hybrid,
+        )
+    )
     turn = _prepare_chat_turn(req, mem, runtime)
     history = turn.history_for_llm
+    scenario_tags = list(req.scenario_tags or [])
+    if req.channel and req.channel not in scenario_tags:
+        scenario_tags.append(req.channel)
     state: dict[str, Any] = {
         "question": turn.message,
         "user_id": req.user_id,
@@ -848,7 +1017,11 @@ def chat_stream(req: ChatRequest):
         "input_mode": req.input_mode,
         "doc_task_type": req.doc_task_type,
         "temp_document_id": req.temp_document_id,
-        "scenario_tags": req.scenario_tags,
+        "scenario_tags": scenario_tags or None,
+        "channel": req.channel,
+        "output_schema_id": req.output_schema_id,
+        "skip_clarify": req.skip_clarify,
+        "clarify_choice_id": req.clarify_choice_id,
     }
     state.update(
         build_stream_retrieval_state(
@@ -912,7 +1085,7 @@ def chat_session_append(session_id: str, req: ChatMessagesAppend, background_tas
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    mem = chat_memory_settings()
+    mem = _memory_for_user(request, req.user_id)
     if bool(mem.get("rolling_summary_enabled", True)):
         background_tasks.add_task(
             refresh_rolling_summary_for_session,
@@ -944,25 +1117,60 @@ def chat_session_delete(
 
 
 @app.get("/users/profile", response_model=UserProfilePublic)
-def users_profile_get(user_id: str = Query(..., min_length=1, max_length=128)):
+def users_profile_get(request: Request, user_id: str = Query(..., min_length=1, max_length=128)):
     """读取用户资料（头像、昵称、部门）；不存在则创建默认记录。"""
-    return UserProfilePublic.model_validate(get_user_profile(user_id))
+    from auth.middleware import get_auth_user
+
+    auth = get_auth_user(request)
+    if auth and auth.get("id") != user_id.strip():
+        raise HTTPException(status_code=403, detail="只能访问本人资料")
+    row = get_user_profile(user_id)
+    if auth:
+        row = {**row, "department": auth["department"]}
+    return UserProfilePublic.model_validate(row)
 
 
 @app.put("/users/profile", response_model=UserProfilePublic)
-def users_profile_update(req: UserProfileUpdate):
-    """更新用户资料。"""
+def users_profile_update(req: UserProfileUpdate, request: Request):
+    """更新用户资料（部门由账号绑定，不可自行修改）。"""
+    from auth.middleware import get_auth_user
+
+    auth = get_auth_user(request)
+    if auth and auth.get("id") != req.user_id.strip():
+        raise HTTPException(status_code=403, detail="只能修改本人资料")
+    dept = auth["department"] if auth else req.department
     try:
         row = upsert_user_profile(
             req.user_id,
             display_name=req.display_name,
             avatar_url=req.avatar_url,
-            department=req.department,
+            department=dept,
             ai_display_name=req.ai_display_name,
             ai_avatar_url=req.ai_avatar_url,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    if auth and req.display_name is not None:
+        from auth.store import update_user_display_name
+
+        update_user_display_name(auth["id"], req.display_name.strip())
+        row = {**row, "display_name": req.display_name.strip()}
+    return UserProfilePublic.model_validate(row)
+
+
+@app.post("/users/profile/merge-legacy", response_model=UserProfilePublic)
+def users_profile_merge_legacy(req: LegacyProfileMergeRequest, request: Request):
+    """Merge pre-auth anonymous profile (avatar, nickname, sessions) into logged-in account."""
+    from auth.middleware import get_auth_user
+
+    auth = get_auth_user(request)
+    if not auth:
+        raise HTTPException(status_code=401, detail="未登录")
+    try:
+        row = merge_legacy_user(req.legacy_user_id.strip(), auth["id"])
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    row = {**row, "department": auth["department"]}
     return UserProfilePublic.model_validate(row)
 
 

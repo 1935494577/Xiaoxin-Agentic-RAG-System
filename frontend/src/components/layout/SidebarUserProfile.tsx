@@ -6,38 +6,39 @@ import { Label } from "../ui/Label";
 import { ChatAvatar } from "../chat/ChatAvatar";
 import { useAuth } from "../../hooks/useAuth";
 import { useUserProfile } from "../../context/UserProfileContext";
-import { DEPT_OPTIONS } from "../../lib/constants";
+import { authChangePassword } from "../../api/client";
 import { fileToAvatarDataUrl, profileLabel } from "../../lib/avatarImage";
 import { toast } from "sonner";
 
 export function SidebarUserProfile() {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { logout, department, username } = useAuth();
   const {
     loading,
     displayName,
     avatarUrl,
     aiDisplayName,
     aiAvatarUrl,
-    department,
     saveProfile,
   } = useUserProfile();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [draftName, setDraftName] = useState("");
-  const [draftDept, setDraftDept] = useState("技术部");
   const [draftAvatar, setDraftAvatar] = useState("");
   const [draftAiName, setDraftAiName] = useState("");
   const [draftAiAvatar, setDraftAiAvatar] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const userFileRef = useRef<HTMLInputElement>(null);
   const aiFileRef = useRef<HTMLInputElement>(null);
 
   const openDialog = () => {
-    setDraftName(displayName);
-    setDraftDept(department);
+    setDraftName(displayName || username);
     setDraftAvatar(avatarUrl);
     setDraftAiName(aiDisplayName);
     setDraftAiAvatar(aiAvatarUrl);
+    setCurrentPassword("");
+    setNewPassword("");
     setOpen(true);
   };
 
@@ -55,9 +56,20 @@ export function SidebarUserProfile() {
   const onSave = async () => {
     setSaving(true);
     try {
+      if (newPassword.trim()) {
+        if (newPassword.trim().length < 6) {
+          toast.error("新密码至少 6 位");
+          return;
+        }
+        if (!currentPassword) {
+          toast.error("修改密码需填写当前密码");
+          return;
+        }
+        await authChangePassword(currentPassword, newPassword.trim());
+        toast.success("密码已更新");
+      }
       await saveProfile({
         display_name: draftName.trim(),
-        department: draftDept,
         avatar_url: draftAvatar,
         ai_display_name: draftAiName.trim(),
         ai_avatar_url: draftAiAvatar,
@@ -71,10 +83,10 @@ export function SidebarUserProfile() {
     }
   };
 
-  const label = profileLabel(displayName);
+  const label = profileLabel(displayName || username);
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate("/login", { replace: true });
   };
 
@@ -89,7 +101,7 @@ export function SidebarUserProfile() {
         >
           <ChatAvatar
             avatarUrl={avatarUrl}
-            label={displayName}
+            label={displayName || username}
             fallback="你"
             variant="user"
             size="sidebar"
@@ -149,15 +161,7 @@ export function SidebarUserProfile() {
               />
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-text-muted">对话中你的头像</p>
-                {draftAvatar && (
-                  <button
-                    type="button"
-                    className="text-xs text-brand hover:underline cursor-pointer mt-1"
-                    onClick={() => setDraftAvatar("")}
-                  >
-                    移除头像
-                  </button>
-                )}
+                <p className="text-xs text-text-muted mt-1">登录账号：{username}</p>
               </div>
             </div>
             <Label htmlFor="profile-name">昵称</Label>
@@ -165,79 +169,54 @@ export function SidebarUserProfile() {
               id="profile-name"
               type="text"
               maxLength={64}
+              autoComplete="nickname"
               value={draftName}
               onChange={(e) => setDraftName(e.target.value)}
-              placeholder="例如：风停看雨画"
               className="mt-1 flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
             />
           </section>
 
           <section className="pt-1 border-t border-border-light">
             <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-3 mt-4">助手展示</p>
-            <div className="flex items-center gap-4 mb-4">
-              <button
-                type="button"
-                onClick={() => aiFileRef.current?.click()}
-                className="relative rounded-full cursor-pointer hover:opacity-90 transition-opacity shrink-0"
-              >
-                <ChatAvatar
-                  avatarUrl={draftAiAvatar}
-                  label={draftAiName}
-                  fallback="AI"
-                  variant="ai"
-                  size="sidebar"
-                />
-                <span className="absolute -bottom-1 -right-1 text-[10px] bg-brand text-white px-1.5 py-0.5 rounded-full">
-                  更换
-                </span>
-              </button>
-              <input
-                ref={aiFileRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => onPickAvatar(e.target.files?.[0], "ai")}
-              />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-text-muted">对话中 AI 的头像</p>
-                {draftAiAvatar && (
-                  <button
-                    type="button"
-                    className="text-xs text-brand hover:underline cursor-pointer mt-1"
-                    onClick={() => setDraftAiAvatar("")}
-                  >
-                    移除头像
-                  </button>
-                )}
-              </div>
-            </div>
             <Label htmlFor="profile-ai-name">助手名称</Label>
             <input
               id="profile-ai-name"
               type="text"
               maxLength={64}
+              autoComplete="off"
+              placeholder="留空则对话中显示 AI"
               value={draftAiName}
               onChange={(e) => setDraftAiName(e.target.value)}
-              placeholder="留空则显示 AI"
               className="mt-1 flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
             />
           </section>
 
           <section className="pt-1 border-t border-border-light">
-            <Label htmlFor="profile-dept">部门权限</Label>
-            <select
-              id="profile-dept"
-              value={draftDept}
-              onChange={(e) => setDraftDept(e.target.value)}
-              className="mt-1 flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
-            >
-              {DEPT_OPTIONS.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-text-muted mt-1.5">决定可检索的知识库文档范围</p>
+            <Label>所属部门</Label>
+            <p className="mt-1 text-sm text-text">{department}</p>
+            <p className="text-xs text-text-muted mt-1">由账号绑定，决定管理功能与知识库可见范围</p>
+          </section>
+
+          <section className="pt-1 border-t border-border-light">
+            <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-3 mt-4">修改密码</p>
+            <Label htmlFor="current-pw">当前密码</Label>
+            <input
+              id="current-pw"
+              type="password"
+              autoComplete="current-password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              className="mt-1 mb-3 flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm"
+            />
+            <Label htmlFor="new-pw">新密码（至少 6 位，留空则不修改）</Label>
+            <input
+              id="new-pw"
+              type="password"
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className="mt-1 flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm"
+            />
           </section>
         </div>
       </Dialog>

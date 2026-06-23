@@ -9,7 +9,9 @@ import {
   FileText,
   HardDrive,
   MessageSquare,
+  Sparkles,
   ThumbsUp,
+  Users,
   Wrench,
 } from "lucide-react";
 import type { Department } from "./constants";
@@ -30,6 +32,8 @@ export const ADMIN_FEATURES = [
   "eval_reports",
   "trace",
   "tutorial",
+  "scenarios",
+  "users",
 ] as const;
 
 export type AdminFeature = (typeof ADMIN_FEATURES)[number];
@@ -40,9 +44,11 @@ export const STANDARD_DEPARTMENT_FEATURES: ReadonlySet<AdminFeature> = new Set([
   "ingest",
   "prompts",
   "models",
+  "tutorial",
+  "scenarios",
 ]);
 
-export type NavGroupId = "daily" | "quality" | "system";
+export type NavGroupId = "daily" | "quality" | "system" | "administration";
 
 export type NavGroup = {
   id: NavGroupId;
@@ -55,7 +61,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     id: "daily",
     label: "日常运营",
-    featureIds: ["ingest", "tutorial"],
+    featureIds: ["ingest", "scenarios", "tutorial"],
   },
   {
     id: "quality",
@@ -66,6 +72,11 @@ export const NAV_GROUPS: NavGroup[] = [
     id: "system",
     label: "系统配置",
     featureIds: ["memory", "prompts", "models", "processing", "vector_store"],
+  },
+  {
+    id: "administration",
+    label: "系统管理",
+    featureIds: ["users"],
   },
 ];
 
@@ -80,6 +91,7 @@ export type NavItem = {
 export const ALL_NAV_ITEMS: NavItem[] = [
   { id: "chat", label: "Jnao Chat", href: "/chat", icon: MessageSquare, primary: true },
   { id: "ingest", label: "数据入库", href: "/admin/ingest", icon: Database },
+  { id: "scenarios", label: "业务场景", href: "/admin/scenarios", icon: Sparkles },
   { id: "processing", label: "工具", href: "/admin/processing", icon: Wrench },
   { id: "vector_store", label: "向量库", href: "/admin/vector-store", icon: HardDrive },
   { id: "memory", label: "对话设置", href: "/admin/memory", icon: Brain },
@@ -89,6 +101,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   { id: "eval_reports", label: "评测报告", href: "/admin/eval-reports", icon: BarChart3 },
   { id: "trace", label: "链路 Trace", href: "/admin/trace", icon: Activity },
   { id: "tutorial", label: "教程", href: "/admin/tutorial", icon: BookOpen },
+  { id: "users", label: "账号管理", href: "/admin/users", icon: Users },
 ];
 
 const ADMIN_PATH_FEATURE: Array<{ prefix: string; feature: AdminFeature }> = [
@@ -102,6 +115,8 @@ const ADMIN_PATH_FEATURE: Array<{ prefix: string; feature: AdminFeature }> = [
   { prefix: "/admin/eval-reports", feature: "eval_reports" },
   { prefix: "/admin/trace", feature: "trace" },
   { prefix: "/admin/tutorial", feature: "tutorial" },
+  { prefix: "/admin/scenarios", feature: "scenarios" },
+  { prefix: "/admin/users", feature: "users" },
 ];
 
 function isKnownDepartment(department: string): department is Department {

@@ -1,12 +1,19 @@
 /**
- * useAuth hook tests.
- * Verifies userId generation, persistence, and stability — critical for session survival.
+ * useAuth hook tests — session login via API mock.
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { renderHook, act } from "@testing-library/react";
+import { renderHook, act, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { AuthProvider } from "../src/context/AuthContext";
 import { useAuth } from "../src/hooks/useAuth";
+
+const authLogin = vi.fn();
+const authLogout = vi.fn();
+
+vi.mock("../src/api/client", () => ({
+  authLogin: (...args: unknown[]) => authLogin(...args),
+  authLogout: (...args: unknown[]) => authLogout(...args),
+}));
 
 const localStorageMock = (() => {
   let store: Record<string, string> = {};
@@ -35,77 +42,83 @@ describe("useAuth", () => {
   beforeEach(() => {
     localStorageMock.clear();
     vi.clearAllMocks();
+    authLogout.mockResolvedValue(undefined);
   });
 
-  it("generates a new userId when none is stored", () => {
+  it("starts unauthenticated with empty userId", () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
-
-    expect(result.current.userId).toMatch(/^u_[a-z0-9]+$/);
-    expect(result.current.userId.length).toBeGreaterThan(6);
-  });
-
-  it("returns stored userId when it exists", () => {
-    localStorageMock.getItem.mockReturnValueOnce('"u_stored_id_123"');
-
-    const { result } = renderHook(() => useAuth(), { wrapper });
-
-    expect(result.current.userId).toBe("u_stored_id_123");
-    expect(localStorageMock.setItem).not.toHaveBeenCalled();
-  });
-
-  it("userId is stable across re-renders (referential equality)", () => {
-    const { result, rerender } = renderHook(() => useAuth(), { wrapper });
-    const first = result.current.userId;
-
-    rerender();
-    const second = result.current.userId;
-
-    expect(first).toBe(second);
-  });
-
-  it("two separate calls return the same stored userId", () => {
-    const { result: a } = renderHook(() => useAuth(), { wrapper });
-    const { result: b } = renderHook(() => useAuth(), { wrapper });
-
-    expect(a.current.userId).toBe(b.current.userId);
-  });
-
-  it("uses key rag_chat_user_id", () => {
-    renderHook(() => useAuth(), { wrapper });
-    expect(localStorageMock.getItem).toHaveBeenCalledWith("rag_chat_user_id");
-  });
-
-  it("login stores session and marks authenticated", () => {
-    const { result } = renderHook(() => useAuth(), { wrapper });
-
     expect(result.current.isAuthenticated).toBe(false);
+    expect(result.current.userId).toBe("");
+  });
 
-    act(() => {
-      result.current.login("alice", "运营部", true);
+  it("restores session from storage", () => {
+    localStorageMock.getItem.mockImplementation((key: string) => {
+      if (key === "jnao_auth_session") {
+        return JSON.stringify({
+          username: "tech1",
+          department: "技术部",
+          role: "superadmin",
+          token: "tok_abc",
+          userId: "u_tech1",
+          loggedInAt: 1,
+        });
+      }
+      return null;
+    });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    expect(result.current.isAuthenticated).toBe(true);
+    expect(result.current.userId).toBe("u_tech1");
+    expect(result.current.username).toBe("tech1");
+  });
+
+  it("login stores session from API response", async () => {
+    authLogin.mockResolvedValue({
+      token: "tok_new",
+      user: { id: "u_ops1", username: "ops1", department: "运营部", display_name: "ops1" },
+    });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await act(async () => {
+      await result.current.login("ops1", "secret", true);
     });
 
     expect(result.current.isAuthenticated).toBe(true);
-    expect(result.current.username).toBe("alice");
+    expect(result.current.username).toBe("ops1");
     expect(result.current.department).toBe("运营部");
+    expect(result.current.userId).toBe("u_ops1");
     expect(localStorageMock.setItem).toHaveBeenCalledWith(
       "jnao_auth_session",
-      expect.stringContaining('"username":"alice"')
+      expect.stringContaining('"token":"tok_new"')
     );
   });
 
-  it("logout clears session", () => {
-    const { result } = renderHook(() => useAuth(), { wrapper });
-
-    act(() => {
-      result.current.login("bob", "技术部");
-      result.current.logout();
+  it("logout clears session", async () => {
+    authLogin.mockResolvedValue({
+      token: "tok",
+      user: { id: "u1", username: "bob", department: "技术部", display_name: "bob" },
     });
 
-    expect(result.current.isAuthenticated).toBe(false);
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await act(async () => {
+      await result.current.login("bob", "pw");
+      await result.current.logout();
+    });
+
+    await waitFor(() => {
+      expect(result.current.isAuthenticated).toBe(false);
+    });
     expect(localStorageMock.removeItem).toHaveBeenCalledWith("jnao_auth_session");
   });
 
-  it("shares session state across hook instances in one provider", () => {
+  it("shares session state across hook instances in one provider", async () => {
+    authLogin.mockResolvedValue({
+      token: "tok",
+      user: { id: "u2", username: "carol", department: "媒体部", display_name: "carol" },
+    });
+
     function useTwoAuth() {
       const a = useAuth();
       const b = useAuth();
@@ -114,15 +127,15 @@ describe("useAuth", () => {
 
     const { result } = renderHook(() => useTwoAuth(), { wrapper });
 
-    act(() => {
-      result.current.a.login("carol", "媒体部");
+    await act(async () => {
+      await result.current.a.login("carol", "pw");
     });
 
     expect(result.current.b.isAuthenticated).toBe(true);
     expect(result.current.b.username).toBe("carol");
 
-    act(() => {
-      result.current.b.logout();
+    await act(async () => {
+      await result.current.b.logout();
     });
 
     expect(result.current.a.isAuthenticated).toBe(false);

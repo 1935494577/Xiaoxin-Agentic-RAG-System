@@ -9,6 +9,7 @@ from agent.answer_prompts import general_system_prompt, general_user_content
 from agent.conversation.rolling_summary import augment_system_with_summary
 from agent.conversation_context import build_llm_messages
 from agent.llm_routing import model_for_task, routing_llm_runtime
+from agent.output_schemas import output_schema_instruction
 from agent.tools.config.registry import enabled_tool_ids, load_tools_config
 from agent.tools.runtime.loop import run_tool_loop, stream_answer_after_tools
 from agent.reasoning_modes import should_use_tool_loop
@@ -62,6 +63,9 @@ def stream_general_answer(
         )
         enabled = enabled | {"show_relationship_graph"}
     system = augment_system_with_summary(system, state.get("rolling_summary"))
+    schema_extra = output_schema_instruction(str(state.get("output_schema_id") or ""))
+    if schema_extra:
+        system += f"\n\n{schema_extra}"
     user_content = general_user_content(state["question"])
     messages = build_llm_messages(system=system, history=history, user_content=user_content)
 

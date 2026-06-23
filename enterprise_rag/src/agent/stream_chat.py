@@ -31,6 +31,13 @@ from agent.tools.runtime.routing import (
     should_use_relationship_graph_fast_path,
 )
 from agent.tools.runtime.stream import is_tools_active, stream_general_answer
+from agent.clarify import (
+    apply_clarify_choice_to_message,
+    build_clarify_event,
+    resolve_clarify_choice,
+    should_offer_clarify,
+)
+from agent.output_schemas import output_schema_instruction
 from graph.prompts import graph_kb_system_extra
 from config import settings
 from evaluation.stream_langsmith import new_stream_tracer
@@ -80,6 +87,38 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
     trace = new_stream_tracer(state)
     trace_err: str | None = None
     quiet = bool(state.get("quiet_routing"))
+
+    choice_id = str(state.get("clarify_choice_id") or "").strip()
+    if choice_id:
+        choice = resolve_clarify_choice(choice_id)
+        if choice:
+            state["question"] = apply_clarify_choice_to_message(state["question"], choice)
+            init_state["question"] = state["question"]
+            if choice.get("output_schema_id") and not state.get("output_schema_id"):
+                state["output_schema_id"] = choice["output_schema_id"]
+
+    turn_meta = state.get("turn_meta") or {}
+    if should_offer_clarify(
+        enabled=bool(mem.get("clarify_enabled")),
+        skip_clarify=bool(state.get("skip_clarify")),
+        clarify_choice_id=choice_id or None,
+        rule_confidence=float(turn_meta.get("rule_confidence") or 1.0),
+        intent=str(turn_meta.get("query_intent") or "unknown"),
+        message=str(state.get("question") or ""),
+    ):
+        yield _evt(build_clarify_event(channel=state.get("channel")))
+        yield _evt(
+            {
+                "type": "done",
+                "answer": "",
+                "needs_clarify": True,
+                "trace_id": trace.trace_id,
+            }
+        )
+        trace.finish({})
+        return
+
+    schema_extra = output_schema_instruction(str(state.get("output_schema_id") or ""))
 
     if should_use_relationship_graph_fast_path(state["question"], history):
         graph_state = dict(state)
@@ -323,7 +362,8 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
                         reasoning_mode=reasoning_mode,
                         strict_kb_only=strict_kb_only,
                     )
-                    + (f"\n\n{graph_extra}" if graph_extra else ""),
+                    + (f"\n\n{graph_extra}" if graph_extra else "")
+                    + (f"\n\n{schema_extra}" if schema_extra else ""),
                     rolling_summary,
                 )
                 user_content = kb_user_content(ctx, state["question"])

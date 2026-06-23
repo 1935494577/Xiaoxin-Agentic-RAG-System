@@ -60,12 +60,21 @@ class Settings(BaseSettings):
     feedback_auto_add_to_golden: bool = True
     feedback_auto_add_to_golden_min_confidence: float = 0.85
     chat_sessions_db_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "chat_sessions.db"
+    auth_db_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "auth.db"
+    platform_config_db_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "platform_config.db"
+    auth_bootstrap_credentials_path: Path = (
+        _REPO_ROOT / "enterprise_rag" / "data" / "config" / "auth_bootstrap_credentials.txt"
+    )
+    auth_session_ttl_hours: int = 168  # 7 days
+    auth_session_remember_ttl_hours: int = 720  # 30 days
     chat_trace_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "chat_trace.jsonl"
     model_profiles_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "model_profiles.json"
     ui_config_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "ui_config.json"
     prompt_config_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "prompt_config.json"
     processing_tools_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "processing_tools.json"
     agent_tools_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "agent_tools.json"
+    clarify_options_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "config" / "clarify_options.json"
+    scenario_catalog_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "config" / "scenario_catalog.json"
     doc_registry_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "doc_registry.json"
     graph_db_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "knowledge_graph.db"
     ephemeral_docs_dir: Path = _REPO_ROOT / "enterprise_rag" / "data" / "ephemeral"
