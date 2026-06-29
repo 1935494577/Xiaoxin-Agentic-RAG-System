@@ -84,18 +84,8 @@ export function Sidebar() {
 
       <div className="border-b border-border px-4 py-4">
 
-        <div className="flex items-center gap-2.5">
-
-          <img src="/company_logo.png" alt="" className="h-8 w-auto" />
-
-          <div className="min-w-0">
-
-            <p className="truncate text-sm font-semibold text-text">Jnao 知识库</p>
-
-            <p className="truncate text-[11px] text-text-muted">劲脑 · 内部工作平台</p>
-
-          </div>
-
+        <div className="flex items-center">
+          <img src="/company_logo.png" alt="JNAO 劲脑" className="h-8 w-auto" />
         </div>
 
       </div>

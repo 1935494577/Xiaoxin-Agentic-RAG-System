@@ -27,9 +27,9 @@ from account_config.store import init_platform_config_db
 def _memory_for_user(request: Request | None, user_id: str | None) -> dict[str, Any]:
     from account_config.request_auth import resolve_config_actor
 
-    auth_uid, is_admin = resolve_config_actor(request) if request else (None, False)
+    auth_uid, _ = resolve_config_actor(request) if request else (None, False)
     actor = auth_uid or ((user_id or "").strip() or None)
-    return chat_memory_settings(actor, is_admin)
+    return chat_memory_settings(actor)
 
 
 from api.department_chat_profile import apply_department_chat_profile
@@ -156,6 +156,7 @@ from indexing.ingest_dedup import (
 )
 from indexing.document_registry import get_document_registry
 from api.user_profile_store import (
+    apply_auth_to_profile,
     get_profile as get_user_profile,
     init_user_profile_db,
     merge_legacy_user,
@@ -265,7 +266,7 @@ def health():
 
 @app.get("/config/nav")
 def get_nav_config():
-    """Unified nav links for Chat SPA and Streamlit admin."""
+    """Nav links for Chat SPA and React admin (see frontend/src/lib/departmentAccess.ts)."""
     return build_nav_config()
 
 
@@ -291,8 +292,8 @@ def get_ui_config(request: Request):
     from account_config.store import effective_ui_config
     from account_config.request_auth import resolve_config_actor
 
-    user_id, is_admin = resolve_config_actor(request)
-    return UiConfigPublic.model_validate(effective_ui_config(user_id, is_admin))
+    user_id, can_write = resolve_config_actor(request)
+    return UiConfigPublic.model_validate(effective_ui_config(user_id))
 
 
 @app.get("/config/layer-status")
@@ -301,11 +302,18 @@ def get_config_layer_status(request: Request):
     from account_config.store import get_platform_version, list_user_config_scopes
     from account_config.request_auth import resolve_config_actor
 
-    user_id, is_admin = resolve_config_actor(request)
+    from account_config.request_auth import resolve_config_actor
+
+    user_id, can_write = resolve_config_actor(request)
     scopes = ["ui", "processing_tools", "agent_tools", "prompts:kb:std", "prompts:general:std"]
+    from auth.middleware import get_auth_user
+
+    auth = get_auth_user(request)
     return {
         "user_id": user_id,
-        "is_platform_admin": is_admin,
+        "username": str(auth.get("username") or "") if auth else "",
+        "can_write_platform": can_write,
+        "platform_writer": settings.platform_config_writer_username,
         "platform_versions": {s: get_platform_version(s) for s in scopes},
         "user_override_scopes": list_user_config_scopes(user_id) if user_id else [],
     }
@@ -361,11 +369,11 @@ def update_ui_config(body: UiConfigUpdate, request: Request):
     from account_config.store import effective_ui_config, save_platform_scope, save_user_scope_patch
     from account_config.request_auth import resolve_config_actor
 
-    user_id, is_admin = resolve_config_actor(request)
+    user_id, can_write = resolve_config_actor(request)
     patch = body.model_dump(exclude_unset=True)
     clear_logo = bool(patch.pop("clear_logo_image", False))
     preset_id = patch.pop("scene_preset", None)
-    if preset_id and is_admin:
+    if preset_id and can_write:
         from api.scene_presets import apply_scene_preset
 
         try:
@@ -374,22 +382,22 @@ def update_ui_config(body: UiConfigUpdate, request: Request):
             raise HTTPException(status_code=400, detail=str(exc)) from exc
     elif preset_id and user_id:
         save_user_scope_patch(user_id, "ui", {"scene_preset": str(preset_id)})
-    if clear_logo and is_admin:
+    if clear_logo and can_write:
         p = resolve_logo_file()
         if p:
             p.unlink(missing_ok=True)
         patch["logo_image_path"] = ""
     if patch:
-        if is_admin:
+        if can_write:
             save_ui_config(patch)
             save_platform_scope("ui", updated_by=user_id or "")
         elif user_id:
             save_user_scope_patch(user_id, "ui", patch)
         else:
             raise HTTPException(status_code=401, detail="登录后才能保存个人配置")
-    if clear_logo and is_admin:
+    if clear_logo and can_write:
         _ = load_ui_config()
-    return UiConfigPublic.model_validate(effective_ui_config(user_id, is_admin))
+    return UiConfigPublic.model_validate(effective_ui_config(user_id))
 
 
 @app.post("/config/ui/scene-preset/{preset_id}", response_model=UiConfigPublic)
@@ -408,8 +416,8 @@ def get_processing_tools_config(request: Request):
     from account_config.store import effective_processing_tools
     from account_config.request_auth import resolve_config_actor
 
-    user_id, is_admin = resolve_config_actor(request)
-    return ProcessingToolsPublic.model_validate(effective_processing_tools(user_id, is_admin))
+    user_id, can_write = resolve_config_actor(request)
+    return ProcessingToolsPublic.model_validate(effective_processing_tools(user_id))
 
 
 @app.put("/config/processing-tools", response_model=ProcessingToolsPublic)
@@ -417,17 +425,17 @@ def update_processing_tools_config(body: ProcessingToolsUpdate, request: Request
     from account_config.store import effective_processing_tools, save_platform_scope, save_user_scope_patch
     from account_config.request_auth import resolve_config_actor
 
-    user_id, is_admin = resolve_config_actor(request)
+    user_id, can_write = resolve_config_actor(request)
     patch = body.model_dump(exclude_unset=True)
     if patch:
-        if is_admin:
+        if can_write:
             save_processing_config(patch)
             save_platform_scope("processing_tools", updated_by=user_id or "")
         elif user_id:
             save_user_scope_patch(user_id, "processing_tools", patch)
         else:
             raise HTTPException(status_code=401, detail="登录后才能保存个人配置")
-    return ProcessingToolsPublic.model_validate(effective_processing_tools(user_id, is_admin))
+    return ProcessingToolsPublic.model_validate(effective_processing_tools(user_id))
 
 
 @app.get("/config/prompts", response_model=PromptConfigPublic)
@@ -439,9 +447,9 @@ def get_prompt_config(
     from account_config.store import effective_prompt_bundle
     from account_config.request_auth import resolve_config_actor
 
-    user_id, is_admin = resolve_config_actor(request)
+    user_id, can_write = resolve_config_actor(request)
     return PromptConfigPublic.model_validate(
-        effective_prompt_bundle(user_id, is_admin, mode=mode, fast=fast)
+        effective_prompt_bundle(user_id, mode=mode, fast=fast)
     )
 
 
@@ -459,13 +467,13 @@ def update_prompt_config(
     )
     from account_config.request_auth import resolve_config_actor
 
-    user_id, is_admin = resolve_config_actor(request)
+    user_id, can_write = resolve_config_actor(request)
     scope = f"prompts:{mode}:{'fast' if fast else 'std'}"
     raw_slots = None
     if body.slots is not None:
         raw_slots = [s.model_dump(exclude_unset=True) for s in body.slots]
 
-    if is_admin:
+    if can_write:
         if body.agent_reasoning_mode is not None:
             ui = load_ui_config()
             ui["agent_reasoning_mode"] = body.agent_reasoning_mode
@@ -492,7 +500,7 @@ def update_prompt_config(
         raise HTTPException(status_code=401, detail="登录后才能保存个人配置")
 
     return PromptConfigPublic.model_validate(
-        effective_prompt_bundle(user_id, is_admin, mode=mode, fast=fast)
+        effective_prompt_bundle(user_id, mode=mode, fast=fast)
     )
 
 
@@ -1125,8 +1133,7 @@ def users_profile_get(request: Request, user_id: str = Query(..., min_length=1, 
     if auth and auth.get("id") != user_id.strip():
         raise HTTPException(status_code=403, detail="只能访问本人资料")
     row = get_user_profile(user_id)
-    if auth:
-        row = {**row, "department": auth["department"]}
+    row = apply_auth_to_profile(row, auth)
     return UserProfilePublic.model_validate(row)
 
 

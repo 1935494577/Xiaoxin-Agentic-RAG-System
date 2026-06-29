@@ -42,25 +42,38 @@ def test_effective_config_merges_for_non_admin(tmp_path, monkeypatch):
         "ui",
         lambda: {"max_history_turns": 6, "kb_min_score": 0.55},
         user_id="user_ops",
-        is_platform_admin=False,
     )
     assert result["max_history_turns"] == 4
     assert result["kb_min_score"] == 0.55
 
 
-def test_admin_reads_platform_baseline_only(tmp_path, monkeypatch):
+def test_logged_in_user_merges_personal_override(tmp_path, monkeypatch):
     db = tmp_path / "platform.db"
     monkeypatch.setattr("account_config.store.settings.platform_config_db_path", db)
     init_platform_config_db()
-    set_user_override("admin_id", "ui", {"max_history_turns": 2})
+    set_user_override("tech2_id", "ui", {"max_history_turns": 2})
 
     result = effective_json_config(
         "ui",
         lambda: {"max_history_turns": 6},
-        user_id="admin_id",
-        is_platform_admin=True,
+        user_id="tech2_id",
     )
-    assert result["max_history_turns"] == 6
+    assert result["max_history_turns"] == 2
+
+
+def test_platform_writer_also_merges_personal_override(tmp_path, monkeypatch):
+    """Even tech1 reads baseline + own user_config when present."""
+    db = tmp_path / "platform.db"
+    monkeypatch.setattr("account_config.store.settings.platform_config_db_path", db)
+    init_platform_config_db()
+    set_user_override("tech1_id", "ui", {"max_history_turns": 3})
+
+    result = effective_json_config(
+        "ui",
+        lambda: {"max_history_turns": 6},
+        user_id="tech1_id",
+    )
+    assert result["max_history_turns"] == 3
 
 
 def test_save_user_scope_patch_merges(tmp_path, monkeypatch):

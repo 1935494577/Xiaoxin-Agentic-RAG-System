@@ -2,11 +2,12 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
-import { authLogin, authLogout } from "../api/client";
+import { authLogin, authLogout, authMe } from "../api/client";
 import { AUTH_SESSION_KEY } from "../lib/constants";
 import { resolveAdminRole, type AdminRole } from "../lib/adminRoles";
 
@@ -16,6 +17,7 @@ export type AuthSession = {
   role: AdminRole;
   token: string;
   userId: string;
+  displayName: string;
   loggedInAt: number;
 };
 
@@ -24,6 +26,7 @@ type AuthContextValue = {
   session: AuthSession | null;
   isAuthenticated: boolean;
   username: string;
+  displayName: string;
   department: string;
   role: AdminRole;
   token: string;
@@ -39,8 +42,11 @@ function readSession(storage: Storage): AuthSession | null {
   try {
     const parsed = JSON.parse(raw) as AuthSession;
     if (parsed?.username && parsed?.token && parsed?.userId) {
+      const displayName =
+        (parsed.displayName ?? "").trim() || (parsed.username ?? "").trim();
       return {
         ...parsed,
+        displayName,
         role: parsed.role ?? resolveAdminRole(parsed.department ?? ""),
       };
     }
@@ -64,14 +70,42 @@ function writeSession(session: AuthSession, remember: boolean): void {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(loadInitialSession);
 
+  useEffect(() => {
+    if (!session?.token) return;
+    const storedName = (session.displayName || "").trim();
+    const username = (session.username || "").trim();
+    if (storedName && storedName !== username) return;
+
+    let cancelled = false;
+    authMe()
+      .then((user) => {
+        if (cancelled) return;
+        const nextName = (user.display_name || user.username || "").trim();
+        if (!nextName || nextName === storedName) return;
+        const updated: AuthSession = { ...session, displayName: nextName };
+        const remember = Boolean(localStorage.getItem(AUTH_SESSION_KEY));
+        writeSession(updated, remember);
+        setSession(updated);
+      })
+      .catch(() => {
+        /* offline or expired — keep cached session */
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.token, session?.userId, session?.displayName, session?.username]);
+
   const login = useCallback(async (username: string, password: string, remember = true) => {
     const res = await authLogin(username.trim(), password, remember);
+    const displayName = (res.user.display_name || res.user.username || "").trim();
     const next: AuthSession = {
       username: res.user.username,
       department: res.user.department,
       role: resolveAdminRole(res.user.department),
       token: res.token,
       userId: res.user.id,
+      displayName,
       loggedInAt: Date.now(),
     };
     writeSession(next, remember);
@@ -96,6 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       isAuthenticated: session !== null,
       username: session?.username ?? "",
+      displayName: session?.displayName ?? "",
       department: session?.department ?? "",
       role: session?.role ?? "operator",
       token: session?.token ?? "",

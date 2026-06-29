@@ -5,6 +5,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from "react-router-do
 import { ArrowLeft, ArrowRight, Brain, Eye, EyeOff, Lock, User } from "lucide-react";
 
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { mergeLegacyUserProfile } from "../api/client";
 import { TalentEditorialMascots } from "@/components/ui/talent-editorial-mascots";
@@ -52,6 +53,7 @@ export default function LoginPage() {
   const [searchParams] = useSearchParams();
 
   const { login } = useAuth();
+  const queryClient = useQueryClient();
 
   const fromWelcome = Boolean(
     (location.state as { fromWelcome?: boolean } | null)?.fromWelcome
@@ -125,20 +127,27 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       const session = await login(name, password, remember);
+      queryClient.removeQueries({ queryKey: ["userProfile"] });
+      const welcomeName = session.displayName || name;
       const legacyId = readLegacyUserId();
       if (legacyId && legacyId !== session.userId) {
         try {
-          const merged = await mergeLegacyUserProfile(legacyId);
+          const merged = await Promise.race([
+            mergeLegacyUserProfile(legacyId),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error("legacy merge timeout")), 8_000)
+            ),
+          ]);
           localStorage.removeItem(USER_ID_KEY);
-          toast.success(`欢迎回来，${merged.display_name || name}`);
+          toast.success(`欢迎回来，${merged.display_name || welcomeName}`);
           navigate(returnTo, { replace: true });
           return;
         } catch {
-          /* no legacy profile to merge */
+          /* legacy merge optional — do not block login */
         }
       }
       localStorage.removeItem(USER_ID_KEY);
-      toast.success(`欢迎回来，${name}`);
+      toast.success(`欢迎回来，${welcomeName}`);
       navigate(returnTo, { replace: true });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "登录失败";
@@ -168,24 +177,8 @@ export default function LoginPage() {
 
         <div className="auth-login-pattern absolute inset-0 opacity-40" />
 
-        <div className="auth-login-brand relative z-10 flex items-center gap-3">
-
-          <img src="/company_logo.png" alt="Jnao 劲脑" className="h-9 w-auto brightness-0 invert" />
-
-          <div>
-
-            <p className="text-lg font-semibold tracking-wide">
-
-              <span className="text-[#ffab91]">J</span>nao
-
-              <span className="ml-1 text-sm font-medium text-white/80">劲脑</span>
-
-            </p>
-
-            <p className="text-sm text-white/70">脑科教育 · 内部工作平台</p>
-
-          </div>
-
+        <div className="auth-login-brand relative z-10">
+          <img src="/company_logo.png" alt="JNAO 劲脑" className="h-9 w-auto brightness-0 invert" />
         </div>
 
 

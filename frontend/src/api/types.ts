@@ -1,18 +1,4 @@
-// ===== Nav & UI Config =====
-export type NavItem = {
-  id: string;
-  label: string;
-  href: string;
-  external?: boolean;
-  primary?: boolean;
-};
-
-export type NavConfig = {
-  chat_url: string;
-  admin_url: string;
-  items: NavItem[];
-};
-
+// ===== UI Config =====
 export type UiConfig = {
   app_title?: string;
   app_tagline?: string;

@@ -16,7 +16,7 @@ AUTH_PUBLIC_PREFIXES = (
     "/auth/login",
     "/favicon.ico",
 )
-AUTH_PUBLIC_EXACT = {"/", "/openapi.json", "/docs", "/redoc"}
+AUTH_PUBLIC_EXACT = {"/", "/openapi.json", "/docs", "/redoc", "/config/nav", "/config/public"}
 
 
 def _bearer_token(request: Request) -> str:

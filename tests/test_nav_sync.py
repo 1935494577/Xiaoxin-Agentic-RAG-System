@@ -1,4 +1,4 @@
-"""Ensure admin nav registry matches React SPA sidebar."""
+"""Ensure backend nav registry matches React SPA sidebar (departmentAccess.ts)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "enterprise_rag" / "src"
-SIDEBAR_TS = ROOT / "frontend" / "src" / "components" / "layout" / "Sidebar.tsx"
+DEPT_ACCESS_TS = ROOT / "frontend" / "src" / "lib" / "departmentAccess.ts"
 
 
 def _load_nav_config():
@@ -26,10 +26,17 @@ def _load_nav_config():
     return mod
 
 
-def _parse_sidebar_nav_ids(text: str) -> list[str]:
-    block = re.search(r"const NAV_ITEMS = \[(.*?)\];", text, re.S)
-    assert block, "NAV_ITEMS not found in Sidebar.tsx"
+def _parse_spa_nav_ids(text: str) -> list[str]:
+    block = re.search(r"export const ALL_NAV_ITEMS.*?=\s*\[(.*?)\];", text, re.S)
+    assert block, "ALL_NAV_ITEMS not found in departmentAccess.ts"
     return re.findall(r'id:\s*"([^"]+)"', block.group(1))
+
+
+def _parse_spa_nav_labels(text: str) -> dict[str, str]:
+    block = re.search(r"export const ALL_NAV_ITEMS.*?=\s*\[(.*?)\];", text, re.S)
+    assert block, "ALL_NAV_ITEMS not found in departmentAccess.ts"
+    pairs = re.findall(r'id:\s*"([^"]+)".*?label:\s*"([^"]+)"', block.group(1), re.S)
+    return dict(pairs)
 
 
 @pytest.fixture
@@ -54,11 +61,19 @@ def client(tmp_path, monkeypatch):
         yield c
 
 
-def test_spa_sidebar_ids_match_registry():
+def test_spa_nav_ids_match_registry():
     nav = _load_nav_config()
-    sidebar_text = SIDEBAR_TS.read_text(encoding="utf-8")
-    spa_ids = [i for i in _parse_sidebar_nav_ids(sidebar_text) if i != "chat"]
+    spa_text = DEPT_ACCESS_TS.read_text(encoding="utf-8")
+    spa_ids = [i for i in _parse_spa_nav_ids(spa_text) if i != "chat"]
     assert spa_ids == [p["id"] for p in nav.ADMIN_PAGES]
+
+
+def test_spa_nav_labels_match_registry():
+    nav = _load_nav_config()
+    spa_text = DEPT_ACCESS_TS.read_text(encoding="utf-8")
+    labels = _parse_spa_nav_labels(spa_text)
+    for page in nav.ADMIN_PAGES:
+        assert labels.get(page["id"]) == page["label"], page["id"]
 
 
 def test_nav_api_items_match_registry():
@@ -67,6 +82,7 @@ def test_nav_api_items_match_registry():
     admin_items = [i for i in cfg["items"] if i["id"] != "chat"]
     assert [i["id"] for i in admin_items] == [p["id"] for p in nav.ADMIN_PAGES]
     assert [i["label"] for i in admin_items] == [p["label"] for p in nav.ADMIN_PAGES]
+    assert cfg["admin_url"].endswith("/admin")
 
 
 def test_nav_config_endpoint(client: TestClient):

@@ -9,10 +9,12 @@ import { useAuth } from "../src/hooks/useAuth";
 
 const authLogin = vi.fn();
 const authLogout = vi.fn();
+const authMe = vi.fn();
 
 vi.mock("../src/api/client", () => ({
   authLogin: (...args: unknown[]) => authLogin(...args),
   authLogout: (...args: unknown[]) => authLogout(...args),
+  authMe: (...args: unknown[]) => authMe(...args),
 }));
 
 const localStorageMock = (() => {
@@ -43,6 +45,7 @@ describe("useAuth", () => {
     localStorageMock.clear();
     vi.clearAllMocks();
     authLogout.mockResolvedValue(undefined);
+    authMe.mockRejectedValue(new Error("offline"));
   });
 
   it("starts unauthenticated with empty userId", () => {
@@ -70,6 +73,35 @@ describe("useAuth", () => {
     expect(result.current.isAuthenticated).toBe(true);
     expect(result.current.userId).toBe("u_tech1");
     expect(result.current.username).toBe("tech1");
+    expect(result.current.displayName).toBe("tech1");
+  });
+
+  it("hydrates displayName from authMe for legacy sessions", async () => {
+    localStorageMock.getItem.mockImplementation((key: string) => {
+      if (key === "jnao_auth_session") {
+        return JSON.stringify({
+          username: "tech1",
+          department: "技术部",
+          role: "superadmin",
+          token: "tok_abc",
+          userId: "u_tech1",
+          loggedInAt: 1,
+        });
+      }
+      return null;
+    });
+    authMe.mockResolvedValue({
+      id: "u_tech1",
+      username: "tech1",
+      department: "技术部",
+      display_name: "Elysa",
+    });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.displayName).toBe("Elysa");
+    });
   });
 
   it("login stores session from API response", async () => {
@@ -88,9 +120,10 @@ describe("useAuth", () => {
     expect(result.current.username).toBe("ops1");
     expect(result.current.department).toBe("运营部");
     expect(result.current.userId).toBe("u_ops1");
+    expect(result.current.displayName).toBe("ops1");
     expect(localStorageMock.setItem).toHaveBeenCalledWith(
       "jnao_auth_session",
-      expect.stringContaining('"token":"tok_new"')
+      expect.stringContaining('"displayName":"ops1"')
     );
   });
 
@@ -133,6 +166,7 @@ describe("useAuth", () => {
 
     expect(result.current.b.isAuthenticated).toBe(true);
     expect(result.current.b.username).toBe("carol");
+    expect(result.current.b.displayName).toBe("carol");
 
     await act(async () => {
       await result.current.b.logout();

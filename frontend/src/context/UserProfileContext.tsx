@@ -27,7 +27,8 @@ type Ctx = {
 const UserProfileContext = createContext<Ctx | null>(null);
 
 export function UserProfileProvider({ children }: { children: ReactNode }) {
-  const { userId, isAuthenticated, department: authDepartment } = useAuth();
+  const { userId, isAuthenticated, department: authDepartment, displayName: authDisplayName } =
+    useAuth();
   const queryClient = useQueryClient();
   const [syncedAuthDept, setSyncedAuthDept] = useState(false);
 
@@ -82,13 +83,13 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       profile: profile ?? null,
       loading: isLoading,
       department: effectiveDepartment,
-      displayName: profile?.display_name ?? "",
+      displayName: (profile?.display_name || authDisplayName || "").trim(),
       avatarUrl: profile?.avatar_url ?? "",
       aiDisplayName: profile?.ai_display_name ?? "",
       aiAvatarUrl: profile?.ai_avatar_url ?? "",
       saveProfile,
     }),
-    [profile, isLoading, effectiveDepartment, saveProfile]
+    [profile, isLoading, effectiveDepartment, saveProfile, authDisplayName]
   );
 
   return <UserProfileContext.Provider value={value}>{children}</UserProfileContext.Provider>;

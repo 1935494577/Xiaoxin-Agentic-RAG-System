@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     chat_sessions_db_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "chat_sessions.db"
     auth_db_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "auth.db"
     platform_config_db_path: Path = _REPO_ROOT / "enterprise_rag" / "data" / "platform_config.db"
+    platform_config_writer_username: str = "tech1"
     auth_bootstrap_credentials_path: Path = (
         _REPO_ROOT / "enterprise_rag" / "data" / "config" / "auth_bootstrap_credentials.txt"
     )

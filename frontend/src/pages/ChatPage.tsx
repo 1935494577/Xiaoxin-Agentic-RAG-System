@@ -54,7 +54,6 @@ export default function ChatPage() {
 
   const abortRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const initDone = useRef(false);
 
   const [input, setInput] = useState("");
   const [newTopicPending, setNewTopicPending] = useState(false);
@@ -68,8 +67,9 @@ export default function ChatPage() {
   const [hybridOverride, setHybridOverride] = useState<boolean | null>(null);
 
   const { data: uiConfig } = useQuery({
-    queryKey: ["uiConfig"],
+    queryKey: ["uiConfig", userId],
     queryFn: fetchUiConfig,
+    enabled: Boolean(userId),
     staleTime: 300_000,
   });
 
@@ -87,18 +87,18 @@ export default function ChatPage() {
     }
   }, [userId]);
 
-  // ---- init: load sessions + uiConfig (matches old App.tsx timing) ----
+  // Load sessions once auth userId is ready (fixes empty list after LAN login).
   useEffect(() => {
-    if (initDone.current) return;
-
+    if (!userId) return;
+    let cancelled = false;
     refreshSessions().then((rows) => {
-      if (rows && rows.length && !sessionId) {
-        setSessionId(rows[0].id);
-      }
-      initDone.current = true;
+      if (cancelled || !rows?.length) return;
+      setSessionId((current) => current || rows[0].id);
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, refreshSessions]);
 
   useEffect(() => {
     setHybridOverride(null);

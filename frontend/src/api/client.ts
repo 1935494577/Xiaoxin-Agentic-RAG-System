@@ -10,7 +10,6 @@ import type {
   IngestedSource,
   ModelProfile,
   ModelProfilesData,
-  NavConfig,
   ProcessingToolsData,
   ProcessingToolsSave,
   AgentToolsData,
@@ -58,13 +57,29 @@ function readAuthHeaders(): Record<string, string> {
 }
 
 // ===== Base fetch wrapper =====
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(
+  path: string,
+  init?: RequestInit & { timeoutMs?: number }
+): Promise<T> {
+  const { timeoutMs = 60_000, ...fetchInit } = init ?? {};
   const authHeaders = readAuthHeaders();
-  const headers = new Headers(init?.headers);
+  const headers = new Headers(fetchInit.headers);
   for (const [key, value] of Object.entries(authHeaders)) {
     if (!headers.has(key)) headers.set(key, value);
   }
-  const r = await fetch(path, { ...init, headers });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let r: Response;
+  try {
+    r = await fetch(path, { ...fetchInit, headers, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error("请求超时，请确认后端 API 已启动（8010 端口）");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
   if (r.status === 401) {
     localStorage.removeItem(AUTH_SESSION_KEY);
     sessionStorage.removeItem(AUTH_SESSION_KEY);
@@ -91,11 +106,16 @@ export function authLogin(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password, remember }),
+    timeoutMs: 30_000,
   });
 }
 
 export function authLogout(): Promise<{ ok: boolean }> {
   return request<{ ok: boolean }>("/auth/logout", { method: "POST" });
+}
+
+export function authMe(): Promise<LoginResponse["user"]> {
+  return request<LoginResponse["user"]>("/auth/me");
 }
 
 export function authChangePassword(
@@ -167,14 +187,6 @@ export function fetchScenarioCatalog(options?: {
   if (options?.includeTech === false) q.set("include_tech", "false");
   const suffix = q.toString() ? `?${q}` : "";
   return request<ScenarioCatalogResponse>(`/config/scenario-catalog${suffix}`);
-}
-
-export function fetchNav(): Promise<NavConfig> {
-  return request<NavConfig>("/config/nav").catch(() => ({
-    chat_url: window.location.origin,
-    admin_url: window.location.origin,
-    items: [],
-  }));
 }
 
 // ===== User profile =====

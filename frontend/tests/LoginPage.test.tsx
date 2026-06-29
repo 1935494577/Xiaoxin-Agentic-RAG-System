@@ -5,15 +5,18 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
 import LoginPage from "../src/pages/LoginPage";
 import { AuthProvider } from "../src/context/AuthContext";
 
 const authLogin = vi.fn();
+const authMe = vi.fn();
 
 vi.mock("../src/api/client", () => ({
   authLogin: (...args: unknown[]) => authLogin(...args),
   authLogout: vi.fn(),
+  authMe: (...args: unknown[]) => authMe(...args),
   mergeLegacyUserProfile: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -45,16 +48,19 @@ Object.defineProperty(window, "localStorage", { value: localStorageMock });
 Object.defineProperty(window, "sessionStorage", { value: localStorageMock });
 
 function renderLogin(initial = "/login") {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <AuthProvider>
-      <MemoryRouter initialEntries={[initial]}>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/admin/ingest" element={<div>Admin Ingest</div>} />
-          <Route path="/" element={<div>Chat Home</div>} />
-        </Routes>
-      </MemoryRouter>
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <MemoryRouter initialEntries={[initial]}>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/admin/ingest" element={<div>Admin Ingest</div>} />
+            <Route path="/" element={<div>Chat Home</div>} />
+          </Routes>
+        </MemoryRouter>
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }
 
@@ -62,6 +68,7 @@ describe("LoginPage", () => {
   beforeEach(() => {
     localStorageMock.clear();
     vi.clearAllMocks();
+    authMe.mockRejectedValue(new Error("offline"));
     authLogin.mockResolvedValue({
       token: "tok",
       user: {

@@ -290,3 +290,14 @@ def merge_legacy_user(legacy_user_id: str, target_user_id: str) -> dict[str, Any
         except Exception:
             pass
     return result
+
+
+def apply_auth_to_profile(row: dict[str, Any], auth: dict[str, Any] | None) -> dict[str, Any]:
+    """Apply account-bound fields; sync empty profile display_name from auth user."""
+    if not auth:
+        return row
+    dept = auth.get("department") or row["department"]
+    auth_name = (auth.get("display_name") or "").strip()
+    if auth_name and not (row.get("display_name") or "").strip():
+        return upsert_profile(row["user_id"], display_name=auth_name, department=dept)
+    return {**row, "department": dept}

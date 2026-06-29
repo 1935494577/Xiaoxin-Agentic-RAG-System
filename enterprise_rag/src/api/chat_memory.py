@@ -7,14 +7,11 @@ from typing import Any
 from api.ui_config_store import resolve_effective_reasoning_mode
 
 
-def chat_memory_settings(
-    user_id: str | None = None,
-    is_platform_admin: bool = False,
-) -> dict[str, Any]:
+def chat_memory_settings(user_id: str | None = None) -> dict[str, Any]:
     from account_config.store import effective_prompt_slots_list, effective_ui_config
 
-    ui = effective_ui_config(user_id, is_platform_admin)
-    prompt_slots = effective_prompt_slots_list(user_id, is_platform_admin)
+    ui = effective_ui_config(user_id)
+    prompt_slots = effective_prompt_slots_list(user_id)
     return {
         "max_history_turns": int(ui.get("max_history_turns") or 6),
         "max_history_chars": int(ui.get("max_history_chars") or 6000),

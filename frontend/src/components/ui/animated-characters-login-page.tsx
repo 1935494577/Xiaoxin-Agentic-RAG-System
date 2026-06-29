@@ -561,7 +561,3 @@ export function AnimatedCharacterMascots({
     </div>
   );
 }
-
-/** @deprecated use AnimatedCharacterMascots */
-export const AnimatedLetterMascots = AnimatedCharacterMascots;
-export type AnimatedLetterMascotsProps = AnimatedCharacterMascotsProps;

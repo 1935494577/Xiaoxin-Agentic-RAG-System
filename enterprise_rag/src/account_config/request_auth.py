@@ -5,13 +5,21 @@ from __future__ import annotations
 from starlette.requests import Request
 
 from auth.middleware import get_auth_user
-from security.department_features import FULL_ACCESS_DEPARTMENT
+from config import settings
+
+
+def can_write_platform_config(auth: dict | None) -> bool:
+    """Only the designated platform writer (default tech1) may persist global config files."""
+    if not auth:
+        return False
+    writer = (settings.platform_config_writer_username or "tech1").strip()
+    return str(auth.get("username") or "").strip() == writer
 
 
 def resolve_config_actor(request: Request) -> tuple[str | None, bool]:
-    """Return (user_id, is_platform_admin). Anonymous callers get (None, False)."""
+    """Return (user_id, can_write_platform). Anonymous callers get (None, False)."""
     auth = get_auth_user(request)
     if not auth:
         return None, False
-    is_admin = str(auth.get("department") or "") == FULL_ACCESS_DEPARTMENT
-    return str(auth.get("id") or "").strip() or None, is_admin
+    user_id = str(auth.get("id") or "").strip() or None
+    return user_id, can_write_platform_config(auth)

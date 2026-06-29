@@ -183,40 +183,33 @@ def effective_json_config(
     baseline_loader: Callable[[], dict[str, Any]],
     *,
     user_id: str | None,
-    is_platform_admin: bool,
 ) -> dict[str, Any]:
     version = get_platform_version(scope)
-    key = _cache_key(scope, user_id if not is_platform_admin else None, version)
+    key = _cache_key(scope, user_id or "_anon_", version)
     now = time.monotonic()
     cached = _CACHE.get(key)
     if cached and now - cached[0] < _CACHE_TTL_SECONDS:
         return deepcopy(cached[1])
 
     baseline = baseline_loader()
-    if is_platform_admin or not user_id:
-        result = baseline
-    else:
+    if user_id:
         override = get_user_override(user_id, scope)
         result = deep_merge(baseline, override) if override else baseline
+    else:
+        result = baseline
 
     _CACHE[key] = (now, deepcopy(result))
     return result
 
 
-def effective_ui_config(user_id: str | None, is_platform_admin: bool) -> dict[str, Any]:
+def effective_ui_config(user_id: str | None) -> dict[str, Any]:
     from api.ui_config_store import public_ui_config
 
-    return effective_json_config(
-        "ui",
-        public_ui_config,
-        user_id=user_id,
-        is_platform_admin=is_platform_admin,
-    )
+    return effective_json_config("ui", public_ui_config, user_id=user_id)
 
 
 def effective_prompt_bundle(
     user_id: str | None,
-    is_platform_admin: bool,
     *,
     mode: str = "kb",
     fast: bool = False,
@@ -225,13 +218,8 @@ def effective_prompt_bundle(
     from api.prompt_config_store import _merge_builtin_defaults, load_prompt_slots, public_prompt_config
 
     scope = f"prompts:{mode}:{'fast' if fast else 'std'}"
-    base = effective_json_config(
-        scope,
-        lambda: public_prompt_config(mode=mode, fast=fast),
-        user_id=user_id,
-        is_platform_admin=is_platform_admin,
-    )
-    override = None if is_platform_admin or not user_id else get_user_override(user_id, scope)
+    base = public_prompt_config(mode=mode, fast=fast)
+    override = get_user_override(user_id, scope) if user_id else None
     if not override:
         return base
 
@@ -256,10 +244,10 @@ def effective_prompt_bundle(
     return out
 
 
-def effective_prompt_slots_list(user_id: str | None, is_platform_admin: bool) -> list[dict[str, Any]]:
+def effective_prompt_slots_list(user_id: str | None) -> list[dict[str, Any]]:
     from api.prompt_config_store import _merge_builtin_defaults, load_prompt_slots
 
-    if is_platform_admin or not user_id:
+    if not user_id:
         return load_prompt_slots()
     override = get_user_override(user_id, "prompts:kb:std") or {}
     if override.get("slots"):
@@ -267,25 +255,23 @@ def effective_prompt_slots_list(user_id: str | None, is_platform_admin: bool) ->
     return load_prompt_slots()
 
 
-def effective_processing_tools(user_id: str | None, is_platform_admin: bool) -> dict[str, Any]:
+def effective_processing_tools(user_id: str | None) -> dict[str, Any]:
     from document_loader.processing.registry import load_config, public_config
 
     return effective_json_config(
         "processing_tools",
         lambda: public_config(load_config()),
         user_id=user_id,
-        is_platform_admin=is_platform_admin,
     )
 
 
-def effective_agent_tools(user_id: str | None, is_platform_admin: bool) -> dict[str, Any]:
+def effective_agent_tools(user_id: str | None) -> dict[str, Any]:
     from agent.tools.config.registry import load_tools_config, public_tools_config
 
     return effective_json_config(
         "agent_tools",
         lambda: public_tools_config(load_tools_config()),
         user_id=user_id,
-        is_platform_admin=is_platform_admin,
     )
 
 
