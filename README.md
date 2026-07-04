@@ -19,7 +19,7 @@
 | **租户预留（Sprint E）** | `X-Tenant-ID` 中间件（默认 `internal`）；`/api/v1/*` 路由别名；`FeedbackStore` / `TraceStore` 抽象 |
 | **前端** | **Jnao Chat** React SPA（8502）：流式对话；**助手模式切换**（知识/任务/自动）；**执行步骤时间线**；**语音输入**；**Chat 内交互关系图**（ECharts）；**SQLite 登录**与**用户资料**；**新话题**；**部门功能门控**；**React 管理后台**（`/admin`）：侧边栏分组（日常运营 / 质量闭环 / 系统配置）、各页「怎么用」指南、**结构化链路详情**（反馈 Trace）；入库、工具、提示词、模型、对话设置（含默认助手模式与场景预设）、评测报告等 |
 | **用户反馈（Sprint A–D）** | 👍👎 反馈 → Triage → 采纳 → **Actuator**（golden / 重入库工单 / 配置补丁 / **query alias**）→ **alias 候选排序**（`GET /admin/feedback/alias-proposals`）→ **golden 评测**（RAGAS 或 naive 回退，对比上一份 Δ）；`config_revisions` 可回滚；Admin **评测报告**页；Feedback 故障时 **Chat 热路径不受影响** |
-| **规划中（Sprint G）** | **严格按 DeerFlow**（`D:\bytedance flow\deer-flow`）：harness + `make_lead_agent`、skills、TokenUsage、app/channels；RAG 作 community 工具；详见 [`docs/deerflow-integration.md`](docs/deerflow-integration.md) |
+| **规划中（Sprint G / DF-0）** | DeerFlow harness：`config.yaml`、`tests/test_deerflow_df0_config.py`；独立 venv `scripts/bootstrap-deerflow-venv.ps1`；详见 [`docs/deerflow-integration.md`](docs/deerflow-integration.md) |
 | **评测与追踪** | 可选 LangSmith / 本地 JSONL trace；`scripts/eval_ingest_dedup.py` 检索去重 A/B；`scripts/eval_query_robustness.py`（分 scenario 汇总）/ `scripts/query_verify.ps1`；`docs/query-understanding.md` |
 | **容器与脚本** | `Dockerfile`、`docker-compose.yml`、`Makefile`；Windows `.ps1` 与 **macOS/Linux `.sh`** 一键启停；**生产启动** `run-api-prod.ps1` / `run-api-prod.sh`；**缓存清理** `clean-cache.ps1` |
 

@@ -1,0 +1,43 @@
+# Jnao × DeerFlow — minimal config (schema aligned with deer-flow/config.example.yaml)
+# Copy from deer-flow when upgrading: bump config_version and run merge manually.
+
+config_version: 17
+
+log_level: info
+
+token_usage:
+  enabled: true
+
+token_budget:
+  enabled: false
+
+max_recursion_limit: 1000
+
+models:
+  - name: jnao-default
+    display_name: Jnao Default
+    use: langchain_openai:ChatOpenAI
+    model: $OPENAI_CHAT_MODEL
+    api_base: $OPENAI_API_BASE
+    api_key: $OPENAI_API_KEY
+    max_tokens: 4096
+
+tool_groups:
+  - name: web
+  - name: rag
+
+tools:
+  - name: web_search
+    group: web
+    use: deerflow.community.tavily.tools:web_search_tool
+    max_results: 5
+
+  - name: kb_search
+    group: rag
+    use: deerflow_community.kb_search:kb_search_tool
+
+subagents:
+  enabled: false
+
+sandbox:
+  provider: local

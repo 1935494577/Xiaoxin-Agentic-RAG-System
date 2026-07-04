@@ -93,7 +93,7 @@ enterprise_rag/src/deerflow_community/
 tools:
   - name: kb_search
     group: rag
-    use: enterprise_rag.deerflow_community.kb_search:kb_search_tool
+    use: deerflow_community.kb_search:kb_search_tool
   - name: web_search
     group: web
     use: deerflow.community.tavily.tools:web_search_tool   # 与 DeerFlow 一致，Tavily 走 community

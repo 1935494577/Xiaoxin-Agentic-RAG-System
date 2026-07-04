@@ -1,0 +1,11 @@
+# DeerFlow harness — install into a dedicated venv (LangChain 1.x / LangGraph 1.x).
+# The main RAG venv stays on LangChain 0.2 until a coordinated upgrade.
+#
+#   python -m venv .venv-deerflow
+#   .venv-deerflow\Scripts\pip install -r requirements-deerflow.txt
+#
+# Harness path (Windows default checkout):
+#   DEER_FLOW_HARNESS_PATH=D:\bytedance flow\deer-flow\backend\packages\harness
+
+-e "D:/bytedance flow/deer-flow/backend/packages/harness"
+pyyaml>=6.0.3

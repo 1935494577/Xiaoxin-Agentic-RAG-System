@@ -1,6 +1,8 @@
 .env
 # 密钥只放在 .env（已被忽略）；勿在本文件写入 sk- 等明文，否则仍会进 Git 历史。
 .venv/
+.venv-deerflow/
+.deer-flow/
 venv/
 __pycache__/
 *.pyc

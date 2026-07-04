@@ -1,6 +1,16 @@
 # Changelog
 
-## 2026-06-16 — DeerFlow 严格对齐规范
+## 2026-06-16 — DF-0 DeerFlow config + harness tests (TDD)
+
+### Added
+
+- **`config.yaml`** / **`extensions_config.json`** / **`skills/`** — DeerFlow 根配置（`config_version: 17`，Tavily web_search，kb_search）
+- **`enterprise_rag/src/jnao_deerflow/`** — harness 路径解析
+- **`enterprise_rag/src/deerflow_community/kb_search.py`** — LangChain 工具入口（config `use:`）
+- **`tests/test_deerflow_df0_config.py`** — 真实参数测试（9 项 + 2 项 `@pytest.mark.deerflow`）
+- **`requirements-deerflow.txt`** + **`scripts/bootstrap-deerflow-venv.ps1`** — 独立 venv 安装 harness
+
+---
 
 ### 文档
 
