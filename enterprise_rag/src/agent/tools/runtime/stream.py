@@ -60,9 +60,7 @@ def stream_general_answer(
             user_department=state.get("user_department"),
             max_hops=3,
         )
-        system = (
-            f"{system}\n\n{AGENT_TOOLS_REALTIME_POLICY}\n\n{format_beijing_time_anchor()}"
-        )
+        system = f"{system}\n\n{AGENT_TOOLS_REALTIME_POLICY}"
         enabled = enabled | {"show_relationship_graph"}
     system = augment_system_with_summary(system, state.get("rolling_summary"))
     schema_extra = output_schema_instruction(str(state.get("output_schema_id") or ""))

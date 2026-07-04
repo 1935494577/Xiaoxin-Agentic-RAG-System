@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from agent.prompt_engine import KB_TASK_STRICT, KB_TASK_STRICT_FAST, compose_system_prompt
 from agent.reasoning_modes import reasoning_policy
+
+_BJ = timezone(timedelta(hours=8))
+_WEEKDAYS = ("星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日")
 
 GENERAL_WORLD_USER_HINT = (
     "（本题请用通用常识作答：若属于公众熟知的人物/概念/事实，请直接介绍，"
@@ -36,6 +40,33 @@ def _resolve_slots(slots: list[dict[str, Any]] | None, persona: str | None) -> l
     return load_prompt_slots()
 
 
+def _format_time_anchor_local() -> str:
+    now = datetime.now(_BJ)
+    weekday = _WEEKDAYS[now.weekday()]
+    hour = now.hour
+    if hour < 6:
+        period = "凌晨"
+    elif hour < 12:
+        period = "上午"
+    elif hour < 18:
+        period = "下午"
+    else:
+        period = "晚上"
+    return (
+        f"【时间基准】北京时间：{now.strftime('%Y年%m月%d日')} {weekday} "
+        f"{period} {now.strftime('%H:%M')}（向用户汇报日期与时刻必须与此一致；"
+        f"涉及年份、趋势、时事时请以此为准，勿假设仍在训练数据截止年之前）"
+    )
+
+
+def _with_time_anchor(text: str) -> str:
+    """Inject server clock so the model does not assume a stale training-era year."""
+    anchor = _format_time_anchor_local()
+    if anchor in text:
+        return text
+    return f"{text}\n\n{anchor}"
+
+
 def kb_system_prompt(
     *,
     fast: bool = False,
@@ -53,7 +84,8 @@ def kb_system_prompt(
                 slot["content"] = strict_text
     text = compose_system_prompt(resolved, mode="kb", fast=fast)
     policy = reasoning_policy(reasoning_mode)
-    return f"{text}\n\n{policy}" if policy else text
+    merged = f"{text}\n\n{policy}" if policy else text
+    return _with_time_anchor(merged)
 
 
 def general_system_prompt(
@@ -65,7 +97,8 @@ def general_system_prompt(
     resolved = _resolve_slots(slots, persona)
     text = compose_system_prompt(resolved, mode="general", fast=False)
     policy = reasoning_policy(reasoning_mode)
-    return f"{text}\n\n{policy}" if policy else text
+    merged = f"{text}\n\n{policy}" if policy else text
+    return _with_time_anchor(merged)
 
 
 def kb_user_content(contexts: list[str], question: str) -> str:

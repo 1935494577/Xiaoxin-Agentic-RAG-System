@@ -10,7 +10,19 @@ from retrieval.query_normalize import clean_oral_user_message
 _REALTIME_RE = re.compile(
     r"今天|今日|现在|当前|此刻|几点|几月|几号|日期|星期|礼拜|周几|"
     r"北京时间|什么时间|什么时候|哪年|哪一年|哪一月|哪个月|哪天|"
+    r"今年|去年|本年|近期|近来|"
     r"实时|最新|新闻|放假|节假日|调休|天气怎么样|天气如何",
+    re.IGNORECASE,
+)
+_WEB_SEARCH_RE = re.compile(
+    r"20\d{2}年.*?(?:AI|人工智能|大模型|机器学习|科技|互联网|芯片|半导体)"
+    r".*?(?:发展|趋势|动态|热点|进展|突破|回顾|展望|预测|总结|现状|状况)|"
+    r"(?:AI|人工智能|大模型|机器学习|科技|互联网|芯片|半导体)"
+    r".*?(?:发展|趋势|动态|热点|进展|突破|回顾|展望|预测|现状|状况)|"
+    r"(?:发展|趋势|动态|热点|进展|突破|回顾|展望|预测)"
+    r".*?(?:AI|人工智能|大模型|机器学习|科技|互联网|芯片|半导体)|"
+    r"行业(?:动态|趋势|格局)|市场(?:动态|格局|份额)|"
+    r"(?:最新|近期|当前|最近)(?:进展|突破|发布|动态|热点)",
     re.IGNORECASE,
 )
 _WEATHER_RE = re.compile(
@@ -115,6 +127,8 @@ def question_needs_realtime_tools(question: str) -> bool:
     if not q or is_relationship_graph_question(q):
         return False
     if _WEATHER_RE.search(q):
+        return True
+    if _WEB_SEARCH_RE.search(q):
         return True
     return bool(_REALTIME_RE.search(q))
 

@@ -28,6 +28,12 @@ import type {
   ToolTraceItem,
 } from "../api/types";
 import { applyToolStreamEvent } from "../lib/streamTools";
+import {
+  applyExecutionStreamEvent,
+  buildExecutionSummary,
+  finalizeExecutionSteps,
+  type ExecutionStep,
+} from "../lib/executionTimeline";
 import { downloadMarkdown, messagesToMarkdown } from "../lib/exportChatMarkdown";
 import { toast } from "sonner";
 import { PanelLeftClose, PanelLeftOpen, Sparkles } from "lucide-react";
@@ -56,6 +62,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState("");
+  const [streamExecutionSteps, setStreamExecutionSteps] = useState<ExecutionStep[]>([]);
   const [streamGraphViz, setStreamGraphViz] = useState<GraphViz | null>(null);
   const [error, setError] = useState("");
 
@@ -191,12 +198,14 @@ export default function ChatPage() {
 
     setStreaming(true);
     setStreamText("");
+    setStreamExecutionSteps([]);
     setStreamGraphViz(null);
 
     let assistant = "";
     let streamError = "";
     let meta: ChatMessage["meta"] = {};
     let toolTrace: ToolTraceItem[] = [];
+    let executionSteps: ExecutionStep[] = [];
     let graphViz: GraphViz | undefined;
     let clarifyEvt: Extract<StreamEvent, { type: "clarify" }> | null = null;
     let needsClarify = false;
@@ -228,6 +237,11 @@ export default function ChatPage() {
             clarifyEvt = evt;
           } else if (evt.type === "tool_call" || evt.type === "tool_result") {
             toolTrace = applyToolStreamEvent(toolTrace, evt);
+            executionSteps = applyExecutionStreamEvent(executionSteps, evt);
+            setStreamExecutionSteps([...executionSteps]);
+          } else if (evt.type === "status" || evt.type === "done") {
+            executionSteps = applyExecutionStreamEvent(executionSteps, evt);
+            setStreamExecutionSteps([...executionSteps]);
           } else if (evt.type === "graph_viz") {
             graphViz = evt.graph;
             setStreamGraphViz(evt.graph);
@@ -246,6 +260,12 @@ export default function ChatPage() {
               trace_id: evt.trace_id,
               tool_trace: evt.tool_trace?.length ? evt.tool_trace : toolTrace,
               graph_viz: evt.graph_viz ?? graphViz,
+              assistant_mode: evt.assistant_mode ?? assistantMode,
+              execution_summary: buildExecutionSummary(finalizeExecutionSteps(executionSteps), {
+                answer_mode: evt.answer_mode,
+                rag_architecture: evt.rag_architecture,
+                assistant_mode: evt.assistant_mode ?? assistantMode,
+              }),
             };
           }
         },
@@ -259,6 +279,7 @@ export default function ChatPage() {
     } finally {
       setStreaming(false);
       setStreamText("");
+      setStreamExecutionSteps([]);
       setStreamGraphViz(null);
       abortRef.current = null;
       setNewTopicPending(false);

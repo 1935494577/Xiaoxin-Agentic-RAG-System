@@ -116,6 +116,29 @@ export type LoginResponse = {
   user: AuthUserPublic;
 };
 
+export type ExecutionSummary = {
+  steps: number;
+  tools_used: string[];
+  rag_architecture?: string;
+  answer_mode?: string;
+  assistant_mode?: string;
+};
+
+export type ExecutionStepKind = "status" | "tool";
+
+export type ExecutionStep = {
+  id: string;
+  kind: ExecutionStepKind;
+  label: string;
+  detail?: string;
+  pending?: boolean;
+  ok?: boolean;
+  tool?: string;
+  output?: string;
+  arguments?: Record<string, unknown>;
+  phase?: string;
+};
+
 export type ChatMessage = {
   id?: string;
   role: "user" | "assistant";
@@ -129,6 +152,8 @@ export type ChatMessage = {
     tool_trace?: ToolTraceItem[];
     graph_viz?: GraphViz;
     rag_architecture?: string;
+    assistant_mode?: string;
+    execution_summary?: ExecutionSummary;
   };
 };
 
