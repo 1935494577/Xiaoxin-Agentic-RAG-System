@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "default_prompt": "你的问题可以往几个方向展开，选一个更接近的：",
+  "options": [
+    {
+      "id": "course_kb",
+      "label": "查课程 / 制度原文",
+      "hint": "请根据知识库原文回答，并标注引用来源。",
+      "output_schema_id": null,
+      "channels": ["wecom", "wechat", "miniprogram", "channels", "douyin", "all"]
+    },
+    {
+      "id": "selling_points",
+      "label": "提炼卖点（提分 / 脑力训练）",
+      "hint": "针对指定课程或训练产品，从知识库提炼面向家长的卖点清单，突出提分与脑力训练差异，勿编造。",
+      "output_schema_id": "selling_points",
+      "channels": ["wecom", "wechat", "miniprogram", "channels", "douyin", "all"]
+    },
+    {
+      "id": "parent_dm",
+      "label": "企业微信 / 私聊话术",
+      "hint": "生成适合企业微信或微信私聊的家长沟通话术：先共情再价值点再行动号召，语气专业可信，基于知识库事实。",
+      "output_schema_id": "parent_dm_script",
+      "channels": ["wecom", "wechat", "all"]
+    },
+    {
+      "id": "short_video",
+      "label": "短视频 / 视频号 / 抖音脚本",
+      "hint": "生成 30–60 秒短视频口播结构：钩子、3 个要点、行动号召；基于知识库，口语化，适合视频号或抖音。",
+      "output_schema_id": "short_video_script",
+      "channels": ["channels", "douyin", "all"]
+    },
+    {
+      "id": "compare_materials",
+      "label": "对比两份材料 / 课程",
+      "hint": "对比知识库中两个主题或课程的差异与适用场景，用表格化结构输出。",
+      "output_schema_id": "compare_table",
+      "channels": ["all"]
+    },
+    {
+      "id": "faq",
+      "label": "家长常见问题 FAQ",
+      "hint": "围绕指定主题，从知识库整理家长常问的 5–8 个问答，答案简洁可转发。",
+      "output_schema_id": "faq_bullets",
+      "channels": ["wecom", "wechat", "miniprogram", "all"]
+    }
+  ]
+}

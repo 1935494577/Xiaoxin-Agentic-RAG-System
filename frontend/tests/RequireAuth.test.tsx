@@ -67,6 +67,8 @@ describe("RequireAuth", () => {
           username: "alice",
           department: "技术部",
           role: "admin",
+          token: "tok_test",
+          userId: "u_alice",
           loggedInAt: Date.now(),
         });
       }

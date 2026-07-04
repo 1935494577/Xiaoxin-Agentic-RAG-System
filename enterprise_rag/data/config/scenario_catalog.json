@@ -1,0 +1,231 @@
+{
+  "version": 1,
+  "title": "新媒体卖课 · 业务场景与功能目录",
+  "departments": {
+    "技术部": {
+      "label": "技术部",
+      "summary": "系统开发、配置、评测与 API 集成；可见全部 Admin 与技术指标。",
+      "admin_features": ["all"],
+      "default_scene_preset": "internal_full",
+      "chat_channels": ["wecom", "wechat", "miniprogram", "channels", "douyin"]
+    },
+    "运营部": {
+      "label": "运营部",
+      "summary": "企业微信 / 微信私域卖课：话术、FAQ、卖点；负责课程资料入库。",
+      "admin_features": ["chat", "ingest", "prompts", "models", "scenarios", "tutorial"],
+      "default_scene_preset": "analyst",
+      "chat_channels": ["wecom", "wechat", "miniprogram"],
+      "chat_note": "登录为运营部后，Chat 已自动启用「新媒体 / 内容分析」能力（引导选项、结构化话术），无需进入「对话设置」。"
+    },
+    "媒体部": {
+      "label": "媒体部",
+      "summary": "视频号 / 抖音内容策划：卖点、口播结构、选题；配合入库宣传材料。",
+      "admin_features": ["chat", "ingest", "prompts", "models", "scenarios", "tutorial"],
+      "default_scene_preset": "analyst",
+      "chat_channels": ["channels", "douyin"],
+      "chat_note": "登录为媒体部后，Chat 已自动启用内容分析能力，可直接在 Jnao Chat 生成脚本与卖点。"
+    },
+    "剪辑部": {
+      "label": "剪辑部",
+      "summary": "短视频制作：口播脚本、要点清单；从知识库提取可拍素材。",
+      "admin_features": ["chat", "ingest", "prompts", "models", "scenarios", "tutorial"],
+      "default_scene_preset": "analyst",
+      "chat_channels": ["channels", "douyin"],
+      "chat_note": "登录为剪辑部后，Chat 已自动启用口播脚本等能力，无需配置对话设置。"
+    }
+  },
+  "scenarios": [
+    {
+      "id": "wecom_parent_dm",
+      "label": "企微 / 微信私聊话术",
+      "department": ["运营部"],
+      "channel": "wecom",
+      "user_goal": "生成可逐条发送的家长私聊脚本，用于企业微信或微信一对一沟通。",
+      "steps": [
+        "打开 Jnao Chat，输入课程或训练主题（可短句，如「超脑阅读怎么聊」）",
+        "若出现引导选项，点「企业微信 / 私聊话术」；若没有引导，可直接说「请按企微私聊话术写：……」",
+        "复制生成的话术到企微，按段发送"
+      ],
+      "tech_setup": "技术部可选：在「对话设置 → 场景预设」选「新媒体 / 内容分析」作为全员默认。运营部登录后会自动启用同等能力，不依赖此步。",
+      "scene_preset": "analyst",
+      "clarify_option_id": "parent_dm",
+      "output_schema_id": "parent_dm_script",
+      "tools": ["kb_search", "list_kb_sources", "format_structured_output"],
+      "tech": {
+        "stream_api": "POST /chat/stream",
+        "params": { "channel": "wecom", "clarify_choice_id": "parent_dm" },
+        "content_kit": "GET /config/content-kit?channel=wecom",
+        "code_paths": ["agent/clarify.py", "agent/output_schemas.py", "agent/stream_chat.py"]
+      }
+    },
+    {
+      "id": "selling_points_all",
+      "label": "课程卖点提炼（提分 / 脑力训练）",
+      "department": ["运营部", "媒体部"],
+      "channel": "all",
+      "user_goal": "从已入库课程资料提炼面向家长的卖点，突出脑力训练与传统培训差异。",
+      "steps": [
+        "在「数据入库」确认相关 docx/PDF 已上传",
+        "Jnao Chat 输入主题；引导里选「提炼卖点」，或直接说「请提炼卖点：……」",
+        "核对输出是否来自资料，必要时补充入库"
+      ],
+      "scene_preset": "analyst",
+      "clarify_option_id": "selling_points",
+      "output_schema_id": "selling_points",
+      "tools": ["kb_search", "list_kb_sources", "format_structured_output"],
+      "tech": {
+        "stream_api": "POST /chat/stream",
+        "params": { "clarify_choice_id": "selling_points", "output_schema_id": "selling_points" },
+        "content_kit": "GET /config/content-kit",
+        "code_paths": ["agent/output_schemas.py", "api/scene_presets.py"]
+      }
+    },
+    {
+      "id": "short_video_script",
+      "label": "视频号 / 抖音口播脚本",
+      "department": ["媒体部", "剪辑部"],
+      "channel": "douyin",
+      "user_goal": "生成 30–60 秒短视频结构：钩子、要点、行动号召，口语化可对着镜头念。",
+      "steps": [
+        "Jnao Chat 输入视频主题（如「超脑阅读 30 秒口播」）",
+        "引导里选「短视频 / 视频号 / 抖音脚本」，或直接说明要口播结构",
+        "按生成表格分段拍摄与剪辑"
+      ],
+      "scene_preset": "analyst",
+      "clarify_option_id": "short_video",
+      "output_schema_id": "short_video_script",
+      "tools": ["kb_search", "format_structured_output"],
+      "tech": {
+        "stream_api": "POST /chat/stream",
+        "params": { "channel": "douyin", "clarify_choice_id": "short_video" },
+        "content_kit": "GET /config/content-kit?channel=douyin",
+        "code_paths": ["agent/architecture_router.py", "agent/pipelines/agentic.py"]
+      }
+    },
+    {
+      "id": "parent_faq",
+      "label": "家长 FAQ（可转发）",
+      "department": ["运营部"],
+      "channel": "wechat",
+      "user_goal": "整理 5–8 组常见问答，答案简洁，可直接转发到企微群或朋友圈素材。",
+      "steps": [
+        "在「数据入库」上传 FAQ 相关制度 / 课程说明",
+        "Jnao Chat 输入主题，引导里选「家长常见问题 FAQ」",
+        "复制 Q/A 到运营素材库或企微"
+      ],
+      "scene_preset": "analyst",
+      "clarify_option_id": "faq",
+      "output_schema_id": "faq_bullets",
+      "tools": ["kb_search", "format_structured_output"],
+      "tech": {
+        "stream_api": "POST /chat/stream",
+        "params": { "channel": "wechat", "clarify_choice_id": "faq" },
+        "code_paths": ["agent/clarify.py", "data/config/clarify_options.json"]
+      }
+    },
+    {
+      "id": "course_kb_lookup",
+      "label": "查课程 / 制度原文",
+      "department": ["运营部", "媒体部", "剪辑部", "技术部"],
+      "channel": "all",
+      "user_goal": "培训老师或运营查制度、训练要求原文，带引用来源。",
+      "steps": [
+        "对话设置选「一线 KB 问答」（查原文）或 analyst（需引导时）",
+        "Chat 直接提问，无需选引导项",
+        "查看回答下方引用来源"
+      ],
+      "scene_preset": "kb_frontline",
+      "clarify_option_id": "course_kb",
+      "output_schema_id": null,
+      "tools": ["kb_search"],
+      "tech": {
+        "stream_api": "POST /chat/stream",
+        "params": { "rag_architecture": "classic" },
+        "code_paths": ["agent/pipelines/classic.py", "retrieval/hybrid_searcher.py"]
+      }
+    },
+    {
+      "id": "compare_courses",
+      "label": "对比两份课程 / 材料",
+      "department": ["运营部", "媒体部"],
+      "channel": "all",
+      "user_goal": "并排对比两个训练产品或文档的差异与适用场景。",
+      "steps": [
+        "确保两份材料均已入库",
+        "Chat 说明要对比的两个主题，选「对比两份材料 / 课程」"
+      ],
+      "scene_preset": "analyst",
+      "clarify_option_id": "compare_materials",
+      "output_schema_id": "compare_table",
+      "tools": ["kb_search", "list_kb_sources"],
+      "tech": {
+        "stream_api": "POST /chat/stream",
+        "params": { "clarify_choice_id": "compare_materials" },
+        "code_paths": ["agent/output_schemas.py"]
+      }
+    },
+    {
+      "id": "kb_health_check",
+      "label": "知识库健康检查（开发 / 运营）",
+      "department": ["技术部", "运营部"],
+      "channel": null,
+      "user_goal": "入库后自动探测检索命中率，无需维护 golden 评测集。",
+      "steps": [
+        "技术部：运行 python scripts/eval_kb_health.py --write",
+        "或 Admin API：POST /admin/eval/kb-health?limit=30",
+        "查看 retrieve_hit_rate 与 misses 列表，缺文档则补充入库"
+      ],
+      "scene_preset": null,
+      "clarify_option_id": null,
+      "output_schema_id": null,
+      "tools": [],
+      "tech": {
+        "api": "POST /admin/eval/kb-health",
+        "cli": "scripts/eval_kb_health.py",
+        "code_paths": ["evaluation/kb_health_probe.py"]
+      }
+    },
+    {
+      "id": "web_search_supplement",
+      "label": "联网补充（库外公开资料）",
+      "department": ["技术部", "媒体部"],
+      "channel": null,
+      "user_goal": "知识库未覆盖时，通过 Tavily 搜索 B 站专栏、博客等公开网页作参考（需标注来源，不可替代内部卖点）。",
+      "steps": [
+        "技术部：.env 配置 TAVILY_API_KEY",
+        "Admin → 工具 → 启用 web_search",
+        "对话设置选「内测全功能」或 analyst + Agentic 路径",
+        "提问时说明「库中没有的部分请联网并标注来源」"
+      ],
+      "scene_preset": "internal_full",
+      "clarify_option_id": null,
+      "output_schema_id": null,
+      "tools": ["kb_search", "web_search"],
+      "tech": {
+        "env": "TAVILY_API_KEY",
+        "code_paths": ["agent/tools/builtins/web_search.py", "agent/pipelines/agentic.py"],
+        "note": "无 B 站专用 API；Tavily 可 include_domains 限定站点（待开发）"
+      }
+    },
+    {
+      "id": "miniprogram_api",
+      "label": "微信小程序 / 集成方 API",
+      "department": ["技术部"],
+      "channel": "miniprogram",
+      "user_goal": "小程序或外部系统调用对话与内容模板。",
+      "steps": [
+        "GET /config/content-kit?channel=miniprogram 拉引导项与模板",
+        "POST /chat/stream 传 channel、clarify_choice_id、output_schema_id",
+        "LAN 部署见 docs/lan_api_chat.md"
+      ],
+      "scene_preset": "api_kb_only",
+      "clarify_option_id": null,
+      "output_schema_id": null,
+      "tools": ["kb_search"],
+      "tech": {
+        "apis": ["GET /config/content-kit", "POST /chat/stream", "GET /config/ui"],
+        "code_paths": ["api/main.py", "api/schemas.py"]
+      }
+    }
+  ]
+}

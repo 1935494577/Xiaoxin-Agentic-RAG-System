@@ -2,17 +2,22 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
-import { AUTH_SESSION_KEY, USER_ID_KEY } from "../lib/constants";
+import { authLogin, authLogout, authMe } from "../api/client";
+import { AUTH_SESSION_KEY } from "../lib/constants";
 import { resolveAdminRole, type AdminRole } from "../lib/adminRoles";
 
 export type AuthSession = {
   username: string;
   department: string;
   role: AdminRole;
+  token: string;
+  userId: string;
+  displayName: string;
   loggedInAt: number;
 };
 
@@ -21,37 +26,27 @@ type AuthContextValue = {
   session: AuthSession | null;
   isAuthenticated: boolean;
   username: string;
+  displayName: string;
   department: string;
   role: AdminRole;
-  login: (username: string, department: string, remember?: boolean) => AuthSession;
-  updateDepartment: (department: string) => void;
-  logout: () => void;
+  token: string;
+  login: (username: string, password: string, remember?: boolean) => Promise<AuthSession>;
+  logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-
-function loadOrCreateUserId(): string {
-  const raw = localStorage.getItem(USER_ID_KEY);
-  if (raw) {
-    try {
-      return JSON.parse(raw) as string;
-    } catch {
-      return raw;
-    }
-  }
-  const id = `u_${Math.random().toString(36).slice(2, 14)}`;
-  localStorage.setItem(USER_ID_KEY, id);
-  return id;
-}
 
 function readSession(storage: Storage): AuthSession | null {
   const raw = storage.getItem(AUTH_SESSION_KEY);
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as AuthSession;
-    if (parsed?.username) {
+    if (parsed?.username && parsed?.token && parsed?.userId) {
+      const displayName =
+        (parsed.displayName ?? "").trim() || (parsed.username ?? "").trim();
       return {
         ...parsed,
+        displayName,
         role: parsed.role ?? resolveAdminRole(parsed.department ?? ""),
       };
     }
@@ -65,51 +60,65 @@ function loadInitialSession(): AuthSession | null {
   return readSession(localStorage) ?? readSession(sessionStorage);
 }
 
-function writeSession(session: AuthSession): void {
-  if (localStorage.getItem(AUTH_SESSION_KEY)) {
-    localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
-    return;
-  }
-  if (sessionStorage.getItem(AUTH_SESSION_KEY)) {
-    sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
-    return;
-  }
-  localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
+function writeSession(session: AuthSession, remember: boolean): void {
+  const storage = remember ? localStorage : sessionStorage;
+  const other = remember ? sessionStorage : localStorage;
+  other.removeItem(AUTH_SESSION_KEY);
+  storage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [userId] = useState(loadOrCreateUserId);
   const [session, setSession] = useState<AuthSession | null>(loadInitialSession);
 
-  const login = useCallback((username: string, department: string, remember = true) => {
+  useEffect(() => {
+    if (!session?.token) return;
+    const storedName = (session.displayName || "").trim();
+    const username = (session.username || "").trim();
+    if (storedName && storedName !== username) return;
+
+    let cancelled = false;
+    authMe()
+      .then((user) => {
+        if (cancelled) return;
+        const nextName = (user.display_name || user.username || "").trim();
+        if (!nextName || nextName === storedName) return;
+        const updated: AuthSession = { ...session, displayName: nextName };
+        const remember = Boolean(localStorage.getItem(AUTH_SESSION_KEY));
+        writeSession(updated, remember);
+        setSession(updated);
+      })
+      .catch(() => {
+        /* offline or expired — keep cached session */
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.token, session?.userId, session?.displayName, session?.username]);
+
+  const login = useCallback(async (username: string, password: string, remember = true) => {
+    const res = await authLogin(username.trim(), password, remember);
+    const displayName = (res.user.display_name || res.user.username || "").trim();
     const next: AuthSession = {
-      username: username.trim(),
-      department,
-      role: resolveAdminRole(department),
+      username: res.user.username,
+      department: res.user.department,
+      role: resolveAdminRole(res.user.department),
+      token: res.token,
+      userId: res.user.id,
+      displayName,
       loggedInAt: Date.now(),
     };
-    const storage = remember ? localStorage : sessionStorage;
-    const other = remember ? sessionStorage : localStorage;
-    other.removeItem(AUTH_SESSION_KEY);
-    storage.setItem(AUTH_SESSION_KEY, JSON.stringify(next));
+    writeSession(next, remember);
     setSession(next);
     return next;
   }, []);
 
-  const updateDepartment = useCallback((department: string) => {
-    setSession((prev) => {
-      if (!prev) return prev;
-      const next: AuthSession = {
-        ...prev,
-        department: department.trim(),
-        role: resolveAdminRole(department),
-      };
-      writeSession(next);
-      return next;
-    });
-  }, []);
-
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    try {
+      await authLogout();
+    } catch {
+      /* ignore network errors on logout */
+    }
     localStorage.removeItem(AUTH_SESSION_KEY);
     sessionStorage.removeItem(AUTH_SESSION_KEY);
     setSession(null);
@@ -117,17 +126,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AuthContextValue>(
     () => ({
-      userId,
+      userId: session?.userId ?? "",
       session,
       isAuthenticated: session !== null,
       username: session?.username ?? "",
+      displayName: session?.displayName ?? "",
       department: session?.department ?? "",
-      role: session?.role ?? "admin",
+      role: session?.role ?? "operator",
+      token: session?.token ?? "",
       login,
-      updateDepartment,
       logout,
     }),
-    [userId, session, login, updateDepartment, logout]
+    [session, login, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

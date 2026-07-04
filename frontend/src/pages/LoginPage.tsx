@@ -5,10 +5,11 @@ import { Link, useLocation, useNavigate, useSearchParams } from "react-router-do
 import { ArrowLeft, ArrowRight, Brain, Eye, EyeOff, Lock, User } from "lucide-react";
 
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 
-import { saveUserProfile } from "../api/client";
-
+import { mergeLegacyUserProfile } from "../api/client";
 import { TalentEditorialMascots } from "@/components/ui/talent-editorial-mascots";
+import { USER_ID_KEY } from "../lib/constants";
 
 import { Button } from "@/components/ui/Button";
 
@@ -16,25 +17,30 @@ import { Input } from "@/components/ui/Input";
 
 import { Label } from "@/components/ui/Label";
 
-import { Select } from "@/components/ui/Select";
-
 import { useAuth } from "../hooks/useAuth";
-
-import { DEPT_OPTIONS } from "../lib/constants";
 
 import { cn } from "@/lib/utils";
 
 
 
 const HIGHLIGHTS = [
-
   "脑科训练方案与学员成长数据一站查询",
-
   "按部门配置功能权限，保障信息安全",
-
   "智能助手辅助答疑、备课与知识检索",
-
 ] as const;
+
+function readLegacyUserId(): string | null {
+  const raw = localStorage.getItem(USER_ID_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (typeof parsed === "string" && parsed.trim()) return parsed.trim();
+  } catch {
+    /* plain string */
+  }
+  const trimmed = raw.replace(/^"|"$/g, "").trim();
+  return trimmed || null;
+}
 
 
 
@@ -46,12 +52,11 @@ export default function LoginPage() {
 
   const [searchParams] = useSearchParams();
 
-  const { userId, login } = useAuth();
+  const { login } = useAuth();
+  const queryClient = useQueryClient();
 
   const fromWelcome = Boolean(
-
     (location.state as { fromWelcome?: boolean } | null)?.fromWelcome
-
   );
 
 
@@ -65,9 +70,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
 
   const [showPassword, setShowPassword] = useState(false);
-
-  const [department, setDepartment] = useState<string>(DEPT_OPTIONS[0]);
-
   const [remember, setRemember] = useState(true);
 
   const [isTyping, setIsTyping] = useState(false);
@@ -123,39 +125,36 @@ export default function LoginPage() {
 
 
     setSubmitting(true);
-
     try {
-
-      login(name, department, remember);
-
-      try {
-
-        await saveUserProfile({
-
-          user_id: userId,
-
-          display_name: name,
-
-          department,
-
-        });
-
-      } catch {
-
-        toast.warning("登录成功，但个人资料同步失败，可在侧边栏稍后重试");
-
+      const session = await login(name, password, remember);
+      queryClient.removeQueries({ queryKey: ["userProfile"] });
+      const welcomeName = session.displayName || name;
+      const legacyId = readLegacyUserId();
+      if (legacyId && legacyId !== session.userId) {
+        try {
+          const merged = await Promise.race([
+            mergeLegacyUserProfile(legacyId),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error("legacy merge timeout")), 8_000)
+            ),
+          ]);
+          localStorage.removeItem(USER_ID_KEY);
+          toast.success(`欢迎回来，${merged.display_name || welcomeName}`);
+          navigate(returnTo, { replace: true });
+          return;
+        } catch {
+          /* legacy merge optional — do not block login */
+        }
       }
-
-      toast.success(`欢迎回来，${name}`);
-
+      localStorage.removeItem(USER_ID_KEY);
+      toast.success(`欢迎回来，${welcomeName}`);
       navigate(returnTo, { replace: true });
-
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "登录失败";
+      toast.error(msg.includes("401") || msg.includes("密码") ? "用户名或密码错误" : msg);
     } finally {
-
       setSubmitting(false);
-
     }
-
   }
 
 
@@ -178,24 +177,8 @@ export default function LoginPage() {
 
         <div className="auth-login-pattern absolute inset-0 opacity-40" />
 
-        <div className="auth-login-brand relative z-10 flex items-center gap-3">
-
-          <img src="/company_logo.png" alt="Jnao 劲脑" className="h-9 w-auto brightness-0 invert" />
-
-          <div>
-
-            <p className="text-lg font-semibold tracking-wide">
-
-              <span className="text-[#ffab91]">J</span>nao
-
-              <span className="ml-1 text-sm font-medium text-white/80">劲脑</span>
-
-            </p>
-
-            <p className="text-sm text-white/70">脑科教育 · 内部工作平台</p>
-
-          </div>
-
+        <div className="auth-login-brand relative z-10">
+          <img src="/company_logo.png" alt="JNAO 劲脑" className="h-9 w-auto brightness-0 invert" />
         </div>
 
 
@@ -322,7 +305,7 @@ export default function LoginPage() {
 
               <p className="mt-1.5 text-pretty text-sm leading-relaxed text-text-muted">
 
-                使用内部账号登录，系统将根据所选部门开放对应功能权限
+                使用内部账号登录；部门由账号绑定，决定可使用的管理功能
 
               </p>
 
@@ -420,46 +403,6 @@ export default function LoginPage() {
 
               </div>
 
-
-
-              <div>
-
-                <Label htmlFor="department">所属部门</Label>
-
-                <p className="mb-1.5 text-xs text-text-muted">
-
-                  不同部门可使用的管理功能与数据范围可能不同
-
-                </p>
-
-                <Select
-
-                  id="department"
-
-                  value={department}
-
-                  onChange={(e) => setDepartment(e.target.value)}
-
-                  className="h-11 border-[#e8e2d9] bg-[#fdfcfa] focus:border-brand/40"
-
-                >
-
-                  {DEPT_OPTIONS.map((d) => (
-
-                    <option key={d} value={d}>
-
-                      {d}
-
-                    </option>
-
-                  ))}
-
-                </Select>
-
-              </div>
-
-
-
               <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-text-muted">
 
                 <input
@@ -504,31 +447,13 @@ export default function LoginPage() {
 
             <p className="mt-6 text-center text-xs leading-relaxed text-text-muted">
 
-              开发环境暂未接入 SSO，任意密码即可登录。
+              首次部署后初始密码见服务端 `auth_bootstrap_credentials.txt`，登录后请在用户设置中修改。
 
             </p>
 
           </div>
 
 
-
-          <p className="mt-6 text-center text-sm text-text-muted">
-
-            暂不登录？{" "}
-
-            <Link
-
-              to="/chat"
-
-              className="font-medium text-brand transition-colors hover:text-brand-dark"
-
-            >
-
-              仅体验对话功能
-
-            </Link>
-
-          </p>
 
         </div>
 

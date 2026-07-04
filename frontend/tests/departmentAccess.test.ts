@@ -7,6 +7,7 @@ import {
   canAccessAdminPath,
   canAccessFeature,
   getDefaultAdminPath,
+  getVisibleNavGroups,
   getVisibleNavItems,
   resolveAdminFeatureFromPath,
   resolveEffectiveDepartment,
@@ -19,23 +20,24 @@ describe("departmentAccess", () => {
     expect(canAccessAdminPath("技术部", "/admin/trace")).toBe(true);
   });
 
-  it("非技术部 only gets chat, ingest, prompts, models", () => {
+  it("非技术部 gets chat, ingest, prompts, models, scenarios, tutorial", () => {
     for (const dept of ["运营部", "媒体部", "剪辑部"]) {
       expect(canAccessFeature(dept, "chat")).toBe(true);
       expect(canAccessFeature(dept, "ingest")).toBe(true);
       expect(canAccessFeature(dept, "prompts")).toBe(true);
       expect(canAccessFeature(dept, "models")).toBe(true);
+      expect(canAccessFeature(dept, "scenarios")).toBe(true);
+      expect(canAccessFeature(dept, "tutorial")).toBe(true);
 
       expect(canAccessFeature(dept, "processing")).toBe(false);
       expect(canAccessFeature(dept, "vector_store")).toBe(false);
       expect(canAccessFeature(dept, "memory")).toBe(false);
       expect(canAccessFeature(dept, "feedback")).toBe(false);
       expect(canAccessFeature(dept, "trace")).toBe(false);
-      expect(canAccessFeature(dept, "tutorial")).toBe(false);
+      expect(canAccessFeature(dept, "users")).toBe(false);
 
       expect(canAccessAdminPath(dept, "/admin/ingest")).toBe(true);
-      expect(canAccessAdminPath(dept, "/admin/prompts")).toBe(true);
-      expect(canAccessAdminPath(dept, "/admin/models")).toBe(true);
+      expect(canAccessAdminPath(dept, "/admin/scenarios")).toBe(true);
       expect(canAccessAdminPath(dept, "/admin/processing")).toBe(false);
       expect(canAccessAdminPath(dept, "/admin/memory")).toBe(false);
     }
@@ -55,7 +57,7 @@ describe("departmentAccess", () => {
 
   it("filters sidebar nav for 运营部", () => {
     const ids = getVisibleNavItems("运营部").map((item) => item.id);
-    expect(ids).toEqual(["chat", "ingest", "prompts", "models"]);
+    expect(ids).toEqual(["chat", "ingest", "scenarios", "prompts", "models", "tutorial"]);
   });
 
   it("shows all nav items for 技术部", () => {
@@ -67,6 +69,18 @@ describe("departmentAccess", () => {
   it("default admin path for restricted dept is ingest", () => {
     expect(getDefaultAdminPath("运营部")).toBe("/admin/ingest");
     expect(getDefaultAdminPath(FULL_ACCESS_DEPARTMENT)).toBe("/admin/ingest");
+  });
+
+  it("shows users admin nav group only for 技术部", () => {
+    const techGroups = getVisibleNavGroups("技术部");
+    const techLabels = techGroups.map((g) => g.label);
+    expect(techLabels).toContain("系统管理");
+    expect(
+      techGroups.find((g) => g.id === "administration")?.items.map((i) => i.id)
+    ).toEqual(["users"]);
+
+    const opsGroups = getVisibleNavGroups("运营部");
+    expect(opsGroups.map((g) => g.label)).not.toContain("系统管理");
   });
 
   it("resolveEffectiveDepartment prefers auth session when logged in", () => {

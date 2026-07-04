@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from api.ui_config_store import load_ui_config, resolve_effective_reasoning_mode
+from api.ui_config_store import resolve_effective_reasoning_mode
 
 
-def chat_memory_settings() -> dict[str, Any]:
-    from api.prompt_config_store import load_prompt_slots
+def chat_memory_settings(user_id: str | None = None) -> dict[str, Any]:
+    from account_config.store import effective_prompt_slots_list, effective_ui_config
 
-    ui = load_ui_config()
+    ui = effective_ui_config(user_id)
+    prompt_slots = effective_prompt_slots_list(user_id)
     return {
         "max_history_turns": int(ui.get("max_history_turns") or 6),
         "max_history_chars": int(ui.get("max_history_chars") or 6000),
@@ -38,11 +39,12 @@ def chat_memory_settings() -> dict[str, Any]:
         "condense_llm_enabled": bool(ui.get("condense_llm_enabled", True)),
         "kb_llm_judge_always": bool(ui.get("kb_llm_judge_always", False)),
         "agent_reasoning_mode": resolve_effective_reasoning_mode(ui),
-        "prompt_slots": load_prompt_slots(),
+        "prompt_slots": prompt_slots,
         "rag_arch_router_enabled": bool(ui.get("rag_arch_router_enabled", True)),
         "rag_arch_llm_fallback": bool(ui.get("rag_arch_llm_fallback", False)),
         "default_rag_architecture": str(ui.get("default_rag_architecture") or "auto"),
         "graph_extraction_enabled": bool(ui.get("graph_extraction_enabled", True)),
         "agentic_max_turns": int(ui.get("agentic_max_turns") or 6),
         "agentic_max_kb_searches": int(ui.get("agentic_max_kb_searches") or 4),
+        "clarify_enabled": bool(ui.get("clarify_enabled", False)),
     }

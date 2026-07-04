@@ -16,7 +16,7 @@ vi.mock("../src/api/client", () => ({
   submitFeedback: (...args: unknown[]) => mockSubmitFeedback(...args),
 }));
 
-// Mock LottiePlayer to avoid lottie-web canvas probe in jsdom
+// Mock LottiePlayer to avoid DotLottie canvas init in jsdom
 vi.mock("../src/components/chat/LottiePlayer", () => ({
   default: ({ className }: { className?: string }) => {
     const React = require("react");

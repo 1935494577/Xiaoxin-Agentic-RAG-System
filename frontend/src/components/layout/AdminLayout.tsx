@@ -11,7 +11,7 @@ import { resolveAdminPageLabel } from "./Sidebar";
 export default function AdminLayout() {
   const { username, logout } = useAuth();
   const navigate = useNavigate();
-  const { department } = useUserProfile();
+  const { department, displayName } = useUserProfile();
   const location = useLocation();
   const pageLabel = resolveAdminPageLabel(location.pathname);
 
@@ -38,7 +38,9 @@ export default function AdminLayout() {
         </div>
         <div className="flex shrink-0 items-center gap-3 text-sm">
           {username ? (
-            <span className="hidden text-text-muted sm:inline">{username}</span>
+            <span className="hidden text-text-muted sm:inline">
+              {displayName?.trim() || username}
+            </span>
           ) : null}
           <button
             type="button"

@@ -6,7 +6,7 @@ from urllib.parse import unquote
 
 FULL_ACCESS_DEPARTMENT = "技术部"
 
-STANDARD_DEPARTMENT_FEATURES = frozenset({"ingest", "prompts", "models"})
+STANDARD_DEPARTMENT_FEATURES = frozenset({"ingest", "prompts", "models", "scenarios", "tutorial"})
 
 KNOWN_DEPARTMENTS = frozenset({"技术部", "运营部", "媒体部", "剪辑部"})
 
@@ -45,6 +45,9 @@ def feature_for_request(method: str, path: str) -> str | None:
     if p == "/health" or p == "/config/nav" or p == "/config/public":
         return None
 
+    if p.startswith("/config/scenario-catalog"):
+        return "scenarios"
+
     if p.startswith("/ingest/"):
         return "ingest"
 
@@ -65,8 +68,14 @@ def feature_for_request(method: str, path: str) -> str | None:
             return None
         return "memory"
 
+    if p.startswith("/admin/feedback/eval-reports") or p.startswith("/admin/eval/"):
+        return "eval_reports"
+
     if p.startswith("/admin/feedback"):
         return "feedback"
+
+    if p.startswith("/auth/admin"):
+        return "users"
 
     if p.startswith("/debug/trace-status"):
         return "trace"

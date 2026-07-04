@@ -66,6 +66,18 @@ class ChatRequest(BaseModel):
     )
     temp_document_id: str | None = Field(default=None, max_length=128)
     scenario_tags: list[str] | None = Field(default=None, max_length=20)
+    channel: str | None = Field(
+        default=None,
+        pattern="^(wecom|wechat|miniprogram|channels|douyin)$",
+        description="内容渠道：企业微信/微信/小程序/视频号/抖音；影响引导选项与输出模板",
+    )
+    output_schema_id: str | None = Field(
+        default=None,
+        max_length=64,
+        description="结构化输出模板：selling_points / parent_dm_script / short_video_script 等",
+    )
+    skip_clarify: bool = Field(default=False, description="为 true 时跳过意图引导")
+    clarify_choice_id: str | None = Field(default=None, max_length=64, description="用户选择的引导选项 id")
 
 
 class SourceRef(BaseModel):
@@ -519,7 +531,7 @@ class UiConfigUpdate(BaseModel):
     agentic_max_turns: int | None = Field(default=None, ge=1, le=20)
     agentic_max_kb_searches: int | None = Field(default=None, ge=1, le=20)
     agent_reasoning_mode: str | None = Field(default=None, pattern="^(direct|react|plan_execute)$")
-    scene_preset: str | None = Field(default=None, pattern="^(kb_frontline|internal_full|api_kb_only)$")
+    scene_preset: str | None = Field(default=None, pattern="^(kb_frontline|internal_full|api_kb_only|analyst)$")
 
 
 class ProcessingToolPublic(BaseModel):
@@ -665,6 +677,10 @@ class UserProfileUpdate(BaseModel):
     department: str | None = Field(default=None, max_length=64)
     ai_display_name: str | None = Field(default=None, max_length=64)
     ai_avatar_url: str | None = Field(default=None, max_length=600_000)
+
+
+class LegacyProfileMergeRequest(BaseModel):
+    legacy_user_id: str = Field(..., min_length=1, max_length=128)
 
 
 class VectorStorePublic(BaseModel):

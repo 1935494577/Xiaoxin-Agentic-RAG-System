@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 from agent.tools.builtins.datetime_cn import get_beijing_time
+from agent.tools.builtins.format_structured_output import format_structured_output
 from agent.tools.builtins.kb_search import get_kb_hits, kb_search, set_kb_search_context
+from agent.tools.builtins.list_kb_sources import list_kb_sources
 from agent.tools.builtins.relationship_graph import (
     clear_relationship_graph_context,
     set_relationship_graph_context,
@@ -58,6 +60,20 @@ def run_builtin(tool_id: str, arguments: dict[str, Any]) -> str:
             except (TypeError, ValueError):
                 mr = None
         return web_search(str(arguments.get("query") or ""), max_results=mr)
+    if tool_id == "list_kb_sources":
+        lim: int | None = None
+        raw_lim = arguments.get("limit")
+        if raw_lim is not None:
+            try:
+                lim = int(raw_lim)
+            except (TypeError, ValueError):
+                lim = None
+        return list_kb_sources(limit=lim if lim is not None else 30)
+    if tool_id == "format_structured_output":
+        return format_structured_output(
+            str(arguments.get("content") or ""),
+            str(arguments.get("schema_id") or ""),
+        )
     return f"未知工具：{tool_id}"
 
 

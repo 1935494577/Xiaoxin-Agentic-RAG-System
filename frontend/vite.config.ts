@@ -58,6 +58,7 @@ export default defineConfig({
       "/chat/stream": sseProxy(),
       "/chat/transcribe": apiProxy({ timeout: 120_000 }),
       "/users": apiProxy(),
+      "/auth": apiProxy(),
       "/config": apiProxy(),
       "/feedback": apiProxy(),
       "/health": apiProxy(),

@@ -64,7 +64,7 @@
 ## 测试
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest enterprise_rag/tests/test_architecture_router.py enterprise_rag/tests/test_graph_store.py enterprise_rag/tests/test_agentic_pipeline.py -q
+.\.venv\Scripts\python.exe -m pytest tests/unit/test_architecture_router.py tests/unit/test_graph_store.py tests/unit/test_agentic_pipeline.py -q
 ```
 
 Golden 样例：`enterprise_rag/data/eval/routing_architecture_golden.jsonl`

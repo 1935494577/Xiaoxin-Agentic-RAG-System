@@ -32,6 +32,8 @@ def _is_public_path(path: str, method: str) -> bool:
         return True
     if path == "/" and method == "GET":
         return True
+    if path.startswith("/auth/"):
+        return True
     return False
 
 

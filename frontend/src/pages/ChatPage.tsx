@@ -12,7 +12,14 @@ import {
 import { resolveHybridExpertMode, resolveStreamFastMode } from "../lib/chatDefaults";
 import { useAuth } from "../hooks/useAuth";
 import { useUserProfile } from "../context/UserProfileContext";
-import type { ChatMessage, ChatSession, GraphViz, StreamEvent, ToolTraceItem } from "../api/types";
+import type {
+  ChatMessage,
+  ChatSession,
+  ClarifyOption,
+  GraphViz,
+  StreamEvent,
+  ToolTraceItem,
+} from "../api/types";
 import { applyToolStreamEvent } from "../lib/streamTools";
 import { downloadMarkdown, messagesToMarkdown } from "../lib/exportChatMarkdown";
 import { toast } from "sonner";
@@ -47,16 +54,22 @@ export default function ChatPage() {
 
   const abortRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const initDone = useRef(false);
 
   const [input, setInput] = useState("");
   const [newTopicPending, setNewTopicPending] = useState(false);
+  const [clarifyPending, setClarifyPending] = useState<{
+    message: string;
+    prompt: string;
+    options: ClarifyOption[];
+    sessionId: string;
+  } | null>(null);
   /** Session-only override; defaults come from server uiConfig so LAN users stay aligned. */
   const [hybridOverride, setHybridOverride] = useState<boolean | null>(null);
 
   const { data: uiConfig } = useQuery({
-    queryKey: ["uiConfig"],
+    queryKey: ["uiConfig", userId],
     queryFn: fetchUiConfig,
+    enabled: Boolean(userId),
     staleTime: 300_000,
   });
 
@@ -74,18 +87,18 @@ export default function ChatPage() {
     }
   }, [userId]);
 
-  // ---- init: load sessions + uiConfig (matches old App.tsx timing) ----
+  // Load sessions once auth userId is ready (fixes empty list after LAN login).
   useEffect(() => {
-    if (initDone.current) return;
-
+    if (!userId) return;
+    let cancelled = false;
     refreshSessions().then((rows) => {
-      if (rows && rows.length && !sessionId) {
-        setSessionId(rows[0].id);
-      }
-      initDone.current = true;
+      if (cancelled || !rows?.length) return;
+      setSessionId((current) => current || rows[0].id);
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, refreshSessions]);
 
   useEffect(() => {
     setHybridOverride(null);
@@ -134,14 +147,19 @@ export default function ChatPage() {
   };
 
   // ---- send message (follows old App.tsx pattern exactly) ----
-  const handleSend = async () => {
-    const text = input.trim();
-    if (!text || streaming) return;
+  const runChatTurn = async (
+    text: string,
+    opts?: { clarifyChoiceId?: string; appendUser?: boolean; sessionId?: string }
+  ) => {
+    if (streaming) return;
 
     setError("");
-    setInput("");
+    setClarifyPending(null);
 
-    let sid = sessionId;
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
+    let sid = opts?.sessionId || sessionId;
     if (!sid) {
       const s = await createSession(userId);
       sid = s.id;
@@ -149,76 +167,103 @@ export default function ChatPage() {
       await refreshSessions();
     }
 
-    // 1. Add user message to display IMMEDIATELY
     const userMsg: ChatMessage = { role: "user", content: text };
-    setMessages((m) => [...m, userMsg]);
+    if (opts?.appendUser !== false) {
+      setMessages((m) => [...m, userMsg]);
+    }
 
-    // 2. Start streaming
     setStreaming(true);
     setStreamText("");
     setStreamGraphViz(null);
-
-    const ctrl = new AbortController();
-    abortRef.current = ctrl;
 
     let assistant = "";
     let streamError = "";
     let meta: ChatMessage["meta"] = {};
     let toolTrace: ToolTraceItem[] = [];
     let graphViz: GraphViz | undefined;
+    let clarifyEvt: Extract<StreamEvent, { type: "clarify" }> | null = null;
+    let needsClarify = false;
     const priorHistory = newTopicPending
       ? []
       : messages.map((m) => ({ role: m.role, content: m.content }));
     const resetContext = newTopicPending;
 
-    await streamChat(
-      {
-        message: text,
-        user_id: userId,
-        user_department: department,
-        hybrid_expert_mode: hybridExpert,
-        stream_fast_mode: resolveStreamFastMode(uiConfig),
-        skip_query_rewrite: true,
-        session_id: sid,
-        history: priorHistory,
-        reset_context: resetContext,
-        rag_architecture: "auto",
-      },
-      (evt: StreamEvent) => {
-        if (evt.type === "token") {
-          assistant += evt.content;
-          setStreamText(assistant);
-        } else if (evt.type === "tool_call" || evt.type === "tool_result") {
-          toolTrace = applyToolStreamEvent(toolTrace, evt);
-        } else if (evt.type === "graph_viz") {
-          graphViz = evt.graph;
-          setStreamGraphViz(evt.graph);
-        } else if (evt.type === "error") {
-          streamError = evt.message;
-          setError(evt.message);
-        } else if (evt.type === "done") {
-          assistant = evt.answer || assistant;
-          meta = {
-            sources: evt.sources,
-            source_refs: evt.source_refs,
-            answer_mode: evt.answer_mode,
-            rag_architecture: evt.rag_architecture,
-            verified: evt.verified,
-            trace_id: evt.trace_id,
-            tool_trace: evt.tool_trace?.length ? evt.tool_trace : toolTrace,
-            graph_viz: evt.graph_viz ?? graphViz,
-          };
-        }
-      },
-      ctrl.signal
-    );
+    try {
+      await streamChat(
+        {
+          message: text,
+          user_id: userId,
+          user_department: department,
+          hybrid_expert_mode: hybridExpert,
+          stream_fast_mode: resolveStreamFastMode(uiConfig),
+          skip_query_rewrite: true,
+          session_id: sid,
+          history: priorHistory,
+          reset_context: resetContext,
+          rag_architecture: "auto",
+          clarify_choice_id: opts?.clarifyChoiceId,
+        },
+        (evt: StreamEvent) => {
+          if (evt.type === "token") {
+            assistant += evt.content;
+            setStreamText(assistant);
+          } else if (evt.type === "clarify") {
+            clarifyEvt = evt;
+          } else if (evt.type === "tool_call" || evt.type === "tool_result") {
+            toolTrace = applyToolStreamEvent(toolTrace, evt);
+          } else if (evt.type === "graph_viz") {
+            graphViz = evt.graph;
+            setStreamGraphViz(evt.graph);
+          } else if (evt.type === "error") {
+            streamError = evt.message;
+            setError(evt.message);
+          } else if (evt.type === "done") {
+            needsClarify = Boolean(evt.needs_clarify);
+            assistant = evt.answer || assistant;
+            meta = {
+              sources: evt.sources,
+              source_refs: evt.source_refs,
+              answer_mode: evt.answer_mode,
+              rag_architecture: evt.rag_architecture,
+              verified: evt.verified,
+              trace_id: evt.trace_id,
+              tool_trace: evt.tool_trace?.length ? evt.tool_trace : toolTrace,
+              graph_viz: evt.graph_viz ?? graphViz,
+            };
+          }
+        },
+        ctrl.signal
+      );
+    } catch (err) {
+      if (!ctrl.signal.aborted) {
+        streamError = err instanceof Error ? err.message : "请求失败";
+        setError(streamError);
+      }
+    } finally {
+      setStreaming(false);
+      setStreamText("");
+      setStreamGraphViz(null);
+      abortRef.current = null;
+      setNewTopicPending(false);
+    }
 
-    // 3. Stream finished
-    setStreaming(false);
-    setStreamText("");
-    setStreamGraphViz(null);
-    abortRef.current = null;
-    setNewTopicPending(false);
+    const wasAborted = ctrl.signal.aborted;
+
+    if (wasAborted) {
+      const stopped = assistant.trim() ? `${assistant.trim()}\n\n（已停止生成）` : "（已停止生成）";
+      setMessages((prev) => [...prev, { role: "assistant", content: stopped, meta }]);
+      return;
+    }
+
+    if (needsClarify && clarifyEvt) {
+      setClarifyPending({
+        message: text,
+        prompt: clarifyEvt.prompt,
+        options: clarifyEvt.options,
+        sessionId: sid,
+      });
+      return;
+    }
 
     const finalContent = assistant || streamError || "（无回复）";
     const assistantMsg: ChatMessage = {
@@ -227,16 +272,34 @@ export default function ChatPage() {
       meta,
     };
 
-    const all = [...messages, userMsg, assistantMsg];
-    setMessages(all);
+    setMessages((prev) => [...prev, assistantMsg]);
 
-    // 4. Persist to backend + refresh session list
     try {
-      await appendMessages(userId, sid!, [userMsg, assistantMsg], text);
+      const toPersist =
+        opts?.appendUser === false ? [assistantMsg] : [userMsg, assistantMsg];
+      await appendMessages(userId, sid!, toPersist, text);
       await refreshSessions();
     } catch (err) {
       console.error("消息持久化失败", err);
     }
+  };
+
+  const handleSend = async () => {
+    const text = input.trim();
+    if (!text || streaming) return;
+    setInput("");
+    await runChatTurn(text);
+  };
+
+  const handleClarifyPick = async (choiceId: string) => {
+    if (!clarifyPending || streaming) return;
+    const { message, sessionId: sid } = clarifyPending;
+    setClarifyPending(null);
+    await runChatTurn(message, {
+      clarifyChoiceId: choiceId,
+      appendUser: false,
+      sessionId: sid,
+    });
   };
 
   const abort = useCallback(() => {
@@ -330,6 +393,24 @@ export default function ChatPage() {
                       className="chat-suggestion-chip max-w-full cursor-pointer rounded-full border border-border bg-surface px-3.5 py-2 text-left text-[13px] leading-relaxed text-text transition-colors hover:border-brand hover:bg-brand-light disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {clarifyPending && !streaming && (
+              <div className="mx-auto my-4 max-w-xl rounded-2xl border border-brand/30 bg-brand-light/40 px-4 py-4">
+                <p className="text-sm font-medium text-text">{clarifyPending.prompt}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {clarifyPending.options.map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => handleClarifyPick(opt.id)}
+                      className="chat-suggestion-chip cursor-pointer rounded-full border border-border bg-white px-3.5 py-2 text-left text-[13px] text-text transition-colors hover:border-brand hover:bg-brand-light"
+                    >
+                      {opt.label}
                     </button>
                   ))}
                 </div>

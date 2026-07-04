@@ -66,11 +66,12 @@ describe("Sidebar", () => {
     expect(screen.getByText("管理后台")).toBeInTheDocument();
   });
 
-  it("getVisibleNavGroups returns quality loop for 技术部", () => {
+  it("getVisibleNavGroups returns quality loop and admin for 技术部", () => {
     const groups = getVisibleNavGroups("技术部");
     const labels = groups.map((g) => g.label);
     expect(labels).toContain("日常运营");
     expect(labels).toContain("质量闭环");
     expect(labels).toContain("系统配置");
+    expect(labels).toContain("系统管理");
   });
 });

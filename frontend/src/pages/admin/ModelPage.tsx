@@ -201,7 +201,7 @@ export default function ModelPage() {
         </details>
 
         {/* Form */}
-        <div>
+        <form autoComplete="off" onSubmit={(e) => e.preventDefault()}>
           {editingId ? (
             <p className="text-sm text-brand bg-brand-light rounded-lg px-3 py-2 mb-4">
               正在编辑配置 <code className="text-xs">{editingId}</code>。留空「API Key」则保留原密钥；点「取消编辑」可新建。
@@ -215,6 +215,10 @@ export default function ModelPage() {
               <span className="text-sm text-text">显示名称</span>
               <input
                 type="text"
+                name="model-profile-name"
+                autoComplete="off"
+                readOnly
+                onFocus={(e) => e.currentTarget.removeAttribute("readonly")}
                 value={form.name}
                 onChange={(e) => set("name", e.target.value)}
                 placeholder="例如：公司用的通义千问"
@@ -239,6 +243,8 @@ export default function ModelPage() {
               <span className="text-sm text-text">服务网址（Base）</span>
               <input
                 type="text"
+                name="model-api-base"
+                autoComplete="off"
                 value={form.api_base}
                 onChange={(e) => set("api_base", e.target.value)}
                 placeholder="https://api.deepseek.com"
@@ -249,6 +255,8 @@ export default function ModelPage() {
               <span className="text-sm text-text">路径后缀（多数情况可留空）</span>
               <input
                 type="text"
+                name="model-api-path"
+                autoComplete="off"
                 value={form.api_path}
                 onChange={(e) => set("api_path", e.target.value)}
                 placeholder="通义千问兼容模式填 /compatible-mode/v1"
@@ -259,6 +267,8 @@ export default function ModelPage() {
               <span className="text-sm text-text">回答模型（生成答案）</span>
               <input
                 type="text"
+                name="model-default-model"
+                autoComplete="off"
                 value={form.default_model}
                 onChange={(e) => set("default_model", e.target.value)}
                 placeholder="如 deepseek-chat、qwen-plus"
@@ -269,6 +279,10 @@ export default function ModelPage() {
               <span className="text-sm text-text">预处理模型（condense / KB 判断，可选）</span>
               <input
                 type="text"
+                name="model-routing-model"
+                autoComplete="off"
+                readOnly
+                onFocus={(e) => e.currentTarget.removeAttribute("readonly")}
                 value={form.routing_model}
                 onChange={(e) => set("routing_model", e.target.value)}
                 placeholder="建议填更小模型，如 gpt-4o-mini；留空同回答模型"
@@ -284,6 +298,8 @@ export default function ModelPage() {
               </span>
               <input
                 type="password"
+                name="model-api-key"
+                autoComplete="new-password"
                 value={form.api_key}
                 onChange={(e) => set("api_key", e.target.value)}
                 placeholder={editingId ? "留空则保留原密钥" : "必填"}
@@ -322,7 +338,7 @@ export default function ModelPage() {
               {testMut.isPending ? "测试中..." : "测试连接"}
             </Button>
           </div>
-        </div>
+        </form>
 
         {/* Saved profiles */}
         <div>

@@ -5,6 +5,7 @@ import { DEPT_OPTIONS, DEPT_LABELS, PERM_OPTIONS, PERM_LABELS } from "../../lib/
 import { PageHeader } from "../../components/admin/PageHeader";
 import { Button } from "../../components/ui/Button";
 import { Tabs } from "../../components/ui/Tabs";
+import { IngestedSourcesTab } from "../../components/admin/IngestedSourcesTab";
 import { Badge } from "../../components/ui/Badge";
 import { Select } from "../../components/ui/Select";
 import { toast } from "sonner";
@@ -156,7 +157,14 @@ export default function IngestPage() {
         description={`支持 ${extLabel} 格式；可选标签、部门与可见范围。`}
       />
 
-      <div className="admin-panel space-y-6">
+      <Tabs
+        defaultTab="upload"
+        tabs={[
+          {
+            id: "upload",
+            label: "上传入库",
+            content: (
+              <div className="admin-panel space-y-6 mt-4">
         {/* Department & Permission */}
         <div className="grid grid-cols-2 gap-4">
           <label className="block">
@@ -238,7 +246,20 @@ export default function IngestPage() {
           ]}
           defaultTab="clean"
         />
-      </div>
+              </div>
+            ),
+          },
+          {
+            id: "manage",
+            label: "已入库文档",
+            content: (
+              <div className="admin-panel p-4 mt-4">
+                <IngestedSourcesTab />
+              </div>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }

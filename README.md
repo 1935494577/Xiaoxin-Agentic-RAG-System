@@ -81,7 +81,7 @@ xiaoxin_RAG/
 ├── frontend/
 │   └── src/                    # Jnao Chat React SPA（Vite，端口 8502）+ `/admin`
 ├── scripts/                     # 安装、启停 API/前端/Chat、评测与预下载
-└── tests/                       # pytest 用例
+└── tests/                       # pytest 用例（根目录集成测试 + unit/ 模块单测）
 ```
 
 > **天赋引导式测评**已拆至独立目录 `D:\天赋测试设计方案`（Assessment API 8020 + H5 8520），与本仓库无代码依赖。

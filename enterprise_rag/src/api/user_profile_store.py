@@ -182,3 +182,122 @@ def upsert_profile(
             return dict(row) if row else current
         finally:
             conn.close()
+
+
+def _fetch_profile_row(conn: sqlite3.Connection, user_id: str) -> dict[str, Any] | None:
+    row = conn.execute(
+        "SELECT user_id, display_name, avatar_url, department, "
+        "ai_display_name, ai_avatar_url, updated_at "
+        "FROM user_profiles WHERE user_id = ?",
+        (user_id,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def _profile_has_legacy_assets(row: dict[str, Any]) -> bool:
+    return bool(
+        (row.get("display_name") or "").strip()
+        or (row.get("avatar_url") or "").strip()
+        or (row.get("ai_display_name") or "").strip()
+        or (row.get("ai_avatar_url") or "").strip()
+    )
+
+
+def _looks_like_login_placeholder(name: str, user_id: str) -> bool:
+    n = (name or "").strip()
+    if not n:
+        return True
+    if n == user_id:
+        return True
+    return n.isascii() and n.isalnum() and len(n) <= 32
+
+
+def merge_legacy_user(legacy_user_id: str, target_user_id: str) -> dict[str, Any]:
+    """Move avatar/nickname and chat sessions from pre-auth anonymous user id to auth account."""
+    legacy = legacy_user_id.strip()
+    target = target_user_id.strip()
+    if not legacy or not target:
+        raise ValueError("user_id required")
+    if legacy == target:
+        return get_profile(target)
+
+    with _lock:
+        conn = _connect()
+        try:
+            legacy_row = _fetch_profile_row(conn, legacy)
+            if not legacy_row or not _profile_has_legacy_assets(legacy_row):
+                return get_profile(target)
+
+            target_row = _fetch_profile_row(conn, target)
+            if target_row is None:
+                target_row = _default_row(target)
+
+            merged_name = (target_row.get("display_name") or "").strip()
+            legacy_name = (legacy_row.get("display_name") or "").strip()[:64]
+            if legacy_name and _looks_like_login_placeholder(merged_name, target):
+                merged_name = legacy_name
+
+            merged_avatar = (target_row.get("avatar_url") or "").strip() or legacy_row.get("avatar_url") or ""
+            merged_ai_name = (target_row.get("ai_display_name") or "").strip() or (
+                legacy_row.get("ai_display_name") or ""
+            ).strip()[:64]
+            merged_ai_avatar = (target_row.get("ai_avatar_url") or "").strip() or (
+                legacy_row.get("ai_avatar_url") or ""
+            )
+
+            dept = target_row.get("department") or legacy_row.get("department") or _DEFAULT_DEPT
+            updated = _utc_now()
+            conn.execute(
+                """
+                INSERT INTO user_profiles (
+                    user_id, display_name, avatar_url, department,
+                    ai_display_name, ai_avatar_url, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    display_name = excluded.display_name,
+                    avatar_url = excluded.avatar_url,
+                    department = excluded.department,
+                    ai_display_name = excluded.ai_display_name,
+                    ai_avatar_url = excluded.ai_avatar_url,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    target,
+                    merged_name,
+                    merged_avatar,
+                    dept,
+                    merged_ai_name,
+                    merged_ai_avatar,
+                    updated,
+                ),
+            )
+            conn.execute(
+                "UPDATE chat_sessions SET user_id = ? WHERE user_id = ?",
+                (target, legacy),
+            )
+            conn.commit()
+            row = _fetch_profile_row(conn, target)
+            result = row if row else get_profile(target)
+        finally:
+            conn.close()
+
+    if merged_name:
+        try:
+            from auth.store import update_user_display_name
+
+            update_user_display_name(target, merged_name)
+        except Exception:
+            pass
+    return result
+
+
+def apply_auth_to_profile(row: dict[str, Any], auth: dict[str, Any] | None) -> dict[str, Any]:
+    """Apply account-bound fields; sync empty profile display_name from auth user."""
+    if not auth:
+        return row
+    dept = auth.get("department") or row["department"]
+    auth_name = (auth.get("display_name") or "").strip()
+    if auth_name and not (row.get("display_name") or "").strip():
+        return upsert_profile(row["user_id"], display_name=auth_name, department=dept)
+    return {**row, "department": dept}
