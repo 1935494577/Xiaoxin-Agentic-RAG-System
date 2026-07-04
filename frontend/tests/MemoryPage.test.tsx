@@ -35,6 +35,7 @@ const baseConfig = {
   kb_llm_judge: true,
   kb_post_stream_fallback: false,
   hybrid_expert_mode: false,
+  default_assistant_mode: "auto",
   stream_verifier_enabled: false,
   graph_verifier_enabled: false,
   conversation_condense_enabled: true,
@@ -81,7 +82,7 @@ describe("MemoryPage", () => {
 
     const textarea = screen.getByPlaceholderText("每行一个问题") as HTMLTextAreaElement;
     expect(textarea.value).toContain("问题1");
-    expect(screen.getByText("混合专家模式（新用户默认开启）")).toBeTruthy();
+    expect(screen.getByText("默认助手模式")).toBeTruthy();
   });
 
   it("shows KB settings on kb tab", async () => {

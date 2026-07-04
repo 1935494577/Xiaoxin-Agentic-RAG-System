@@ -78,7 +78,9 @@ export default function TutorialPage() {
         <section>
           <h3 className="text-base font-semibold mb-2">4. Jnao Chat 对话</h3>
           <ul className="list-disc pl-5 text-sm text-text-muted space-y-0.5">
-            <li>默认<strong>仅知识库检索</strong>；输入框上方可开<strong>混合专家模式</strong>（知识库优先，未命中时补充通用回答）</li>
+            <li>
+              输入框上方可选<strong>知识 / 任务 / 自动</strong>：知识=仅知识库；任务=多步工具；自动=按服务端配置
+            </li>
             <li>侧栏选<strong>部门权限</strong>，与入库部门一致时检索效果更好</li>
             <li>支持多会话管理：新建、切换、删除会话，历史消息自动持久化</li>
             <li>发送后 AI 头像立即出现并显示"…"思考提示，收到 token 后流式输出</li>

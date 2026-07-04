@@ -3,8 +3,8 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { ChatToolbar } from "../src/components/chat/ChatToolbar";
 
 const baseProps = {
-  hybridExpert: true,
-  onHybridChange: vi.fn(),
+  assistantMode: "auto" as const,
+  onAssistantModeChange: vi.fn(),
   newTopicPending: false,
   onNewTopicToggle: vi.fn(),
   streaming: false,
@@ -19,16 +19,17 @@ describe("ChatToolbar", () => {
 
   it("toggles new topic button", () => {
     const onToggle = vi.fn();
-    render(<ChatToolbar {...baseProps} hybridExpert={false} onNewTopicToggle={onToggle} />);
+    render(<ChatToolbar {...baseProps} onNewTopicToggle={onToggle} />);
     fireEvent.click(screen.getByText("新话题"));
     expect(onToggle).toHaveBeenCalled();
   });
 
-  it("does not expose RAG architecture controls", () => {
+  it("does not expose legacy RAG architecture or hybrid controls", () => {
     render(<ChatToolbar {...baseProps} />);
     expect(screen.queryByText("架构")).toBeNull();
-    expect(screen.queryByText("任务")).toBeNull();
     expect(screen.queryByText("来源")).toBeNull();
     expect(screen.queryByText("临时文档")).toBeNull();
+    expect(screen.queryByText("混合专家模式")).toBeNull();
+    expect(screen.getByRole("radio", { name: "任务" })).toBeTruthy();
   });
 });

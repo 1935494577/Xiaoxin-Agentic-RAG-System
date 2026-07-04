@@ -94,7 +94,7 @@ export const MEMORY_PAGE_HELP = {
     },
     {
       title: "基础",
-      detail: "记忆轮数、混合专家默认、推荐问题 — 影响 Chat 首次打开时的体验。",
+      detail: "记忆轮数、默认助手模式、推荐问题 — 影响 Chat 首次打开时的体验。",
     },
     {
       title: "检索与 KB",

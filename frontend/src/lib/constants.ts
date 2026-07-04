@@ -17,6 +17,5 @@ export const PERM_LABELS: Record<Permission, string> = {
   internal: "内部",
 };
 
-export const HYBRID_MODE_KEY = "jnao_hybrid_expert_mode";
 export const USER_ID_KEY = "rag_chat_user_id";
 export const AUTH_SESSION_KEY = "jnao_auth_session";

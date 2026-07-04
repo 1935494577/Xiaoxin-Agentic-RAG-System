@@ -5,6 +5,7 @@ import { fetchUiConfig, saveUiConfig, applyScenePreset } from "../../api/client"
 import { PageHeader } from "../../components/admin/PageHeader";
 import { SectionGuide } from "../../components/admin/SectionGuide";
 import { MEMORY_PAGE_HELP } from "../../lib/adminHelp";
+import { ASSISTANT_MODE_OPTIONS } from "../../lib/assistantMode";
 import { Button } from "../../components/ui/Button";
 import { Switch } from "../../components/ui/Switch";
 import { Slider } from "../../components/ui/Slider";
@@ -85,6 +86,7 @@ export default function MemoryPage() {
         kb_llm_judge: raw.kb_llm_judge ?? true,
         kb_post_stream_fallback: raw.kb_post_stream_fallback ?? false,
         hybrid_expert_mode: raw.hybrid_expert_mode ?? false,
+        default_assistant_mode: raw.default_assistant_mode ?? "auto",
         stream_verifier_enabled: raw.stream_verifier_enabled ?? false,
         graph_verifier_enabled: raw.graph_verifier_enabled ?? false,
         conversation_condense_enabled: raw.conversation_condense_enabled ?? true,
@@ -160,12 +162,29 @@ export default function MemoryPage() {
   const basicTab = (
     <div className="space-y-5">
       <p className="text-xs text-text-muted">
-        面向 Jnao Chat 的默认行为。用户可在对话页切换「混合专家模式」与「新话题」；语气与人设请在
+        面向 Jnao Chat 的默认行为。用户可在对话页切换「知识 / 任务 / 自动」与「新话题」；语气与人设请在
         <Link to="/admin/prompts" className="text-brand hover:underline mx-0.5">
           提示词
         </Link>
         页配置。
       </p>
+      <label className="block max-w-md">
+        <span className="text-sm text-text">默认助手模式</span>
+        <select
+          value={String(form.default_assistant_mode || "auto")}
+          onChange={(e) => set("default_assistant_mode", e.target.value)}
+          className={inputCls}
+        >
+          {ASSISTANT_MODE_OPTIONS.map((opt) => (
+            <option key={opt.id} value={opt.id}>
+              {opt.label} — {opt.description}
+            </option>
+          ))}
+        </select>
+        <FieldHint>
+          新用户首次打开 Chat 时的模式；用户可在对话页自行切换。知识=仅知识库，任务=多步工具，自动=按服务端配置路由。
+        </FieldHint>
+      </label>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <label className="block">
           <span className="text-sm text-text">短期记忆轮数</span>
@@ -193,13 +212,6 @@ export default function MemoryPage() {
         </label>
       </div>
       <div className="space-y-3">
-        <ToggleRow
-          id="mem-hybrid"
-          label="混合专家模式（新用户默认开启）"
-          help="对应 Chat 页「混合专家」开关的初始状态：知识库优先，必要时通用补充。"
-          checked={f("hybrid_expert_mode")}
-          onChange={(v) => set("hybrid_expert_mode", v)}
-        />
         <ToggleRow
           id="mem-long-term"
           label="长期记忆（session 持久化）"
@@ -231,7 +243,9 @@ export default function MemoryPage() {
 
   const kbTab = (
     <div className="space-y-5">
-      <p className="text-xs text-text-muted">控制何时走知识库回答 vs 通用回答。混合专家开启时，未命中 KB 可自动 fallback。</p>
+      <p className="text-xs text-text-muted">
+        控制何时走知识库回答 vs 通用回答。仅在助手模式为「自动」且未解析为知识/任务时，混合兜底等高级项生效。
+      </p>
       <div>
         <span className="text-sm text-text">混合检索阈值（kb_min_score）：{n("kb_min_score")}</span>
         <Slider
@@ -260,7 +274,7 @@ export default function MemoryPage() {
         <ToggleRow
           id="mem-general-fb"
           label="全局通用兜底"
-          help="仅当客户端未传 hybrid_expert_mode 时作为默认。"
+          help="服务端默认；助手模式为「自动」时作为通用兜底开关。"
           checked={f("general_fallback_enabled")}
           onChange={(v) => set("general_fallback_enabled", v)}
         />
@@ -274,7 +288,7 @@ export default function MemoryPage() {
         <ToggleRow
           id="mem-kb-post-fb"
           label="流式 KB 后再 fallback"
-          help="混合专家模式下由客户端自动启用。"
+          help="「自动」模式下由场景预设或下方全局通用兜底启用。"
           checked={f("kb_post_stream_fallback")}
           onChange={(v) => set("kb_post_stream_fallback", v)}
         />
@@ -429,7 +443,7 @@ export default function MemoryPage() {
     <div className="p-6 max-w-[860px]">
       <PageHeader
         title="对话设置"
-        description="服务端默认与阈值。Chat 页仅暴露「混合专家」与「新话题」；其余在此分 Tab 管理。"
+        description="服务端默认与阈值。Chat 页仅暴露「助手模式」与「新话题」；其余在此分 Tab 管理。"
       />
 
       <SectionGuide

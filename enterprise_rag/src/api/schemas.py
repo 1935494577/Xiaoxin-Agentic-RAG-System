@@ -47,7 +47,7 @@ class ChatRequest(BaseModel):
     )
     hybrid_expert_mode: bool | None = Field(
         default=None,
-        description="混合专家模式：true=RAG 未命中可走通用；false=仅 RAG；None 使用 UI 默认",
+        description="已废弃：由 assistant_mode 决定；客户端传值将被忽略",
     )
     rag_architecture: str | None = Field(
         default=None,
@@ -78,6 +78,11 @@ class ChatRequest(BaseModel):
     )
     skip_clarify: bool = Field(default=False, description="为 true 时跳过意图引导")
     clarify_choice_id: str | None = Field(default=None, max_length=64, description="用户选择的引导选项 id")
+    assistant_mode: str | None = Field(
+        default=None,
+        pattern="^(knowledge|task|auto)$",
+        description="助手模式：knowledge=知识库优先；task=任务/工具；auto=跟随配置",
+    )
 
 
 class SourceRef(BaseModel):
@@ -490,6 +495,7 @@ class UiConfigPublic(BaseModel):
     graph_extraction_enabled: bool = True
     agentic_max_turns: int = 6
     agentic_max_kb_searches: int = 4
+    default_assistant_mode: str = "auto"
 
 
 class UiConfigUpdate(BaseModel):
@@ -532,6 +538,11 @@ class UiConfigUpdate(BaseModel):
     agentic_max_kb_searches: int | None = Field(default=None, ge=1, le=20)
     agent_reasoning_mode: str | None = Field(default=None, pattern="^(direct|react|plan_execute)$")
     scene_preset: str | None = Field(default=None, pattern="^(kb_frontline|internal_full|api_kb_only|analyst)$")
+    default_assistant_mode: str | None = Field(
+        default=None,
+        pattern="^(knowledge|task|auto)$",
+        description="Chat 页助手模式默认值：知识 / 任务 / 自动",
+    )
 
 
 class ProcessingToolPublic(BaseModel):

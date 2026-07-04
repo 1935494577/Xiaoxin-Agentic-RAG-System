@@ -44,6 +44,7 @@ export type UiConfig = {
   agentic_max_kb_searches?: number;
   scene_preset?: string;
   scene_presets?: Array<{ id: string; label: string; description?: string }>;
+  default_assistant_mode?: "knowledge" | "task" | "auto";
 };
 
 // ===== Chat =====
@@ -146,6 +147,7 @@ export type StreamEvent =
       rag_architecture?: string;
       input_mode?: string;
       doc_task_type?: string;
+      assistant_mode?: string;
       trace_id?: string;
     }
   | { type: "stream_reset" }
@@ -171,6 +173,7 @@ export type StreamEvent =
       rag_architecture?: string;
       input_mode?: string;
       verified?: boolean;
+      assistant_mode?: string;
       trace_id?: string;
       tool_trace?: ToolTraceItem[];
       graph_viz?: GraphViz;
@@ -201,6 +204,7 @@ export type StreamPayload = {
   output_schema_id?: string;
   skip_clarify?: boolean;
   clarify_choice_id?: string;
+  assistant_mode?: "knowledge" | "task" | "auto";
 };
 
 export type IngestedSource = {

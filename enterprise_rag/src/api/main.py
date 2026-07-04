@@ -35,7 +35,7 @@ def _memory_for_user(request: Request | None, user_id: str | None) -> dict[str, 
 from api.department_chat_profile import apply_department_chat_profile
 from api.prompt_config_store import public_prompt_config, save_prompt_config
 from api.chat_routing import apply_routing_tier
-from api.routing_mode import apply_hybrid_expert_memory, resolve_hybrid_expert_mode
+from api.routing_mode import apply_hybrid_expert_memory
 from api.stream_retrieval import build_stream_retrieval_state, resolve_stream_fast_mode
 from api.admin_roles import AdminRoleMiddleware
 from api.auth_middleware import APIAuthMiddleware, SecurityHeadersMiddleware
@@ -905,7 +905,13 @@ def _prepare_chat_turn(
     )
 
 
-def _resolve_chat_architecture(req: ChatRequest, mem: dict[str, Any], runtime: dict[str, Any]) -> tuple[str, str, str | None]:
+def _resolve_chat_architecture(
+    req: ChatRequest,
+    mem: dict[str, Any],
+    runtime: dict[str, Any],
+    *,
+    rag_override: str | None = None,
+) -> tuple[str, str, str | None]:
     from agent.architecture_router import resolve_rag_architecture
     from agent.input_modes import resolve_input_mode
     from agent.llm_routing import routing_llm_runtime
@@ -923,12 +929,38 @@ def _resolve_chat_architecture(req: ChatRequest, mem: dict[str, Any], runtime: d
         input_mode=input_mode,
         doc_task_type=doc_task_type,
         scenario_tags=req.scenario_tags,
-        request_override=req.rag_architecture or mem.get("default_rag_architecture") or "auto",
+        request_override=rag_override or req.rag_architecture or mem.get("default_rag_architecture") or "auto",
         router_enabled=bool(mem.get("rag_arch_router_enabled", True)),
         llm_fallback=bool(mem.get("rag_arch_llm_fallback", False)),
         llm_runtime=llm_rt,
     )
     return arch, input_mode, doc_task_type
+
+
+def _prepare_assistant_runtime(
+    req: ChatRequest,
+    base_mem: dict[str, Any],
+) -> tuple[Any, bool, bool, dict[str, Any], str | None]:
+    from agent.runtime.router import (
+        apply_mode_to_memory,
+        pick_hybrid_expert_mode,
+        pick_rag_architecture_override,
+        pick_stream_fast_mode,
+        resolve_mode_profile,
+    )
+
+    ui = load_ui_config()
+    profile = resolve_mode_profile(req.assistant_mode, ui)
+    hybrid = pick_hybrid_expert_mode(profile, bool(ui.get("hybrid_expert_mode", False)))
+    fast = pick_stream_fast_mode(
+        profile,
+        req.stream_fast_mode,
+        bool(ui.get("stream_fast_mode", True)),
+    )
+    mem = apply_mode_to_memory(dict(base_mem), profile)
+    mem = apply_routing_tier(apply_hybrid_expert_memory(mem, hybrid))
+    rag_override = pick_rag_architecture_override(profile, req.rag_architecture)
+    return profile, hybrid, fast, mem, rag_override
 
 
 @app.post("/chat", response_model=ChatResponse)
@@ -940,11 +972,13 @@ def chat(req: ChatRequest, background_tasks: BackgroundTasks, request: Request):
             status_code=400,
             detail="未配置 API Key：请在「模型配置」中保存密钥，或在 .env 中设置 OPENAI_API_KEY。",
         )
-    mem = apply_routing_tier(
-        apply_department_chat_profile(_memory_for_user(request, req.user_id), req.user_department)
+    base_mem = apply_department_chat_profile(
+        _memory_for_user(request, req.user_id),
+        req.user_department,
     )
+    profile, _, _, mem, rag_override = _prepare_assistant_runtime(req, base_mem)
     turn = _prepare_chat_turn(req, mem, runtime)
-    rag_arch, _, _ = _resolve_chat_architecture(req, mem, runtime)
+    rag_arch, _, _ = _resolve_chat_architecture(req, mem, runtime, rag_override=rag_override)
     out = run_agent(
         question=turn.message,
         user_id=req.user_id,
@@ -987,14 +1021,11 @@ def chat_stream(req: ChatRequest, request: Request):
             detail="未配置 API Key：请在「模型配置」中保存密钥，或在 .env 中设置 OPENAI_API_KEY。",
         )
 
-    fast = resolve_stream_fast_mode(req.stream_fast_mode)
-    hybrid = resolve_hybrid_expert_mode(req.hybrid_expert_mode)
-    mem = apply_routing_tier(
-        apply_hybrid_expert_memory(
-            apply_department_chat_profile(_memory_for_user(request, req.user_id), req.user_department),
-            hybrid,
-        )
+    base_mem = apply_department_chat_profile(
+        _memory_for_user(request, req.user_id),
+        req.user_department,
     )
+    profile, hybrid, fast, mem, rag_override = _prepare_assistant_runtime(req, base_mem)
     turn = _prepare_chat_turn(req, mem, runtime)
     history = turn.history_for_llm
     scenario_tags = list(req.scenario_tags or [])
@@ -1016,12 +1047,14 @@ def chat_stream(req: ChatRequest, request: Request):
         "session_id": req.session_id,
         "quiet_routing": True,
         "hybrid_expert_mode": hybrid,
+        "assistant_mode": profile.mode,
+        "_assistant_force_tools": profile.force_tools,
         "llm_temperature_answer": req.temperature if req.temperature is not None else 0.2,
         "llm_max_tokens_rewrite": req.max_tokens_rewrite if req.max_tokens_rewrite is not None else 128,
         "llm_max_tokens_answer": req.max_tokens_answer,
         "llm_temperature_verifier": req.verifier_temperature,
         "llm_max_tokens_verifier": req.max_tokens_verifier,
-        "rag_architecture": req.rag_architecture,
+        "rag_architecture": rag_override or req.rag_architecture,
         "input_mode": req.input_mode,
         "doc_task_type": req.doc_task_type,
         "temp_document_id": req.temp_document_id,

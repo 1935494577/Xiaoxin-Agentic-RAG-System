@@ -1,10 +1,10 @@
 import { MessageSquarePlus, Info, Download } from "lucide-react";
-import { HybridToggle } from "./HybridToggle";
+import { AssistantModeSwitcher } from "./AssistantModeSwitcher";
+import type { AssistantMode } from "@/lib/assistantMode";
 
 type Props = {
-  hybridExpert: boolean;
-  onHybridChange: (on: boolean) => void;
-  hybridUsesServerDefault?: boolean;
+  assistantMode: AssistantMode;
+  onAssistantModeChange: (mode: AssistantMode) => void;
   department?: string;
   newTopicPending: boolean;
   onNewTopicToggle: () => void;
@@ -14,9 +14,8 @@ type Props = {
 };
 
 export function ChatToolbar({
-  hybridExpert,
-  onHybridChange,
-  hybridUsesServerDefault = true,
+  assistantMode,
+  onAssistantModeChange,
   department,
   newTopicPending,
   onNewTopicToggle,
@@ -27,19 +26,21 @@ export function ChatToolbar({
   return (
     <div className="max-w-[768px] mx-auto space-y-2">
       <div className="flex items-center gap-3 flex-wrap rounded-xl border border-border bg-surface-muted/50 px-3 py-2">
-        <HybridToggle enabled={hybridExpert} onChange={onHybridChange} disabled={streaming} />
+        <AssistantModeSwitcher
+          value={assistantMode}
+          onChange={onAssistantModeChange}
+          disabled={streaming}
+        />
         {department ? (
-          <span
-            className="text-[11px] text-text-muted px-2 py-0.5 rounded-full bg-white border border-border"
-            title="检索权限按登录部门过滤；与同事不一致时回答可能不同"
-          >
-            部门：{department}
-          </span>
-        ) : null}
-        {!hybridUsesServerDefault ? (
-          <span className="text-[11px] text-brand">
-            {hybridExpert ? "本页已临时开启混合专家" : "本页已临时关闭混合专家（仅知识库）"}
-          </span>
+          <>
+            <span className="hidden sm:inline h-4 w-px bg-border" aria-hidden />
+            <span
+              className="text-[11px] text-text-muted px-2 py-0.5 rounded-full bg-white border border-border"
+              title="检索权限按登录部门过滤；与同事不一致时回答可能不同"
+            >
+              部门：{department}
+            </span>
+          </>
         ) : null}
         <span className="hidden sm:inline h-4 w-px bg-border" aria-hidden />
         <button

@@ -9,7 +9,14 @@ import {
   loadMessages,
   streamChat,
 } from "../api/client";
-import { resolveHybridExpertMode, resolveStreamFastMode } from "../lib/chatDefaults";
+import { resolveStreamFastMode } from "../lib/chatDefaults";
+import {
+  loadStoredAssistantMode,
+  normalizeAssistantMode,
+  placeholderForMode,
+  saveStoredAssistantMode,
+  type AssistantMode,
+} from "../lib/assistantMode";
 import { useAuth } from "../hooks/useAuth";
 import { useUserProfile } from "../context/UserProfileContext";
 import type {
@@ -63,8 +70,7 @@ export default function ChatPage() {
     options: ClarifyOption[];
     sessionId: string;
   } | null>(null);
-  /** Session-only override; defaults come from server uiConfig so LAN users stay aligned. */
-  const [hybridOverride, setHybridOverride] = useState<boolean | null>(null);
+  const [assistantMode, setAssistantMode] = useState<AssistantMode>("auto");
 
   const { data: uiConfig } = useQuery({
     queryKey: ["uiConfig", userId],
@@ -73,7 +79,6 @@ export default function ChatPage() {
     staleTime: 300_000,
   });
 
-  const hybridExpert = resolveHybridExpertMode(uiConfig, hybridOverride);
 
   // ---- refresh sessions imperatively (like old App.tsx) ----
   const refreshSessions = useCallback(async () => {
@@ -100,9 +105,21 @@ export default function ChatPage() {
     };
   }, [userId, refreshSessions]);
 
+
   useEffect(() => {
-    setHybridOverride(null);
-  }, [uiConfig?.hybrid_expert_mode]);
+    if (!uiConfig) return;
+    const stored = loadStoredAssistantMode();
+    if (stored != null) {
+      setAssistantMode(stored);
+      return;
+    }
+    setAssistantMode(normalizeAssistantMode(uiConfig.default_assistant_mode ?? "auto"));
+  }, [uiConfig?.default_assistant_mode, uiConfig]);
+
+  const handleAssistantModeChange = useCallback((mode: AssistantMode) => {
+    setAssistantMode(mode);
+    saveStoredAssistantMode(mode);
+  }, []);
 
   // ---- load messages when session changes (like old App.tsx) ----
   useEffect(() => {
@@ -194,13 +211,13 @@ export default function ChatPage() {
           message: text,
           user_id: userId,
           user_department: department,
-          hybrid_expert_mode: hybridExpert,
           stream_fast_mode: resolveStreamFastMode(uiConfig),
           skip_query_rewrite: true,
           session_id: sid,
           history: priorHistory,
           reset_context: resetContext,
           rag_architecture: "auto",
+          assistant_mode: assistantMode,
           clarify_choice_id: opts?.clarifyChoiceId,
         },
         (evt: StreamEvent) => {
@@ -318,9 +335,7 @@ export default function ChatPage() {
     uiConfig?.suggested_questions?.filter((q) => String(q).trim()).slice(0, 12) ||
     SUGGESTIONS_FALLBACK;
 
-  const inputPlaceholder = hybridExpert
-    ? "输入问题；优先知识库，必要时补充通用能力"
-    : "输入问题，助手将基于知识库内容回答";
+  const inputPlaceholder = placeholderForMode(assistantMode);
 
   return (
     <div className="flex h-full">
@@ -455,9 +470,8 @@ export default function ChatPage() {
         <div className="border-t border-border bg-white px-5 pt-3 pb-5">
           <div className="mb-2.5">
             <ChatToolbar
-              hybridExpert={hybridExpert}
-              onHybridChange={setHybridOverride}
-              hybridUsesServerDefault={hybridOverride === null}
+              assistantMode={assistantMode}
+              onAssistantModeChange={handleAssistantModeChange}
               department={department}
               newTopicPending={newTopicPending}
               onNewTopicToggle={() => setNewTopicPending((v) => !v)}

@@ -168,6 +168,7 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
                 "input_mode": input_mode,
                 "doc_task_type": doc_task_type,
                 "route_meta": route_meta,
+                "assistant_mode": state.get("assistant_mode"),
                 "trace_id": trace.trace_id,
             }
         )
