@@ -27,13 +27,8 @@ import type {
   StreamEvent,
   ToolTraceItem,
 } from "../api/types";
-import { applyToolStreamEvent } from "../lib/streamTools";
-import {
-  applyExecutionStreamEvent,
-  buildExecutionSummary,
-  finalizeExecutionSteps,
-  type ExecutionStep,
-} from "../lib/executionTimeline";
+import { type ExecutionStep } from "../lib/executionTimeline";
+import { reduceStreamTurnEvent } from "../lib/chatStreamTurn";
 import { downloadMarkdown, messagesToMarkdown } from "../lib/exportChatMarkdown";
 import { toast } from "sonner";
 import { PanelLeftClose, PanelLeftOpen, Sparkles } from "lucide-react";
@@ -230,43 +225,42 @@ export default function ChatPage() {
           clarify_choice_id: opts?.clarifyChoiceId,
         },
         (evt: StreamEvent) => {
+          const acc = reduceStreamTurnEvent(
+            {
+              assistant,
+              streamError,
+              meta,
+              toolTrace,
+              executionSteps,
+              graphViz,
+              needsClarify,
+              clarifyEvt,
+            },
+            evt,
+            assistantMode
+          );
+          assistant = acc.assistant;
+          streamError = acc.streamError;
+          meta = acc.meta;
+          toolTrace = acc.toolTrace;
+          executionSteps = acc.executionSteps;
+          graphViz = acc.graphViz;
+          needsClarify = acc.needsClarify;
+          clarifyEvt = acc.clarifyEvt;
+
           if (evt.type === "token") {
-            assistant += evt.content;
             setStreamText(assistant);
-          } else if (evt.type === "clarify") {
-            clarifyEvt = evt;
-          } else if (evt.type === "tool_call" || evt.type === "tool_result") {
-            toolTrace = applyToolStreamEvent(toolTrace, evt);
-            executionSteps = applyExecutionStreamEvent(executionSteps, evt);
-            setStreamExecutionSteps([...executionSteps]);
-          } else if (evt.type === "status" || evt.type === "done") {
-            executionSteps = applyExecutionStreamEvent(executionSteps, evt);
-            setStreamExecutionSteps([...executionSteps]);
           } else if (evt.type === "graph_viz") {
-            graphViz = evt.graph;
             setStreamGraphViz(evt.graph);
           } else if (evt.type === "error") {
-            streamError = evt.message;
             setError(evt.message);
-          } else if (evt.type === "done") {
-            needsClarify = Boolean(evt.needs_clarify);
-            assistant = evt.answer || assistant;
-            meta = {
-              sources: evt.sources,
-              source_refs: evt.source_refs,
-              answer_mode: evt.answer_mode,
-              rag_architecture: evt.rag_architecture,
-              verified: evt.verified,
-              trace_id: evt.trace_id,
-              tool_trace: evt.tool_trace?.length ? evt.tool_trace : toolTrace,
-              graph_viz: evt.graph_viz ?? graphViz,
-              assistant_mode: evt.assistant_mode ?? assistantMode,
-              execution_summary: buildExecutionSummary(finalizeExecutionSteps(executionSteps), {
-                answer_mode: evt.answer_mode,
-                rag_architecture: evt.rag_architecture,
-                assistant_mode: evt.assistant_mode ?? assistantMode,
-              }),
-            };
+          } else if (
+            evt.type === "tool_call" ||
+            evt.type === "tool_result" ||
+            evt.type === "status" ||
+            evt.type === "done"
+          ) {
+            setStreamExecutionSteps([...executionSteps]);
           }
         },
         ctrl.signal
@@ -494,6 +488,7 @@ export default function ChatPage() {
               assistantMode={assistantMode}
               onAssistantModeChange={handleAssistantModeChange}
               department={department}
+              sessionId={sessionId}
               newTopicPending={newTopicPending}
               onNewTopicToggle={() => setNewTopicPending((v) => !v)}
               streaming={streaming}

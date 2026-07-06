@@ -1,4 +1,9 @@
-"""ReAct 工具循环（OpenAI-compatible）。"""
+"""ReAct 工具循环（OpenAI-compatible）。
+
+.. deprecated::
+    task/auto 主编排已迁移至 Jnao ``make_lead_agent``（见 ``jnao_harness.lead_stream``）。
+    本模块仅作 harness 不可用时的回退，以及 knowledge 快路径下的 realtime 工具辅助。
+"""
 
 from __future__ import annotations
 

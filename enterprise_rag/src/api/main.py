@@ -195,7 +195,11 @@ async def lifespan(app: FastAPI):
 
     if settings.warmup_models_on_startup:
         threading.Thread(target=_warmup, daemon=True).start()
-    yield
+
+    from jnao_harness.runtime_bootstrap import harness_runtime_lifespan
+
+    async with harness_runtime_lifespan(app):
+        yield
 
 
 app = FastAPI(
@@ -234,6 +238,34 @@ app.include_router(agent_tools_router)
 app.include_router(feedback_router)
 app.include_router(feedback_router, prefix="/api/v1")
 
+try:
+    from jnao_harness.gateway.routers.channel_connections import router as channel_connections_router
+
+    app.include_router(channel_connections_router)
+except ImportError:
+    pass
+
+try:
+    from jnao_harness.gateway.routers.channels import router as channels_router
+
+    app.include_router(channels_router)
+except ImportError:
+    pass
+
+try:
+    from jnao_harness.gateway.routers.token_usage import router as token_usage_router
+
+    app.include_router(token_usage_router)
+except ImportError:
+    pass
+
+try:
+    from jnao_harness.gateway.routers.skills import router as skills_router
+
+    app.include_router(skills_router)
+except ImportError:
+    pass
+
 
 @app.get("/", include_in_schema=False)
 def root():
@@ -262,6 +294,27 @@ def _safe_raw_file(relative_path: str) -> Path:
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/health/llm")
+def health_llm():
+    """Probe default LLM (.env / default model profile) for connectivity."""
+    from api.schemas import ChatRequest
+
+    runtime = resolve_llm_runtime(ChatRequest(message="ping", user_id="health"))
+    ok, msg = test_llm_connection(
+        api_base=str(runtime.get("llm_api_base") or ""),
+        api_key=str(runtime.get("llm_api_key") or ""),
+        model=str(runtime.get("chat_model") or ""),
+        extra_headers=runtime.get("llm_extra_headers") if isinstance(runtime.get("llm_extra_headers"), dict) else None,
+        timeout_sec=10.0,
+    )
+    return {
+        "connected": ok,
+        "message": msg,
+        "model": runtime.get("chat_model"),
+        "api_base": runtime.get("llm_api_base"),
+    }
 
 
 @app.get("/config/nav")
@@ -1014,66 +1067,114 @@ def chat(req: ChatRequest, background_tasks: BackgroundTasks, request: Request):
 @app.post("/chat/stream")
 def chat_stream(req: ChatRequest, request: Request):
     """SSE 流式对话：检索完成后逐 token 返回答案，末尾返回引用。"""
-    runtime = resolve_llm_runtime(req)
-    if not (runtime.get("llm_api_key") or "").strip():
-        raise HTTPException(
-            status_code=400,
-            detail="未配置 API Key：请在「模型配置」中保存密钥，或在 .env 中设置 OPENAI_API_KEY。",
+    import json
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    def _sse_error_response(message: str) -> StreamingResponse:
+        def _err_gen():
+            payload = {"type": "error", "message": message[:400]}
+            yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+        return StreamingResponse(
+            _err_gen(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
         )
 
-    base_mem = apply_department_chat_profile(
-        _memory_for_user(request, req.user_id),
-        req.user_department,
-    )
-    profile, hybrid, fast, mem, rag_override = _prepare_assistant_runtime(req, base_mem)
-    turn = _prepare_chat_turn(req, mem, runtime)
-    history = turn.history_for_llm
-    scenario_tags = list(req.scenario_tags or [])
-    if req.channel and req.channel not in scenario_tags:
-        scenario_tags.append(req.channel)
-    state: dict[str, Any] = {
-        "question": turn.message,
-        "user_id": req.user_id,
-        "user_department": req.user_department,
-        "allowed_sources": req.allowed_sources,
-        "history": history,
-        "memory_config": mem,
-        "retrieval_query": turn.retrieval_query,
-        "topic_shift": turn.topic_shift,
-        "skip_retrieval_rewrite": turn.skip_retrieval_rewrite,
-        "rolling_summary": turn.rolling_summary,
-        "turn_meta": turn.meta,
-        "routing_model": runtime.get("routing_model"),
-        "session_id": req.session_id,
-        "quiet_routing": True,
-        "hybrid_expert_mode": hybrid,
-        "assistant_mode": profile.mode,
-        "_assistant_force_tools": profile.force_tools,
-        "llm_temperature_answer": req.temperature if req.temperature is not None else 0.2,
-        "llm_max_tokens_rewrite": req.max_tokens_rewrite if req.max_tokens_rewrite is not None else 128,
-        "llm_max_tokens_answer": req.max_tokens_answer,
-        "llm_temperature_verifier": req.verifier_temperature,
-        "llm_max_tokens_verifier": req.max_tokens_verifier,
-        "rag_architecture": rag_override or req.rag_architecture,
-        "input_mode": req.input_mode,
-        "doc_task_type": req.doc_task_type,
-        "temp_document_id": req.temp_document_id,
-        "scenario_tags": scenario_tags or None,
-        "channel": req.channel,
-        "output_schema_id": req.output_schema_id,
-        "skip_clarify": req.skip_clarify,
-        "clarify_choice_id": req.clarify_choice_id,
-    }
-    state.update(
-        build_stream_retrieval_state(
-            fast,
-            skip_query_rewrite=req.skip_query_rewrite,
+    try:
+        runtime = resolve_llm_runtime(req)
+        if not (runtime.get("llm_api_key") or "").strip():
+            raise HTTPException(
+                status_code=400,
+                detail="未配置 API Key：请在「模型配置」中保存密钥，或在 .env 中设置 OPENAI_API_KEY。",
+            )
+
+        base_mem = apply_department_chat_profile(
+            _memory_for_user(request, req.user_id),
+            req.user_department,
         )
-    )
-    state.update(runtime)
+        profile, hybrid, fast, mem, rag_override = _prepare_assistant_runtime(req, base_mem)
+        turn = _prepare_chat_turn(req, mem, runtime)
+        history = turn.history_for_llm
+        scenario_tags = list(req.scenario_tags or [])
+        if req.channel and req.channel not in scenario_tags:
+            scenario_tags.append(req.channel)
+        state: dict[str, Any] = {
+            "question": turn.message,
+            "user_id": req.user_id,
+            "user_department": req.user_department,
+            "allowed_sources": req.allowed_sources,
+            "history": history,
+            "memory_config": mem,
+            "retrieval_query": turn.retrieval_query,
+            "topic_shift": turn.topic_shift,
+            "skip_retrieval_rewrite": turn.skip_retrieval_rewrite,
+            "rolling_summary": turn.rolling_summary,
+            "turn_meta": turn.meta,
+            "routing_model": runtime.get("routing_model"),
+            "session_id": req.session_id,
+            "quiet_routing": True,
+            "hybrid_expert_mode": hybrid,
+            "assistant_mode": profile.mode,
+            "_assistant_force_tools": profile.force_tools,
+            "llm_temperature_answer": req.temperature if req.temperature is not None else 0.2,
+            "llm_max_tokens_rewrite": req.max_tokens_rewrite if req.max_tokens_rewrite is not None else 128,
+            "llm_max_tokens_answer": req.max_tokens_answer,
+            "llm_temperature_verifier": req.verifier_temperature,
+            "llm_max_tokens_verifier": req.max_tokens_verifier,
+            "rag_architecture": rag_override or req.rag_architecture,
+            "input_mode": req.input_mode,
+            "doc_task_type": req.doc_task_type,
+            "temp_document_id": req.temp_document_id,
+            "scenario_tags": scenario_tags or None,
+            "channel": req.channel,
+            "output_schema_id": req.output_schema_id,
+            "skip_clarify": req.skip_clarify,
+            "clarify_choice_id": req.clarify_choice_id,
+        }
+        state.update(
+            build_stream_retrieval_state(
+                fast,
+                skip_query_rewrite=req.skip_query_rewrite,
+            )
+        )
+        state.update(runtime)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("chat/stream failed before SSE generator")
+        from api.stream_errors import format_stream_error
+
+        return _sse_error_response(format_stream_error(exc))
 
     def _gen():
-        yield from stream_rag_chat(state)
+        from jnao_harness.availability import should_use_agent_lead
+        from jnao_harness.lead_stream import stream_agent_lead
+
+        try:
+            if should_use_agent_lead(state):
+                try:
+                    yield from stream_agent_lead(state)
+                    return
+                except Exception as exc:
+                    logger.warning(
+                        "Jnao lead stream failed, falling back to KB path: %s",
+                        exc,
+                        exc_info=True,
+                    )
+            yield from stream_rag_chat(state)
+        except Exception as exc:
+            logger.exception("chat/stream generator failed")
+            from api.stream_errors import format_stream_error
+
+            payload = {"type": "error", "message": format_stream_error(exc)}
+            yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(
         _gen(),

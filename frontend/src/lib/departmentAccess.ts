@@ -13,6 +13,7 @@ import {
   ThumbsUp,
   Users,
   Wrench,
+  Radio,
 } from "lucide-react";
 import type { Department } from "./constants";
 import { DEPT_OPTIONS } from "./constants";
@@ -33,6 +34,7 @@ export const ADMIN_FEATURES = [
   "trace",
   "tutorial",
   "scenarios",
+  "channels",
   "users",
 ] as const;
 
@@ -71,7 +73,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     id: "system",
     label: "系统配置",
-    featureIds: ["memory", "prompts", "models", "processing", "vector_store"],
+    featureIds: ["memory", "prompts", "models", "processing", "vector_store", "channels"],
   },
   {
     id: "administration",
@@ -100,6 +102,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   { id: "feedback", label: "用户反馈", href: "/admin/feedback", icon: ThumbsUp },
   { id: "eval_reports", label: "评测报告", href: "/admin/eval-reports", icon: BarChart3 },
   { id: "trace", label: "链路 Trace", href: "/admin/trace", icon: Activity },
+  { id: "channels", label: "IM 渠道", href: "/admin/channels", icon: Radio },
   { id: "tutorial", label: "教程", href: "/admin/tutorial", icon: BookOpen },
   { id: "users", label: "账号管理", href: "/admin/users", icon: Users },
 ];
@@ -114,6 +117,7 @@ const ADMIN_PATH_FEATURE: Array<{ prefix: string; feature: AdminFeature }> = [
   { prefix: "/admin/feedback", feature: "feedback" },
   { prefix: "/admin/eval-reports", feature: "eval_reports" },
   { prefix: "/admin/trace", feature: "trace" },
+  { prefix: "/admin/channels", feature: "channels" },
   { prefix: "/admin/tutorial", feature: "tutorial" },
   { prefix: "/admin/scenarios", feature: "scenarios" },
   { prefix: "/admin/users", feature: "users" },

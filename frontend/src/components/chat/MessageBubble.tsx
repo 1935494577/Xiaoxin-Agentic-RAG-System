@@ -324,6 +324,9 @@ function MessageBubble({
 
 export default memo(MessageBubble, (prev, next) => {
   if (prev.streaming || next.streaming) return false;
+  const prevGraph = prev.graphViz ?? graphVizFromMessageMeta(prev.message.meta);
+  const nextGraph = next.graphViz ?? graphVizFromMessageMeta(next.message.meta);
+  if (prevGraph !== nextGraph) return false;
   return (
     prev.message.content === next.message.content &&
     prev.message.role === next.message.role &&

@@ -1,4 +1,4 @@
-"""DF-0: DeerFlow config + harness path (real parameters, no mocks for file layout)."""
+"""DF-0: agent harness config + harness path (real parameters, no mocks for file layout)."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_CONFIG_VERSION = 17
 EXPECTED_MODEL_NAME = "jnao-default"
 EXPECTED_WEB_SEARCH_USE = "deerflow.community.tavily.tools:web_search_tool"
-EXPECTED_KB_SEARCH_USE = "deerflow_community.kb_search:kb_search_tool"
+EXPECTED_KB_SEARCH_USE = "jnao_community.kb_search:kb_search_tool"
 DEFAULT_HARNESS_SUFFIX = Path("backend") / "packages" / "harness"
 
 
@@ -41,14 +41,6 @@ def _tool_by_name(cfg: dict, name: str) -> dict:
         if isinstance(row, dict) and row.get("name") == name:
             return row
     raise AssertionError(f"tool {name!r} not in config.yaml tools")
-
-
-@pytest.fixture(autouse=True)
-def _deerflow_project_root(monkeypatch: pytest.MonkeyPatch) -> None:
-    """DeerFlow resolves config from project root — mirror production env in tests."""
-    monkeypatch.setenv("DEER_FLOW_PROJECT_ROOT", str(REPO_ROOT))
-    monkeypatch.setenv("DEER_FLOW_CONFIG_PATH", str(_config_path()))
-    monkeypatch.setenv("DEER_FLOW_EXTENSIONS_CONFIG_PATH", str(_extensions_path()))
 
 
 def test_repo_has_deerflow_config_files():
@@ -105,7 +97,7 @@ def test_extensions_config_json_skills_object():
 
 
 def test_harness_path_points_to_local_deer_flow():
-    from jnao_deerflow.paths import resolve_harness_root
+    from jnao_harness.paths import resolve_harness_root
 
     root = resolve_harness_root()
     assert root.is_dir(), f"harness root missing: {root}"
@@ -117,7 +109,7 @@ def test_harness_does_not_import_app_layer():
     """Port of deer-flow/backend/tests/test_harness_boundary.py against local harness."""
     import ast
 
-    from jnao_deerflow.paths import resolve_harness_root
+    from jnao_harness.paths import resolve_harness_root
 
     harness_deerflow = resolve_harness_root() / "deerflow"
     violations: list[str] = []
@@ -136,9 +128,9 @@ def test_harness_does_not_import_app_layer():
     assert not violations, "harness must not import app:\n" + "\n".join(violations)
 
 
-@pytest.mark.deerflow
-def test_deerflow_get_app_config_reads_jnao_config():
-    """Requires deerflow-harness installed (see requirements-deerflow.txt)."""
+@pytest.mark.harness
+def test_harness_get_app_config_reads_jnao_config():
+    """Requires deerflow-harness installed (see requirements-harness.txt)."""
     deerflow = pytest.importorskip("deerflow")
     from deerflow.config.app_config import AppConfig
 
@@ -150,8 +142,8 @@ def test_deerflow_get_app_config_reads_jnao_config():
     assert deerflow is not None
 
 
-@pytest.mark.deerflow
-def test_deerflow_get_available_tools_includes_kb_and_web_search():
+@pytest.mark.harness
+def test_harness_get_available_tools_includes_kb_and_web_search():
     pytest.importorskip("deerflow")
     from deerflow.config.app_config import AppConfig
     from deerflow.tools import get_available_tools

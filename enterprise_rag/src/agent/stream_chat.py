@@ -41,6 +41,7 @@ from agent.output_schemas import output_schema_instruction
 from graph.prompts import graph_kb_system_extra
 from config import settings
 from evaluation.stream_langsmith import new_stream_tracer
+from api.stream_errors import format_stream_error
 from openai import OpenAI
 
 
@@ -238,7 +239,7 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
                 )
         except Exception as e:
             trace.finish({}, error=str(e))
-            yield _evt({"type": "error", "message": str(e), "trace_id": trace.trace_id})
+            yield _evt({"type": "error", "message": format_stream_error(e), "trace_id": trace.trace_id})
             return
 
     with trace.span(
@@ -429,7 +430,7 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
             state["_tool_trace"] = tool_trace
     except Exception as e:
         trace.finish({"answer_mode": answer_mode}, error=str(e))
-        yield _evt({"type": "error", "message": str(e)[:400], "trace_id": trace.trace_id})
+        yield _evt({"type": "error", "message": format_stream_error(e), "trace_id": trace.trace_id})
         return
 
     answer = "".join(parts).strip()

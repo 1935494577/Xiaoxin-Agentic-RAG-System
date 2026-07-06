@@ -1,4 +1,4 @@
-"""Resolve DeerFlow harness and project paths (Windows dev default included)."""
+"""Resolve Jnao harness and project paths (Windows dev default included)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ def repo_root() -> Path:
     env = (os.getenv("DEER_FLOW_PROJECT_ROOT") or os.getenv("JNAO_REPO_ROOT") or "").strip()
     if env:
         return Path(env).resolve()
-    # enterprise_rag/src/jnao_deerflow/paths.py → repo root
+    # enterprise_rag/src/jnao_harness/paths.py → repo root
     return Path(__file__).resolve().parents[3]
 
 
@@ -19,9 +19,9 @@ def resolve_harness_root() -> Path:
     """
     Local deer-flow harness package directory.
 
-    Override with DEER_FLOW_HARNESS_PATH when the checkout is not at the default path.
+    Override with AGENT_HARNESS_PATH or DEER_FLOW_HARNESS_PATH when the checkout is not at the default path.
     """
-    env = (os.getenv("DEER_FLOW_HARNESS_PATH") or "").strip()
+    env = (os.getenv("AGENT_HARNESS_PATH") or os.getenv("DEER_FLOW_HARNESS_PATH") or "").strip()
     if env:
         return Path(env).resolve()
     default = Path(r"D:\bytedance flow\deer-flow\backend\packages\harness")
@@ -36,7 +36,7 @@ def assert_harness_present() -> Path:
     root = resolve_harness_root()
     if not (root / "deerflow").is_dir():
         raise FileNotFoundError(
-            f"deerflow harness not found under {root}. "
-            "Set DEER_FLOW_HARNESS_PATH to backend/packages/harness in your deer-flow clone."
+            f"Agent harness not found under {root}. "
+            "Set AGENT_HARNESS_PATH to backend/packages/harness in your harness checkout."
         )
     return root

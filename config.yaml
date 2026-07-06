@@ -1,4 +1,4 @@
-# Jnao × DeerFlow — minimal config (schema aligned with deer-flow/config.example.yaml)
+# Jnao agent harness — minimal config (schema aligned with upstream harness config.example.yaml)
 # Copy from deer-flow when upgrading: bump config_version and run merge manually.
 
 config_version: 17
@@ -34,10 +34,44 @@ tools:
 
   - name: kb_search
     group: rag
-    use: deerflow_community.kb_search:kb_search_tool
+    use: jnao_community.kb_search:kb_search_tool
+
+  - name: list_kb_sources
+    group: rag
+    use: jnao_community.list_kb_sources:list_kb_sources_tool
+
+  - name: format_structured_output
+    group: rag
+    use: jnao_community.format_structured_output:format_structured_output_tool
+
+database:
+  backend: sqlite
+  sqlite_dir: .deer-flow/data
 
 subagents:
   enabled: false
 
 sandbox:
+  use: deerflow.sandbox.local:LocalSandboxProvider
   provider: local
+
+# IM 渠道（可选）：需 harness API（.venv-harness）+ 下方凭证；仅看状态页可不填
+# 对齐 DeerFlow config.example.yaml — bot 凭证在 channels.*，用户绑定在 channel_connections.*
+# channel_connections:
+#   enabled: false
+#   require_bound_identity: true
+#   feishu:
+#     enabled: false
+#   wecom:
+#     enabled: false
+# channels:
+#   gateway_url: http://127.0.0.1:8010
+#   langgraph_url: http://127.0.0.1:8010/api/v1
+#   feishu:
+#     enabled: false
+#     app_id: ""
+#     app_secret: ""
+#   wecom:
+#     enabled: false
+#     bot_id: ""
+#     bot_secret: ""

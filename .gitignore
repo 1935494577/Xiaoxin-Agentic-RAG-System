@@ -2,6 +2,7 @@
 # 密钥只放在 .env（已被忽略）；勿在本文件写入 sk- 等明文，否则仍会进 Git 历史。
 .venv/
 .venv-deerflow/
+.venv-harness/
 .deer-flow/
 venv/
 __pycache__/
@@ -49,6 +50,7 @@ enterprise_rag/data/platform_config.db
 enterprise_rag/data/config/auth_bootstrap_credentials.txt
 enterprise_rag/data/knowledge_graph.db
 enterprise_rag/data/chat_trace.jsonl
+enterprise_rag/data/channels/runtime-config.json
 enterprise_rag/data/vector_stores.json
 enterprise_rag/data/vector_stores/**
 !enterprise_rag/data/vector_stores/.gitkeep

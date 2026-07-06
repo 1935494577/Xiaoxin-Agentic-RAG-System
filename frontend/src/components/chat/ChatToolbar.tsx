@@ -1,11 +1,13 @@
 import { MessageSquarePlus, Info, Download } from "lucide-react";
 import { AssistantModeSwitcher } from "./AssistantModeSwitcher";
+import { ThreadTokenBadge } from "./ThreadTokenBadge";
 import type { AssistantMode } from "@/lib/assistantMode";
 
 type Props = {
   assistantMode: AssistantMode;
   onAssistantModeChange: (mode: AssistantMode) => void;
   department?: string;
+  sessionId?: string | null;
   newTopicPending: boolean;
   onNewTopicToggle: () => void;
   streaming: boolean;
@@ -17,6 +19,7 @@ export function ChatToolbar({
   assistantMode,
   onAssistantModeChange,
   department,
+  sessionId,
   newTopicPending,
   onNewTopicToggle,
   streaming,
@@ -42,6 +45,7 @@ export function ChatToolbar({
             </span>
           </>
         ) : null}
+        <ThreadTokenBadge threadId={sessionId} />
         <span className="hidden sm:inline h-4 w-px bg-border" aria-hidden />
         <button
           type="button"

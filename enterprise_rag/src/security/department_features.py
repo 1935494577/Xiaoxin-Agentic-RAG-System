@@ -80,4 +80,10 @@ def feature_for_request(method: str, path: str) -> str | None:
     if p.startswith("/debug/trace-status"):
         return "trace"
 
+    if p.startswith("/api/channels"):
+        return "channels"
+
+    if p.startswith("/api/skills") and m != "GET":
+        return "channels"
+
     return None
