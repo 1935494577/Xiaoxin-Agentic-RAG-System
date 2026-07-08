@@ -796,6 +796,9 @@ class ChannelManager:
         channel_sessions: dict[str, Any] | None = None,
         connection_repo: Any | None = None,
         require_bound_identity: bool = False,
+        rag_api_url: str | None = None,
+        use_rag_backend: bool = False,
+        im_default_department: str | None = None,
     ) -> None:
         self.bus = bus
         self.store = store
@@ -807,6 +810,9 @@ class ChannelManager:
         self._channel_sessions = dict(channel_sessions or {})
         self._connection_repo = connection_repo
         self._require_bound_identity = require_bound_identity
+        self._rag_api_url = rag_api_url
+        self._use_rag_backend = use_rag_backend
+        self._im_default_department = (im_default_department or "").strip() or None
         self._client = None  # lazy init — langgraph_sdk async client
         self._channel_metadata_synced: set[str] = set()
         # Per-conversation locks so concurrent inbound messages for the same
@@ -832,6 +838,15 @@ class ChannelManager:
             if channel is not None:
                 return channel.supports_streaming
         return CHANNEL_CAPABILITIES.get(channel_name, {}).get("supports_streaming", False)
+
+    async def _try_handle_jnao_rag_chat(self, msg: InboundMessage) -> bool:
+        if not self._use_rag_backend:
+            return False
+        try:
+            from jnao_harness.channel_rag_backend import handle_channel_rag_chat
+        except ImportError:
+            return False
+        return await handle_channel_rag_chat(self, msg)
 
     def _resolve_session_layer(self, msg: InboundMessage) -> tuple[dict[str, Any], dict[str, Any]]:
         channel_layer = _as_dict(self._channel_sessions.get(msg.channel_name))
@@ -1279,6 +1294,9 @@ class ChannelManager:
         bound_identity_rejection = None if bound_identity_checked else await self._get_bound_identity_rejection(msg)
         if bound_identity_rejection is not None:
             await self._reject_unbound_channel_message(msg, bound_identity_rejection=bound_identity_rejection)
+            return
+
+        if await self._try_handle_jnao_rag_chat(msg):
             return
 
         client = self._get_client()

@@ -18,7 +18,7 @@ if (-not (Test-Path (Join-Path $Venv "Scripts\python.exe"))) {
 
 $Py = Join-Path $Venv "Scripts\python.exe"
 & $Py -m pip install -U pip
-& $Py -m pip install -r (Join-Path $Root "requirements-harness.txt")
+& $Py -m pip install -r (Join-Path $Root "requirements-harness-gateway.txt")
 & $Py -m pip install -e $HarnessPath
 
 $env:DEER_FLOW_PROJECT_ROOT = $Root
@@ -26,9 +26,7 @@ $env:DEER_FLOW_CONFIG_PATH = Join-Path $Root "config.yaml"
 $env:DEER_FLOW_EXTENSIONS_CONFIG_PATH = Join-Path $Root "extensions_config.json"
 $env:PYTHONPATH = Join-Path $Root "enterprise_rag\src"
 
-if (-not $env:OPENAI_CHAT_MODEL) { $env:OPENAI_CHAT_MODEL = "gpt-4o-mini" }
-if (-not $env:OPENAI_API_BASE) { $env:OPENAI_API_BASE = "http://127.0.0.1:9999/v1" }
-if (-not $env:OPENAI_API_KEY) { $env:OPENAI_API_KEY = "test-key-for-harness-config" }
+if (-not $env:OPENAI_CHAT_MODEL) { $env:OPENAI_CHAT_MODEL = "deepseek-v4-flash" }
 
 Write-Host "Running harness integration tests..."
 & $Py -m pytest @(

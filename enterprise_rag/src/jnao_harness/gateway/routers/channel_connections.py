@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -17,6 +18,7 @@ from jnao_harness.channels_config import (
     merge_channels_config,
 )
 from jnao_harness.gateway.auth import require_admin_user
+from jnao_harness.gateway.gateway_client import harness_gateway_url, proxy_gateway_json
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,7 @@ router = APIRouter(prefix="/api/channels", tags=["channel-connections"])
 
 _MASKED = "********"
 _ADMIN_DETAIL = "Admin privileges required to manage channel runtime credentials."
+_STATE_TTL_SECONDS = 600
 
 _PROVIDER_META: dict[str, dict[str, str]] = {
     "telegram": {"display_name": "Telegram", "auth_mode": "deep_link"},
@@ -96,6 +99,29 @@ class ChannelProvidersResponse(BaseModel):
     providers: list[ChannelProviderResponse]
 
 
+class ChannelConnectResponse(BaseModel):
+    provider: str
+    mode: str
+    url: str | None = None
+    code: str
+    instruction: str
+    expires_in: int
+
+
+class ChannelConnectionResponse(BaseModel):
+    id: str
+    provider: str
+    status: str
+    external_account_id: str | None = None
+    external_account_name: str | None = None
+    workspace_id: str | None = None
+    workspace_name: str | None = None
+
+
+class ChannelConnectionsResponse(BaseModel):
+    connections: list[ChannelConnectionResponse]
+
+
 class ChannelRuntimeConfigRequest(BaseModel):
     values: dict[str, str] = Field(default_factory=dict)
 
@@ -132,6 +158,22 @@ def _runtime_configured(provider: str, channels_config: dict[str, Any]) -> bool:
     return all(str(runtime.get(key) or "").strip() for key in _RUNTIME_REQUIREMENTS[provider])
 
 
+async def _gateway_channel_status() -> dict[str, Any] | None:
+    payload = await proxy_gateway_json("GET", "/api/channels/")
+    return payload if isinstance(payload, dict) else None
+
+
+def _gateway_provider_running(provider: str, status: dict[str, Any] | None) -> bool | None:
+    if not isinstance(status, dict):
+        return None
+    if not status.get("service_running"):
+        return False
+    channel = status.get("channels", {}).get(provider)
+    if not isinstance(channel, dict):
+        return None
+    return bool(channel.get("running"))
+
+
 def _runtime_running(provider: str) -> bool | None:
     try:
         from app.channels.service import get_channel_service
@@ -149,7 +191,37 @@ def _runtime_running(provider: str) -> bool | None:
     return bool(channel.get("running"))
 
 
-def _provider_response(provider: str, channels_config: dict[str, Any]) -> ChannelProviderResponse:
+def _connect_instruction(provider: str, code: str) -> str:
+    meta = _PROVIDER_META.get(provider, {})
+    display_name = meta.get("display_name", provider)
+    if provider == "telegram":
+        return f"向 {display_name} 机器人发送：/start {code}"
+    return f"向 {display_name} 机器人发送：/connect {code}"
+
+
+async def _gateway_connect_response(provider: str) -> ChannelConnectResponse | None:
+    payload = await proxy_gateway_json("POST", f"/api/channels/{provider}/connect")
+    if payload is None:
+        return None
+    code = str(payload.get("code") or "").strip()
+    if not code:
+        return None
+    return ChannelConnectResponse(
+        provider=provider,
+        mode=str(payload.get("mode") or _PROVIDER_META[provider]["auth_mode"]),
+        url=payload.get("url"),
+        code=code,
+        instruction=_connect_instruction(provider, code),
+        expires_in=int(payload.get("expires_in") or _STATE_TTL_SECONDS),
+    )
+
+
+def _provider_response(
+    provider: str,
+    channels_config: dict[str, Any],
+    *,
+    connection_status: str | None = None,
+) -> ChannelProviderResponse:
     meta = _PROVIDER_META[provider]
     enabled = is_provider_enabled(provider)
     configured = enabled and _runtime_configured(provider, channels_config)
@@ -166,7 +238,12 @@ def _provider_response(provider: str, channels_config: dict[str, Any]) -> Channe
             if not value:
                 continue
             credential_values[field.name] = _MASKED if field.type == "password" else value
-    connection_status = "connected" if configured and _runtime_running(provider) else "not_connected"
+    resolved_status = connection_status
+    if resolved_status is None:
+        if configured and _runtime_running(provider):
+            resolved_status = "not_connected"
+        else:
+            resolved_status = "not_connected"
     return ChannelProviderResponse(
         provider=provider,
         display_name=meta["display_name"],
@@ -175,7 +252,7 @@ def _provider_response(provider: str, channels_config: dict[str, Any]) -> Channe
         connectable=configured and unavailable is None,
         unavailable_reason=unavailable,
         auth_mode=meta["auth_mode"],
-        connection_status=connection_status,
+        connection_status=resolved_status,
         credential_fields=_credential_fields(provider),
         credential_values=credential_values,
     )
@@ -220,15 +297,83 @@ async def _apply_runtime_channel(provider: str, runtime_config: dict[str, Any]) 
         return False
 
 
+@router.get("/connections", response_model=ChannelConnectionsResponse)
+async def get_channel_connections(request: Request) -> ChannelConnectionsResponse:
+    payload = await proxy_gateway_json("GET", "/api/channels/connections")
+    if isinstance(payload, dict):
+        rows = payload.get("connections")
+        if isinstance(rows, list):
+            connections = [ChannelConnectionResponse(**row) for row in rows if isinstance(row, dict)]
+            return ChannelConnectionsResponse(connections=connections)
+    return ChannelConnectionsResponse(connections=[])
+
+
+@router.post("/{provider}/connect", response_model=ChannelConnectResponse)
+async def connect_channel_provider(provider: str, request: Request) -> ChannelConnectResponse:
+    if provider not in _PROVIDER_META:
+        raise HTTPException(status_code=404, detail="Unknown channel provider")
+    if not is_connections_enabled():
+        raise HTTPException(status_code=400, detail="Channel connections are disabled")
+    if not is_provider_enabled(provider):
+        raise HTTPException(status_code=400, detail="Channel provider is not enabled")
+
+    channels_config = await _channels_config(request)
+    if not _runtime_configured(provider, channels_config):
+        raise HTTPException(status_code=400, detail="请先保存机器人凭证")
+    if _runtime_running(provider) is False:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{_PROVIDER_META[provider]['display_name']} 已配置但未运行，请确认 Harness Gateway (8011) 已启动。",
+        )
+    gateway_status = await _gateway_channel_status()
+    gateway_running = _gateway_provider_running(provider, gateway_status)
+    if gateway_running is False:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"{_PROVIDER_META[provider]['display_name']} Worker 未运行，"
+                "请检查 Bot 凭证与网络（需能访问 wss://openws.work.weixin.qq.com）。"
+            ),
+        )
+
+    proxied = await _gateway_connect_response(provider)
+    if proxied is not None:
+        return proxied
+
+    if not harness_gateway_url():
+        raise HTTPException(
+            status_code=503,
+            detail="Harness Gateway 未配置。请使用 run-dev-harness.ps1 启动 8011 服务。",
+        )
+    raise HTTPException(
+        status_code=503,
+        detail="无法从 Harness Gateway 获取绑定码，请确认 8011 服务正在运行。",
+    )
+
+
 @router.get("/providers", response_model=ChannelProvidersResponse)
 async def get_channel_providers(request: Request) -> ChannelProvidersResponse:
     enabled = is_connections_enabled()
     channels_config = await _channels_config(request)
-    providers = [
-        _provider_response(provider, channels_config)
-        for provider in _PROVIDER_META
-        if is_provider_enabled(provider)
-    ]
+    connected_providers: set[str] = set()
+    payload = await proxy_gateway_json("GET", "/api/channels/connections")
+    if isinstance(payload, dict):
+        rows = payload.get("connections")
+        if isinstance(rows, list):
+            for row in rows:
+                if isinstance(row, dict) and row.get("status") == "connected" and row.get("provider"):
+                    connected_providers.add(str(row["provider"]))
+
+    providers: list[ChannelProviderResponse] = []
+    for provider in _PROVIDER_META:
+        if not is_provider_enabled(provider):
+            continue
+        configured = _runtime_configured(provider, channels_config)
+        running = _runtime_running(provider)
+        status = "not_connected"
+        if configured and running and provider in connected_providers:
+            status = "connected"
+        providers.append(_provider_response(provider, channels_config, connection_status=status))
     return ChannelProvidersResponse(enabled=enabled, providers=providers)
 
 
@@ -266,6 +411,13 @@ async def configure_channel_provider_runtime(
     live = await _channels_config(request)
     live[provider] = runtime_config
     request.app.state.channels_config = live
+
+    await proxy_gateway_json(
+        "POST",
+        f"/api/channels/{provider}/runtime-config",
+        json={"values": values if provider != "telegram" else {**values, "bot_username": runtime_config.get("bot_username", "")}},
+    )
+
     return _provider_response(provider, live)
 
 

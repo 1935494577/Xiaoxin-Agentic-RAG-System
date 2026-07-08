@@ -18,8 +18,8 @@ models:
     display_name: Jnao Default
     use: langchain_openai:ChatOpenAI
     model: $OPENAI_CHAT_MODEL
-    api_base: $OPENAI_API_BASE
-    api_key: $OPENAI_API_KEY
+    openai_api_base: $OPENAI_API_BASE
+    openai_api_key: $OPENAI_API_KEY
     max_tokens: 4096
 
 tool_groups:
@@ -55,23 +55,44 @@ sandbox:
   use: deerflow.sandbox.local:LocalSandboxProvider
   provider: local
 
-# IM 渠道（可选）：需 harness API（.venv-harness）+ 下方凭证；仅看状态页可不填
-# 对齐 DeerFlow config.example.yaml — bot 凭证在 channels.*，用户绑定在 channel_connections.*
-# channel_connections:
-#   enabled: false
-#   require_bound_identity: true
-#   feishu:
-#     enabled: false
-#   wecom:
-#     enabled: false
-# channels:
-#   gateway_url: http://127.0.0.1:8010
-#   langgraph_url: http://127.0.0.1:8010/api/v1
-#   feishu:
-#     enabled: false
-#     app_id: ""
-#     app_secret: ""
-#   wecom:
-#     enabled: false
-#     bot_id: ""
-#     bot_secret: ""
+# IM 渠道：Harness Gateway（8011）跑 Worker；凭证可在 Admin → IM 渠道 写入 runtime-config.json
+channel_connections:
+  enabled: true
+  require_bound_identity: false
+  wecom:
+    enabled: true
+  feishu:
+    enabled: true
+  telegram:
+    enabled: true
+  slack:
+    enabled: true
+  discord:
+    enabled: true
+  dingtalk:
+    enabled: true
+  wechat:
+    enabled: true
+
+channels:
+  gateway_url: http://127.0.0.1:8011
+  langgraph_url: http://127.0.0.1:8011/api
+  # IM 消息走 Main RAG API（8010）知识库模式，而非 DeerFlow lead_agent 默认话术
+  rag_api_url: http://127.0.0.1:8010
+  use_rag_backend: true
+  # 企微/IM 未绑定 Jnao 账号的成员统一按此部门查知识库（技术部 internal + public 文档）
+  im_default_department: 技术部
+  wecom:
+    enabled: true
+  feishu:
+    enabled: false
+  telegram:
+    enabled: false
+  slack:
+    enabled: false
+  discord:
+    enabled: false
+  dingtalk:
+    enabled: false
+  wechat:
+    enabled: false

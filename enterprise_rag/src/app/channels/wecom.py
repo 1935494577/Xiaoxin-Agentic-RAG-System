@@ -21,6 +21,17 @@ from app.channels.message_bus import (
 logger = logging.getLogger(__name__)
 
 
+def _resolve_wecom_chat_id(body: dict[str, Any], user_id: str | None) -> str:
+    """Use group chat id in group conversations; single chat uses userid."""
+    chattype = str(body.get("chattype") or "").strip().lower()
+    chatid = body.get("chatid") or body.get("chat_id")
+    if chattype in ("group", "2") and chatid:
+        return str(chatid)
+    if user_id:
+        return str(user_id)
+    return str(chatid or user_id or "unknown")
+
+
 class WeComChannel(Channel):
     def __init__(self, bus: MessageBus, config: dict[str, Any]) -> None:
         super().__init__(name="wecom", bus=bus, config=config)
@@ -293,6 +304,7 @@ class WeComChannel(Channel):
             return
 
         user_id = (body.get("from") or {}).get("userid")
+        chat_id = _resolve_wecom_chat_id(body, str(user_id) if user_id else None)
 
         connect_code = self._pending_connect_code(text)
         if connect_code:
@@ -306,8 +318,8 @@ class WeComChannel(Channel):
 
         inbound_type = InboundMessageType.COMMAND if is_known_channel_command(text) else InboundMessageType.CHAT
         inbound = self._make_inbound(
-            chat_id=user_id,  # keep user's conversation in memory
-            user_id=user_id,
+            chat_id=chat_id,
+            user_id=str(user_id or chat_id),
             text=text,
             msg_type=inbound_type,
             thread_ts=msg_id,
@@ -315,10 +327,11 @@ class WeComChannel(Channel):
             metadata={
                 "aibotid": body.get("aibotid"),
                 "chattype": body.get("chattype"),
+                "chatid": body.get("chatid") or body.get("chat_id"),
                 "message_id": msg_id,
             },
         )
-        inbound.topic_id = user_id  # keep the same thread
+        inbound.topic_id = str(user_id or chat_id)
 
         stream_id = generate_req_id("stream")
         self._ws_frames[msg_id] = frame

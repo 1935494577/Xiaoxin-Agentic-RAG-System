@@ -64,8 +64,8 @@ def test_config_yaml_model_uses_openai_env_vars():
     assert primary.get("name") == EXPECTED_MODEL_NAME
     assert primary.get("use") == "langchain_openai:ChatOpenAI"
     assert primary.get("model") == "$OPENAI_CHAT_MODEL"
-    assert primary.get("api_base") == "$OPENAI_API_BASE"
-    assert primary.get("api_key") == "$OPENAI_API_KEY"
+    assert primary.get("openai_api_base") == "$OPENAI_API_BASE"
+    assert primary.get("openai_api_key") == "$OPENAI_API_KEY"
 
 
 def test_config_yaml_tool_groups_include_rag_and_web():

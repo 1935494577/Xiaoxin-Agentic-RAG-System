@@ -1,0 +1,28 @@
+# Harness venv: deerflow + Gateway / channel worker deps (LangChain 1.x).
+# Install: .venv-harness\Scripts\pip install -r requirements-harness-gateway.txt
+#
+# Default harness checkout (Windows):
+#   AGENT_HARNESS_PATH=D:\bytedance flow\deer-flow\backend\packages\harness
+
+-r requirements-harness.txt
+
+# Gateway (from upstream deer-flow backend/pyproject.toml)
+fastapi>=0.115.0
+uvicorn[standard]>=0.34.0
+python-multipart>=0.0.31
+sse-starlette>=2.1.0
+email-validator>=2.0.0
+bcrypt>=4.0.0
+pyjwt>=2.13.0
+langgraph-sdk>=0.1.51
+markdown-to-mrkdwn>=0.3.1
+
+# IM channel SDKs (install only what you use)
+wecom-aibot-python-sdk>=0.1.6
+lark-oapi>=1.4.0
+slack-sdk>=3.33.0
+python-telegram-bot>=21.0
+dingtalk-stream>=0.24.3
+
+python-dotenv>=1.0.1
+pydantic-settings>=2.5.0

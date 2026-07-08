@@ -28,7 +28,9 @@ from agent.tools.runtime.routing import (
     question_needs_agent_tools,
     question_needs_realtime_tools,
     resolve_relationship_graph_query,
+    resolve_web_search_query,
     should_use_relationship_graph_fast_path,
+    should_use_web_search_followup,
 )
 from agent.tools.runtime.stream import is_tools_active, stream_general_answer
 from agent.clarify import (
@@ -45,17 +47,20 @@ from api.stream_errors import format_stream_error
 from openai import OpenAI
 
 
-def _is_realtime_tool_turn(state: dict[str, Any]) -> bool:
-    """Prefer QueryUnderstanding intent from prepare_turn; fallback for direct/test calls."""
+def _is_realtime_tool_turn(
+    state: dict[str, Any],
+    history: list[dict[str, Any]] | None = None,
+) -> bool:
+    """Realtime / web-search tool turns (DeerFlow-style: regex + confirm follow-ups)."""
     if not is_tools_active():
         return False
-    meta = state.get("turn_meta") or {}
-    intent = meta.get("query_intent")
-    if intent == "realtime":
+    q = str(state.get("question") or "")
+    if history and should_use_web_search_followup(q, history):
         return True
-    if intent in ("kb", "graph", "unknown"):
-        return False
-    return question_needs_realtime_tools(str(state.get("question") or ""))
+    if question_needs_realtime_tools(q):
+        return True
+    meta = state.get("turn_meta") or {}
+    return meta.get("query_intent") == "realtime"
 
 
 def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
@@ -131,10 +136,18 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
         return
 
     raw_question = str(state["question"] or "")
-    realtime_tool_turn = _is_realtime_tool_turn(state)
+    web_search_followup = should_use_web_search_followup(raw_question, history)
+    realtime_tool_turn = _is_realtime_tool_turn(state, history)
     if realtime_tool_turn:
         state = dict(state)
         state["_realtime_tool_turn"] = True
+        state["agent_reasoning_mode"] = "react"
+        reasoning_mode = "react"
+        if web_search_followup:
+            resolved = resolve_web_search_query(raw_question, history)
+            state["question"] = resolved
+            init_state["question"] = resolved
+            state["_web_search_followup"] = True
 
     input_mode, doc_task_type = resolve_input_mode(
         input_mode=state.get("input_mode"),

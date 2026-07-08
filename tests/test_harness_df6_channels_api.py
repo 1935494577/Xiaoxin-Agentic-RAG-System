@@ -28,9 +28,12 @@ def test_main_app_exposes_channels_status_route():
     assert "/api/channels/" in paths
 
 
-def test_channels_status_without_langgraph_sdk():
+def test_channels_status_without_langgraph_sdk(monkeypatch):
     pytest.importorskip("fastapi")
     import asyncio
+
+    monkeypatch.delenv("JNAO_HARNESS_GATEWAY_URL", raising=False)
+    monkeypatch.delenv("DEER_FLOW_CHANNELS_GATEWAY_URL", raising=False)
 
     from jnao_harness.gateway.routers.channels import get_channels_status
 

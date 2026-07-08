@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  connectChannelProvider,
   disconnectChannelProvider,
   fetchChannelProviders,
   fetchChannelStatus,
   saveChannelRuntimeConfig,
+  type ChannelConnectResponse,
   type ChannelProvider,
 } from "../../api/client";
 import { PageHeader } from "../../components/admin/PageHeader";
@@ -28,11 +30,21 @@ function statusBadge(provider: ChannelProvider) {
   return <Badge variant="default">未配置</Badge>;
 }
 
+function providerCanConnect(provider: ChannelProvider, workerRunning: boolean): boolean {
+  return (
+    provider.configured &&
+    workerRunning &&
+    provider.auth_mode === "binding_code" &&
+    provider.connection_status !== "connected"
+  );
+}
+
 export default function ChannelsPage() {
   const queryClient = useQueryClient();
   const [configureTarget, setConfigureTarget] = useState<ChannelProvider | null>(null);
   const [formValues, setFormValues] = useState<Record<string, string>>({});
   const [disconnectTarget, setDisconnectTarget] = useState<ChannelProvider | null>(null);
+  const [bindInfo, setBindInfo] = useState<ChannelConnectResponse | null>(null);
 
   const providersQuery = useQuery({
     queryKey: ["admin-channel-providers"],
@@ -76,13 +88,33 @@ export default function ChannelsPage() {
       }
       return saveChannelRuntimeConfig(configureTarget.provider, values);
     },
-    onSuccess: (saved) => {
+    onSuccess: async (saved) => {
       toast.success(`已保存 ${saved.display_name} 凭证`);
       setConfigureTarget(null);
-      queryClient.invalidateQueries({ queryKey: ["admin-channel-providers"] });
-      queryClient.invalidateQueries({ queryKey: ["admin-channels-status"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["admin-channel-providers"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin-channels-status"] }),
+      ]);
+      const status = await statusQuery.refetch();
+      if (saved.auth_mode === "binding_code" && status.data?.service_running) {
+        try {
+          const bind = await connectChannelProvider(saved.provider);
+          setBindInfo(bind);
+        } catch (e) {
+          toast.error(e instanceof Error ? e.message : "获取绑定码失败");
+        }
+      }
     },
     onError: (e: Error) => toast.error(e.message || "保存失败"),
+  });
+
+  const connectMut = useMutation({
+    mutationFn: (provider: ChannelProvider) => connectChannelProvider(provider.provider),
+    onSuccess: (result) => {
+      setBindInfo(result);
+      queryClient.invalidateQueries({ queryKey: ["admin-channel-providers"] });
+    },
+    onError: (e: Error) => toast.error(e.message || "获取绑定码失败"),
   });
 
   const disconnectMut = useMutation({
@@ -105,6 +137,16 @@ export default function ChannelsPage() {
 
   const loading = providersQuery.isLoading || statusQuery.isLoading;
   const error = providersQuery.error || statusQuery.error;
+  const workerRunning = Boolean(statusQuery.data?.service_running);
+
+  const copyBindCode = async (code: string) => {
+    try {
+      await navigator.clipboard.writeText(`/connect ${code}`);
+      toast.success("已复制绑定命令");
+    } catch {
+      toast.error("复制失败，请手动复制");
+    }
+  };
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-6">
@@ -145,6 +187,10 @@ export default function ChannelsPage() {
           </span>
         </p>
         {runtimeHint ? <p className="mt-2 text-xs text-text-muted">{runtimeHint}</p> : null}
+        <p className="mt-2 text-xs text-text-muted">
+          渠道 Worker 运行在 Harness Gateway（默认 <code className="text-xs">8011</code>）。
+          使用 <code className="text-xs">.\scripts\run-dev-harness.ps1</code> 启动完整开发栈。
+        </p>
       </div>
 
       {providers.length === 0 ? (
@@ -170,6 +216,16 @@ export default function ChannelsPage() {
                   ) : null}
                 </div>
                 <div className="flex shrink-0 gap-2">
+                  {providerCanConnect(provider, workerRunning) ? (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={connectMut.isPending}
+                      onClick={() => connectMut.mutate(provider)}
+                    >
+                      获取绑定码
+                    </Button>
+                  ) : null}
                   <Button variant="default" size="sm" onClick={() => openConfigure(provider)}>
                     {provider.configured ? "更新凭证" : "配置"}
                   </Button>
@@ -249,6 +305,33 @@ export default function ChannelsPage() {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      ) : null}
+
+      {bindInfo ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="fixed inset-0 bg-black/40"
+            onClick={() => setBindInfo(null)}
+          />
+          <div className="relative z-10 mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-lg">
+            <h3 className="text-lg font-semibold text-text">绑定账号</h3>
+            <p className="mt-2 text-sm text-text-muted">{bindInfo.instruction}</p>
+            <div className="mt-4 rounded-lg border border-border bg-gray-50 px-3 py-2 font-mono text-sm">
+              /connect {bindInfo.code}
+            </div>
+            <p className="mt-2 text-xs text-text-muted">
+              绑定码约 {Math.round(bindInfo.expires_in / 60)} 分钟内有效。发送后刷新本页查看「已连接」状态。
+            </p>
+            <div className="mt-6 flex justify-end gap-2">
+              <Button variant="default" size="sm" onClick={() => copyBindCode(bindInfo.code)}>
+                复制命令
+              </Button>
+              <Button variant="primary" size="sm" onClick={() => setBindInfo(null)}>
+                知道了
+              </Button>
+            </div>
           </div>
         </div>
       ) : null}

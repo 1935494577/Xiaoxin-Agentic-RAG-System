@@ -46,6 +46,19 @@ _VIZ_FOLLOWUP_RE = re.compile(
     r"^图$|关系图$|组织图$",
     re.IGNORECASE,
 )
+_SEARCH_OFFER_RE = re.compile(
+    r"上网搜索|联网搜索|帮你搜|帮你查|需要我查|要我查|需要我帮你|帮你找|"
+    r"web_search|搜索一下|查一下吗|查吗",
+    re.IGNORECASE,
+)
+_AFFIRMATIVE_RE = re.compile(
+    r"^(?:@\S+\s*)*(?:"
+    r"需要|"
+    r"(?:好的|好|可以|行|嗯|是的|是|要|同意|麻烦|来吧)(?:[,，、\s]*(查|搜)(?:一下)?)?|"
+    r"(?:查|搜)(?:一下)?|帮我(?:查|搜)"
+    r")[。！？!?\s]*$",
+    re.IGNORECASE,
+)
 
 
 def is_relationship_graph_question(question: str) -> bool:
@@ -114,6 +127,74 @@ def resolve_relationship_graph_query(
     hist = _history_text(history)
     if hist and is_graph_visual_followup(q):
         return f"{hist}\n{q}"
+    return q
+
+
+def _strip_mention_prefix(question: str) -> str:
+    q = (question or "").strip()
+    q = re.sub(r"@\S+\s*", "", q).strip()
+    q = re.sub(r"^(?:agent|bot)\s+", "", q, flags=re.IGNORECASE).strip()
+    return q
+
+
+def is_web_search_affirmative_followup(question: str) -> bool:
+    q = _strip_mention_prefix(question)
+    if not q or len(q) > 24:
+        return False
+    return bool(_AFFIRMATIVE_RE.match(q))
+
+
+def recent_assistant_offered_web_search(history: list[dict[str, Any]] | None) -> bool:
+    if not history:
+        return False
+    for msg in reversed(history[-6:]):
+        if str(msg.get("role") or "") != "assistant":
+            continue
+        content = str(msg.get("content") or "")
+        if _SEARCH_OFFER_RE.search(content):
+            return True
+    return False
+
+
+def should_use_web_search_followup(
+    question: str,
+    history: list[dict[str, Any]] | None = None,
+) -> bool:
+    if not is_web_search_affirmative_followup(question):
+        return False
+    return recent_assistant_offered_web_search(history)
+
+
+def resolve_web_search_query(
+    question: str,
+    history: list[dict[str, Any]] | None = None,
+) -> str:
+    """Merge affirmative follow-up with prior user topic (DeerFlow-style tool context)."""
+    q = _strip_mention_prefix(question)
+    if not history:
+        return q
+
+    prior_user = ""
+    for msg in reversed(history):
+        role = str(msg.get("role") or "")
+        content = str(msg.get("content") or "").strip()
+        if role != "user" or not content:
+            continue
+        if content == q or is_web_search_affirmative_followup(content):
+            continue
+        prior_user = content
+        break
+
+    if prior_user:
+        return f"{prior_user} 最新动态与公开信息"
+
+    for msg in reversed(history):
+        if str(msg.get("role") or "") != "assistant":
+            continue
+        snippet = str(msg.get("content") or "").strip()
+        if snippet:
+            head = snippet.split("\n", 1)[0][:160]
+            return f"{head} 联网搜索"
     return q
 
 

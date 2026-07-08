@@ -260,6 +260,61 @@ DF-7  废弃 loop.py 主路径、自研 skill loader、自研 token store（若�
 
 ---
 
+## 11. 本地 Harness 启动（Windows）
+
+本仓库使用 **双 venv**：主 RAG（`.venv`，LangChain 0.2，**8010**）与 Harness Gateway（`.venv-harness`，LangChain 1.x + deerflow，**8011**）。IM 渠道 Worker 与 LangGraph `/api/*` 仅在 **8011** 运行。
+
+### 一次性准备
+
+```powershell
+cd D:\11   # 仓库根目录
+
+# 1. 主 RAG venv（若尚未创建）
+python -m venv .venv
+.\.venv\Scripts\pip install -r requirements.txt
+copy .env.example .env   # 填写 OPENAI_API_BASE / OPENAI_API_KEY / OPENAI_CHAT_MODEL
+
+# 2. Harness venv + deerflow 可编辑安装
+#    默认 harness 路径：D:\bytedance flow\deer-flow\backend\packages\harness
+#    可设：$env:AGENT_HARNESS_PATH = "<你的 harness 目录>"
+.\scripts\bootstrap-harness-venv.ps1
+
+# 3. 校验
+.\scripts\verify-harness.ps1
+```
+
+### 日常开发
+
+| 场景 | 命令 | 端口 |
+|------|------|------|
+| 仅知识库 Chat（无 IM） | `.\scripts\run-dev.ps1` | 8010 + 8502 |
+| **IM 渠道 + 任务 Agent 全栈** | `.\scripts\run-dev-harness.ps1` | 8010 + **8011** + 8502 |
+| 仅 Gateway（调试 Worker） | `.\scripts\run-harness-gateway.ps1` | 8011 |
+
+`run-dev-harness.ps1` 会自动设置：
+
+- `DEER_FLOW_CONFIG_PATH` → 根目录 `config.yaml`
+- `DEER_FLOW_AUTH_DISABLED=1`（**仅本地**；Gateway 免 JWT）
+- `JNAO_HARNESS_GATEWAY_URL` → `http://127.0.0.1:8011`（主 API 8010 代理 Worker 状态）
+
+### IM 渠道配置
+
+1. Admin → **IM 渠道**：填写 Bot ID / Secret（写入 `enterprise_rag/data/channels/runtime-config.json`，已 gitignore）
+2. 根目录 `config.yaml` → `channel_connections` / `channels` 启用对应 provider
+3. 确认 Worker：`GET http://127.0.0.1:8011/api/channels/` → `service_running: true`
+4. **IM 默认知识库模式**：`channels.use_rag_backend: true` 时，企微等 IM 消息走 Main API `8010/chat/stream`（与网页 Chat 共用提示词 + 检索），不再使用 DeerFlow 默认 Agent 话术。
+5. 企微后台：机器人可见范围、网络需能访问 `wss://openws.work.weixin.qq.com`
+
+### 环境变量（可选）
+
+| 变量 | 说明 |
+|------|------|
+| `AGENT_HARNESS_PATH` | deer-flow harness 包路径 |
+| `DEER_FLOW_AUTH_DISABLED=1` | 本地 Gateway 免登录（脚本已默认设置） |
+| `JNAO_HARNESS_GATEWAY_URL` | 主 API 查询 Worker 状态时转发到 8011 |
+
+---
+
 ## 修订记录
 
 | 日期 | 说明 |

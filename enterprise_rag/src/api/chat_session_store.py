@@ -136,6 +136,47 @@ def create_session(user_id: str, *, title: str = "新对话", tenant_id: str = D
     return row
 
 
+def ensure_chat_session(
+    session_id: str,
+    user_id: str,
+    *,
+    title: str = "IM 对话",
+    tenant_id: str = DEFAULT_TENANT,
+) -> dict[str, Any]:
+    """Create session with a fixed id when missing (IM channel bridge)."""
+    sid = session_id.strip()
+    uid = user_id.strip()
+    if not sid or not uid:
+        raise ValueError("session_id and user_id required")
+    existing = get_session(sid, uid, tenant_id=tenant_id)
+    if existing:
+        return existing
+    tid = (tenant_id or DEFAULT_TENANT).strip() or DEFAULT_TENANT
+    now = _utc_now()
+    row = {
+        "id": sid,
+        "tenant_id": tid,
+        "user_id": uid,
+        "title": (title or "IM 对话").strip()[:128] or "IM 对话",
+        "created_at": now,
+        "updated_at": now,
+    }
+    with _lock:
+        conn = _connect()
+        try:
+            conn.execute(
+                """
+                INSERT INTO chat_sessions (id, tenant_id, user_id, title, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (row["id"], row["tenant_id"], row["user_id"], row["title"], row["created_at"], row["updated_at"]),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    return row
+
+
 def get_session(session_id: str, user_id: str, *, tenant_id: str = DEFAULT_TENANT) -> dict[str, Any] | None:
     sid = session_id.strip()
     uid = user_id.strip()

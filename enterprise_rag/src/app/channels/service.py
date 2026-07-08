@@ -86,6 +86,23 @@ class ChannelService:
         langgraph_url = _resolve_service_url(config, "langgraph_url", _CHANNELS_LANGGRAPH_URL_ENV, DEFAULT_LANGGRAPH_URL)
         gateway_url = _resolve_service_url(config, "gateway_url", _CHANNELS_GATEWAY_URL_ENV, DEFAULT_GATEWAY_URL)
         default_session = config.pop("session", None)
+        rag_api_url = _resolve_service_url(
+            config,
+            "rag_api_url",
+            "JNAO_CHANNEL_RAG_API_URL",
+            "http://127.0.0.1:8010",
+        )
+        use_rag_backend = config.pop("use_rag_backend", None)
+        if use_rag_backend is None:
+            use_rag_backend = os.environ.get("JNAO_CHANNEL_RAG_ENABLED", "1").strip().lower() not in (
+                "0",
+                "false",
+                "no",
+                "off",
+            )
+        im_default_department = config.pop("im_default_department", None) or os.environ.get(
+            "JNAO_IM_DEFAULT_DEPARTMENT", ""
+        ).strip() or None
         channel_sessions = {name: channel_config.get("session") for name, channel_config in config.items() if isinstance(channel_config, dict)}
         self.manager = ChannelManager(
             bus=self.bus,
@@ -96,6 +113,9 @@ class ChannelService:
             channel_sessions=channel_sessions,
             connection_repo=connection_repo,
             require_bound_identity=require_bound_identity,
+            rag_api_url=rag_api_url,
+            use_rag_backend=bool(use_rag_backend),
+            im_default_department=im_default_department,
         )
         self._channels: dict[str, Any] = {}  # name -> Channel instance
         self._config = config

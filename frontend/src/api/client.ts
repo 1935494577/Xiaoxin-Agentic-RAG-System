@@ -713,6 +713,15 @@ export type ChannelCredentialField = {
   required: boolean;
 };
 
+export type ChannelConnectResponse = {
+  provider: string;
+  mode: string;
+  url: string | null;
+  code: string;
+  instruction: string;
+  expires_in: number;
+};
+
 export type ChannelProvider = {
   provider: string;
   display_name: string;
@@ -752,6 +761,12 @@ export function saveChannelRuntimeConfig(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ values }),
+  });
+}
+
+export function connectChannelProvider(provider: string): Promise<ChannelConnectResponse> {
+  return request<ChannelConnectResponse>(`/api/channels/${encodeURIComponent(provider)}/connect`, {
+    method: "POST",
   });
 }
 
