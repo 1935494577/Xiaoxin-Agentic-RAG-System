@@ -1,16 +1,63 @@
 import { apiGet } from "../api/client";
 import type { TokenUsage } from "../lib/tokenUsage";
 
-export type ThreadTokenUsageResponse = {
-  thread_id: string;
+export type ThreadTokenUsageModelBreakdown = {
   total_tokens: number;
   total_input_tokens: number;
   total_output_tokens: number;
   total_runs: number;
 };
 
+export type ThreadTokenUsageCallerBreakdown = {
+  total_tokens: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+};
+
+export type ThreadTokenUsageResponse = {
+  thread_id: string;
+  total_tokens: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_runs: number;
+  by_model?: Record<string, ThreadTokenUsageModelBreakdown>;
+  by_caller?: ThreadTokenUsageCallerBreakdown;
+};
+
+/** One LLM chat.completions call recorded in Jnao SQLite. */
+export type TokenUsageCallRecord = {
+  id: string;
+  created_at: string;
+  session_id: string;
+  user_id?: string;
+  channel?: string;
+  model: string;
+  caller: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  question_preview: string;
+};
+
+export type TokenUsageSummaryResponse = {
+  total_tokens: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_calls: number;
+  total_runs: number;
+  total_llm_calls: number;
+  by_model: Record<string, ThreadTokenUsageModelBreakdown>;
+  records: TokenUsageCallRecord[];
+  source: string;
+  available: boolean;
+};
+
 export function threadTokenUsageQueryKey(threadId?: string | null) {
   return ["thread-token-usage", threadId] as const;
+}
+
+export function tokenUsageSummaryQueryKey(limit = 100) {
+  return ["token-usage-summary", limit] as const;
 }
 
 export function threadTokenUsageToTokenUsage(
@@ -36,6 +83,27 @@ export async function fetchThreadTokenUsage(threadId: string): Promise<ThreadTok
       total_input_tokens: 0,
       total_output_tokens: 0,
       total_runs: 0,
+      by_model: {},
+      by_caller: { total_tokens: 0, total_input_tokens: 0, total_output_tokens: 0 },
+    };
+  }
+}
+
+export async function fetchTokenUsageSummary(limit = 100): Promise<TokenUsageSummaryResponse> {
+  try {
+    return await apiGet<TokenUsageSummaryResponse>(`/api/token-usage/summary?limit=${limit}`);
+  } catch {
+    return {
+      total_tokens: 0,
+      total_input_tokens: 0,
+      total_output_tokens: 0,
+      total_calls: 0,
+      total_runs: 0,
+      total_llm_calls: 0,
+      by_model: {},
+      records: [],
+      source: "unavailable",
+      available: false,
     };
   }
 }

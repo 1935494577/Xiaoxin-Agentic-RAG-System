@@ -52,16 +52,13 @@ def test_token_usage_route_registered():
 
 
 def test_token_usage_empty_without_harness_runtime():
+    """Session summary works without DeerFlow RunStore (local SQLite)."""
     pytest.importorskip("fastapi")
     import asyncio
-    from types import SimpleNamespace
-    from unittest.mock import MagicMock
 
     from jnao_harness.gateway.routers.token_usage import thread_token_usage
 
-    request = MagicMock()
-    request.app.state = SimpleNamespace(run_store=None)
-
-    result = asyncio.run(thread_token_usage("t1", request))
+    result = asyncio.run(thread_token_usage("t1"))
     assert result.thread_id == "t1"
     assert result.total_tokens == 0
+    assert result.total_runs == 0

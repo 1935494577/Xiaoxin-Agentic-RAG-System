@@ -172,6 +172,9 @@ async def lifespan(app: FastAPI):
     configure_tracing()
     init_vector_db()
     init_chat_session_db()
+    from api.token_usage_store import init_token_usage_db
+
+    init_token_usage_db()
     init_user_profile_db()
     init_platform_config_db()
     init_auth_db()
@@ -254,8 +257,10 @@ except ImportError:
 
 try:
     from jnao_harness.gateway.routers.token_usage import router as token_usage_router
+    from jnao_harness.gateway.routers.token_usage import summary_router as token_usage_summary_router
 
     app.include_router(token_usage_router)
+    app.include_router(token_usage_summary_router)
 except ImportError:
     pass
 

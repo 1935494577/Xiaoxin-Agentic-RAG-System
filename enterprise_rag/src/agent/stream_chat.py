@@ -47,6 +47,25 @@ from api.stream_errors import format_stream_error
 from openai import OpenAI
 
 
+def apply_strict_kb_miss_contexts(
+    *,
+    kb_ok: bool,
+    answer_mode: str,
+    ctx: list[str],
+    meta: list[dict[str, Any]],
+    general_fallback_enabled: bool,
+) -> tuple[str, list[str], list[dict[str, Any]], bool]:
+    """When strict KB judge rejects retrieval, drop weak chunks so they cannot steer the answer.
+
+    Returns (answer_mode, ctx, meta, missed).
+    """
+    if kb_ok or answer_mode != "kb":
+        return answer_mode, ctx, meta, False
+    if general_fallback_enabled:
+        return "general", [], [], True
+    return "kb", [], [], True
+
+
 def _is_realtime_tool_turn(
     state: dict[str, Any],
     history: list[dict[str, Any]] | None = None,
@@ -297,9 +316,15 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
             topic_shift=bool(state.get("topic_shift")),
             kb_llm_judge_always=bool(mem.get("kb_llm_judge_always", False)),
         )
-        if not kb_ok:
+        answer_mode, ctx, meta, missed = apply_strict_kb_miss_contexts(
+            kb_ok=kb_ok,
+            answer_mode=answer_mode,
+            ctx=ctx,
+            meta=meta,
+            general_fallback_enabled=bool(mem.get("general_fallback_enabled", True)),
+        )
+        if missed:
             state["_kb_strict_miss"] = True
-            # 灰/弱命中仍保留检索片段供 LLM 作答，不直接清空 ctx
 
     api_key = (state.get("llm_api_key") or "").strip() or settings.openai_api_key
     api_base = (state.get("llm_api_base") or "").strip() or settings.openai_api_base
@@ -386,10 +411,10 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
                 kw = _gen_kw(model, messages, temp, mt)
                 try:
                     if may_post_fallback:
-                        for _ in _stream_tokens(client, kw, parts, emit=False):
+                        for _ in _stream_tokens(client, kw, parts, emit=False, state=state):
                             pass
                     else:
-                        yield from _stream_tokens(client, kw, parts, emit=True)
+                        yield from _stream_tokens(client, kw, parts, emit=True, state=state)
                 except Exception as e:
                     trace_err = str(e)
                     raise
@@ -425,10 +450,10 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
                 kw = _gen_kw(model, messages, temp, mt)
                 try:
                     if may_post_fallback:
-                        for _ in _stream_tokens(client, kw, parts, emit=False):
+                        for _ in _stream_tokens(client, kw, parts, emit=False, state=state):
                             pass
                     else:
-                        yield from _stream_tokens(client, kw, parts, emit=True)
+                        yield from _stream_tokens(client, kw, parts, emit=True, state=state)
                 except Exception as e:
                     trace_err = str(e)
                     raise
@@ -484,7 +509,7 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
                     )
                     messages = build_llm_messages(system=system, history=history, user_content=user_content)
                     gen_kw = _gen_kw(model, messages, temp, mt)
-                    yield from _stream_tokens(client, gen_kw, parts, emit=True)
+                    yield from _stream_tokens(client, gen_kw, parts, emit=True, state=state)
                 answer = "".join(parts).strip()
                 fb_out.update({"answer_len": len(answer), "tool_trace": tool_trace[:5]})
                 state["_tool_trace"] = tool_trace
@@ -513,6 +538,7 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
                 answer_mode=answer_mode,
                 enabled=True,
                 llm_runtime=runtime,
+                metering_state=state,
             )
             answer = str(vout.get("answer") or answer)
             verified = bool(vout.get("verified", True))
@@ -603,15 +629,38 @@ def _stream_tokens(
     parts: list[str],
     *,
     emit: bool = True,
+    state: dict[str, Any] | None = None,
+    caller: str = "answer",
 ) -> Iterator[str]:
-    stream = client.chat.completions.create(**kw)
+    stream = None
+    try:
+        stream = client.chat.completions.create(**{**kw, "stream_options": {"include_usage": True}})
+    except Exception:
+        stream = client.chat.completions.create(**kw)
+    usage = None
     for chunk in stream:
+        chunk_usage = getattr(chunk, "usage", None)
+        if chunk_usage is not None:
+            usage = chunk_usage
+        if not getattr(chunk, "choices", None):
+            continue
         delta = chunk.choices[0].delta.content or ""
         if not delta:
             continue
         parts.append(delta)
         if emit:
             yield _evt({"type": "token", "content": delta})
+    try:
+        from api.token_usage_store import metering_meta_from_state, record_usage_object
+
+        record_usage_object(
+            usage,
+            model=str(kw.get("model") or ""),
+            caller=caller,
+            **metering_meta_from_state(state),
+        )
+    except Exception:
+        pass
 
 
 def _replay_tokens(parts: list[str]) -> Iterator[str]:

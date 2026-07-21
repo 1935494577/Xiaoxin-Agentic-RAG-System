@@ -96,6 +96,7 @@ def stream_general_answer(
             emit=emit,
             user_question=str(state.get("question") or ""),
             condense_model=condense_model,
+            metering_state=state,
         )
         tool_trace_out.extend(trace)
         for ev in pending:
@@ -113,6 +114,7 @@ def stream_general_answer(
         messages=messages,
         temperature=temperature,
         max_tokens=max_tokens,
+        metering_state=state,
     ):
         parts.append(delta)
         if emit_tokens:

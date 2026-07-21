@@ -147,34 +147,31 @@ skills/
 
 ---
 
-## 5. Token 计量（DeerFlow 实现 + 本仓库 UI）
+## 5. Token 计量（Jnao 独立 SQLite + Admin UI）
 
-### 5.1 后端（必须）
+Web / IM / Admin **Token 用量**由本仓库独立计量，**不**读取 DeerFlow `RunStore` / Gateway `token-usage` 作为 Admin 数据源。
 
-| 组件 | DeerFlow 参照 |
-|------|----------------|
-| 采集中间件 | `TokenUsageMiddleware` |
-| Run 进度 / 持久化 | `deerflow.runtime` RunJournal、`token_usage_by_model` |
-| Thread 汇总 API | `GET /api/threads/{thread_id}/token-usage`（见 `app/gateway/routers/thread_runs.py` 相关模型） |
-| 配置 | `config.yaml` → `token_usage.enabled` |
+### 5.1 后端（Main API 8010）
 
-**禁止**：自研 `agent/runtime/token_usage.py` 平行统计；仅在 DeerFlow 链上挂 `TokenUsageMiddleware`。
+| 组件 | 路径 / 说明 |
+|------|-------------|
+| 存储 | `enterprise_rag/src/api/token_usage_store.py` → `data/token_usage.db` |
+| 采集 | 对话链路每次 LLM `chat.completions`：`stream_chat._stream_tokens`（`caller=answer`）、工具循环（`tool_loop`）、verifier（`verifier`） |
+| Admin 汇总 | `GET /api/token-usage/summary` |
+| 会话徽章 | `GET /api/threads/{session_id}/token-usage`（按 `session_id` 汇总本库） |
+| 配置 | `settings.token_usage_*`；`config.yaml` → `token_usage.enabled` 可关闭写入 |
 
-### 5.2 前端（必须，对齐 DeerFlow）
+**粒度**：仅 LLM 补全调用；**不含** embedding / rerank。一条用户提问可能对应多条调用记录。
 
-参照源码移植（改 API base 为 Jnao 8010）：
+DeerFlow `TokenUsageMiddleware` 若仍挂在 harness `lead_agent` 内部，仅服务 harness Agent 运行时，**不作为** Admin / Chat 徽章数据源。
 
-| DeerFlow 文件 | 用途 |
-|---------------|------|
-| `frontend/src/core/messages/usage.ts` | 单条 AI message `usage_metadata` |
-| `frontend/src/core/threads/token-usage.ts` | thread 级汇总 query |
-| `frontend/src/core/threads/api.ts` | `GET .../token-usage` |
-| `frontend/src/core/settings/local.ts` | `tokenUsage` 显示开关 |
+### 5.2 前端
 
-本仓库：
-
-- **Chat**：消息级 / 会话级 token（与 DeerFlow 相同交互，非自研 SSE `done.token_usage` 字段）
-- **Admin**：thread token 汇总或全局统计页，数据来自 **DeerFlow 同款 API**
+| 文件 | 用途 |
+|------|------|
+| `frontend/src/lib/threadTokenUsage.ts` | summary / session 查询 |
+| `frontend/src/pages/admin/TokenUsagePage.tsx` | Admin「Token 用量」：全局总量 + 调用记录 |
+| `frontend/src/components/chat/ThreadTokenBadge.tsx` | Chat 会话 Token 徽章 |
 
 ---
 
@@ -230,9 +227,9 @@ DF-1  根目录 config.yaml + extensions_config.json（从 config.example.yaml �
 DF-2  skills/ 目录 + 迁移 2 个业务 SKILL.md
 DF-3  enterprise_rag.deerflow_community 工具 + config.yaml 注册
 DF-4  Gateway 嵌入 make_lead_agent；task/auto → LangGraph stream
-DF-5  TokenUsageMiddleware + /api/threads/{id}/token-usage + 前端 usage 模块
+DF-5  Jnao token_usage_store + /api/token-usage/summary + Chat/Admin UI
 DF-6  app/channels + /api/channels + Admin ChannelsPage
-DF-7  废弃 loop.py 主路径、自研 skill loader、自研 token store（若已写）
+DF-7  废弃 loop.py 主路径、自研 skill loader（Admin Token 已独立，不再依赖 DeerFlow RunStore）
 ```
 
 每步 PR 须注明 **对照 DeerFlow 文件路径** 与 diff 摘要。
@@ -241,10 +238,10 @@ DF-7  废弃 loop.py 主路径、自研 skill loader、自研 token store（若�
 
 ## 9. 禁止清单（Code Review 硬规则）
 
-- [ ] 不得新增与 `deerflow.agents.middlewares.*` 同职责的自研 Middleware
+- [ ] 不得新增与 `deerflow.agents.middlewares.*` 同职责的自研 Middleware（Admin Token 计量除外：走 `api/token_usage_store`）
 - [ ] 不得用 `agent/tools/runtime/loop.py` 作为 task/auto 主编排
 - [ ] 不得自研 Skill 格式（必须 `skills/**/SKILL.md` + `LocalSkillStorage`）
-- [ ] 不得自研 Token 聚合（必须 `TokenUsageMiddleware` + thread token-usage API）
+- [ ] Admin / Chat Token 用量须走 Main API SQLite（`token_usage_store`），不得再绑 DeerFlow RunStore / Gateway 代理
 - [ ] 不得自研渠道总线（必须 `MessageBus` + `Channel` ABC）
 - [ ] 不得在 Harness 层 import `enterprise_rag` / `api.main`
 

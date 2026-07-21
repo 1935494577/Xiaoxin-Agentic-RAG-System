@@ -43,6 +43,7 @@ const router = createBrowserRouter([
               { path: "prompts", lazy: lazyPage(() => import("./pages/admin/PromptPage")) },
               { path: "models", lazy: lazyPage(() => import("./pages/admin/ModelPage")) },
               { path: "trace", lazy: lazyPage(() => import("./pages/admin/TracePage")) },
+              { path: "token-usage", lazy: lazyPage(() => import("./pages/admin/TokenUsagePage")) },
               { path: "feedback", lazy: lazyPage(() => import("./pages/admin/FeedbackInboxPage")) },
               { path: "eval-reports", lazy: lazyPage(() => import("./pages/admin/EvalReportsPage")) },
               { path: "channels", lazy: lazyPage(() => import("./pages/admin/ChannelsPage")) },
