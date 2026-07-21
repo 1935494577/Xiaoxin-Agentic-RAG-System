@@ -1,0 +1,11 @@
+# Agent harness (LangChain 1.x) — dedicated venv; main RAG venv stays on LangChain 0.2.
+#
+#   python -m venv .venv-harness
+#   .venv-harness\Scripts\pip install -r requirements-harness.txt
+#
+# Default harness checkout (Windows):
+#   AGENT_HARNESS_PATH=D:\bytedance flow\deer-flow\backend\packages\harness
+
+-e "D:/bytedance flow/deer-flow/backend/packages/harness"
+pytest>=8.0
+pyyaml>=6.0.3

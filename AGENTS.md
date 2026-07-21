@@ -15,3 +15,7 @@ Five canonical triage labels; defaults match role names. See `docs/agents/triage
 ### Domain docs
 
 Multi-context monorepo: `CONTEXT-MAP.md` at the repo root points to per-package `CONTEXT.md` files. See `docs/agents/domain.md`.
+
+### DeerFlow integration (Sprint G)
+
+Agent orchestration (tools, skills, token usage, channels) **must** follow [`docs/deerflow-integration.md`](docs/deerflow-integration.md) and local reference repo `D:\bytedance flow\deer-flow`. Do not invent parallel middleware, skill loaders, or channel buses.

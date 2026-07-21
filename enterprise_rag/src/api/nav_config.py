@@ -24,6 +24,8 @@ ADMIN_PAGES: list[AdminPageSpec] = [
     {"id": "feedback", "label": "用户反馈", "url_path": "feedback"},
     {"id": "eval_reports", "label": "评测报告", "url_path": "eval-reports"},
     {"id": "trace", "label": "链路 Trace", "url_path": "trace"},
+    {"id": "token_usage", "label": "Token 用量", "url_path": "token-usage"},
+    {"id": "channels", "label": "IM 渠道", "url_path": "channels"},
     {"id": "tutorial", "label": "教程", "url_path": "tutorial"},
     {"id": "users", "label": "账号管理", "url_path": "users"},
 ]

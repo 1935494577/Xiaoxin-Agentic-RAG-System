@@ -1,4 +1,9 @@
-"""ReAct 工具循环（OpenAI-compatible）。"""
+"""ReAct 工具循环（OpenAI-compatible）。
+
+.. deprecated::
+    task/auto 主编排已迁移至 Jnao ``make_lead_agent``（见 ``jnao_harness.lead_stream``）。
+    本模块仅作 harness 不可用时的回退，以及 knowledge 快路径下的 realtime 工具辅助。
+"""
 
 from __future__ import annotations
 
@@ -40,6 +45,7 @@ def run_tool_loop(
     user_question: str = "",
     condense_model: str | None = None,
     condense_enabled: bool | None = None,
+    metering_state: dict[str, Any] | None = None,
 ) -> tuple[str, list[dict[str, Any]]]:
     """执行 tool_calls 直至模型返回文本。返回 (final_text, tool_trace)。"""
     enabled = enabled_ids if enabled_ids is not None else enabled_tool_ids()
@@ -63,6 +69,20 @@ def run_tool_loop(
             kw["max_tokens"] = max_tokens
 
         resp = client.chat.completions.create(**kw)
+        try:
+            from api.token_usage_store import metering_meta_from_state, record_usage_object
+
+            meta = metering_meta_from_state(metering_state)
+            if not meta.get("question_preview") and question:
+                meta["question_preview"] = question[:200]
+            record_usage_object(
+                getattr(resp, "usage", None),
+                model=model,
+                caller="tool_loop",
+                **meta,
+            )
+        except Exception:
+            pass
         msg = resp.choices[0].message
         finish = resp.choices[0].finish_reason
 
@@ -135,6 +155,7 @@ def stream_answer_after_tools(
     messages: list[dict[str, Any]],
     temperature: float = 0.2,
     max_tokens: int | None = None,
+    metering_state: dict[str, Any] | None = None,
 ) -> Iterator[str]:
     """工具轮次结束后流式输出最终回答（不再传 tools）。"""
     kw: dict[str, Any] = {
@@ -145,8 +166,29 @@ def stream_answer_after_tools(
     }
     if max_tokens is not None:
         kw["max_tokens"] = max_tokens
-    stream = client.chat.completions.create(**kw)
+    stream = None
+    try:
+        stream = client.chat.completions.create(**{**kw, "stream_options": {"include_usage": True}})
+    except Exception:
+        stream = client.chat.completions.create(**kw)
+    usage = None
     for chunk in stream:
+        chunk_usage = getattr(chunk, "usage", None)
+        if chunk_usage is not None:
+            usage = chunk_usage
+        if not chunk.choices:
+            continue
         delta = chunk.choices[0].delta.content or ""
         if delta:
             yield delta
+    try:
+        from api.token_usage_store import metering_meta_from_state, record_usage_object
+
+        record_usage_object(
+            usage,
+            model=model,
+            caller="answer",
+            **metering_meta_from_state(metering_state),
+        )
+    except Exception:
+        pass

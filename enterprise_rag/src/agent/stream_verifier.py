@@ -15,6 +15,7 @@ def run_stream_verifier(
     answer_mode: str,
     enabled: bool,
     llm_runtime: dict[str, Any],
+    metering_state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not enabled or answer_mode == "general":
         return {"verifier_decision": "pass", "verified": True, "answer": answer}
@@ -59,6 +60,17 @@ def run_stream_verifier(
         "max_tokens": int(mt) if mt is not None else 8,
     }
     resp = client.chat.completions.create(**kw)
+    try:
+        from api.token_usage_store import metering_meta_from_state, record_usage_object
+
+        record_usage_object(
+            getattr(resp, "usage", None),
+            model=str(model or ""),
+            caller="verifier",
+            **metering_meta_from_state(metering_state),
+        )
+    except Exception:
+        pass
     tag = (resp.choices[0].message.content or "").strip().upper()
 
     if "REJECT" in tag:

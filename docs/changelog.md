@@ -1,5 +1,45 @@
 # Changelog
 
+## 2026-06-16 — DF-0 DeerFlow config + harness tests (TDD)
+
+### Added
+
+- **`config.yaml`** / **`extensions_config.json`** / **`skills/`** — DeerFlow 根配置（`config_version: 17`，Tavily web_search，kb_search）
+- **`enterprise_rag/src/jnao_deerflow/`** — harness 路径解析
+- **`enterprise_rag/src/deerflow_community/kb_search.py`** — LangChain 工具入口（config `use:`）
+- **`tests/test_deerflow_df0_config.py`** — 真实参数测试（9 项 + 2 项 `@pytest.mark.deerflow`）
+- **`requirements-deerflow.txt`** + **`scripts/bootstrap-deerflow-venv.ps1`** — 独立 venv 安装 harness
+
+---
+
+### 文档
+
+- **`docs/deerflow-integration.md`**（新建）— 以 `D:\bytedance flow\deer-flow` 为唯一实现依据；Harness/App 分层、禁止自研清单、DF-0~DF-7 步骤
+- **`docs/assistant-fusion-plan.md`** — 重写 Phase B/C 为 DeerFlow 模块对照；移除自研 TurnMiddleware / token store / channel_gateway 方案
+- **`docs/目标.md`** — Sprint G 改为 DeerFlow 验收项
+- **`README.md`** — 规划行指向 `deerflow-integration.md`
+
+### 说明
+
+- 既有 `routing.py` 扩展为 **knowledge 快路径过渡**，task/auto 主编排须迁移至 `make_lead_agent`
+- 代码实现尚未开始 harness 引入；下一步 **DF-0**
+
+---
+
+## 2026-06-16 — Assistant 融合计划：工具 / Skill / Token / 渠道
+
+### 文档
+
+- **`docs/assistant-fusion-plan.md`** — 新增 §0 前后端分工、§2.1 编排北极星；Phase B 拆为 B1 工具层、B2 Skill 层、B3 Token（含 Chat/Admin UI）、B4 澄清/Todo UI；Phase C 渠道补充 Admin 必显字段；§8.1 DeerFlow 能力对照
+- **`docs/目标.md`** — 新增 **Sprint G**（对话编排与 Agent 能力）及总验收项
+- **`README.md`** — 目录与「规划中（Sprint G）」一行
+
+### 代码（routing，未单独发版）
+
+- `agent/tools/runtime/routing.py` — 行业趋势 / 实时类问题走 `web_search` 路径（如「2025年AI发展」）
+
+---
+
 ## 2026-06-10 — 前端性能优化、目录重组、路径修复
 
 ### 前端目录重组

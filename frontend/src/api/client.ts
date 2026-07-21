@@ -96,6 +96,10 @@ async function request<T>(
   return r.json() as Promise<T>;
 }
 
+export function apiGet<T>(path: string, init?: RequestInit & { timeoutMs?: number }): Promise<T> {
+  return request<T>(path, init);
+}
+
 // ===== UI & Nav =====
 export function authLogin(
   username: string,
@@ -333,7 +337,16 @@ export async function streamChat(
   }
   if (!r.ok) {
     const text = await r.text();
-    onEvent({ type: "error", message: text || "请求失败" });
+    let message = text || r.statusText || "请求失败";
+    try {
+      const parsed = JSON.parse(text) as { detail?: unknown };
+      if (typeof parsed.detail === "string") {
+        message = parsed.detail;
+      }
+    } catch {
+      /* plain-text error body */
+    }
+    onEvent({ type: "error", message });
     return;
   }
   const reader = r.body?.getReader();
@@ -690,4 +703,79 @@ export function applyScenePreset(presetId: string): Promise<UiConfig> {
   return request<UiConfig>(`/config/ui/scene-preset/${encodeURIComponent(presetId)}`, {
     method: "POST",
   });
+}
+
+// ===== IM Channels (DeerFlow-style runtime credentials) =====
+export type ChannelCredentialField = {
+  name: string;
+  label: string;
+  type: string;
+  required: boolean;
+};
+
+export type ChannelConnectResponse = {
+  provider: string;
+  mode: string;
+  url: string | null;
+  code: string;
+  instruction: string;
+  expires_in: number;
+};
+
+export type ChannelProvider = {
+  provider: string;
+  display_name: string;
+  enabled: boolean;
+  configured: boolean;
+  connectable: boolean;
+  unavailable_reason: string | null;
+  auth_mode: string;
+  connection_status: string;
+  credential_fields: ChannelCredentialField[];
+  credential_values: Record<string, string>;
+};
+
+export type ChannelProvidersResponse = {
+  enabled: boolean;
+  providers: ChannelProvider[];
+};
+
+export type ChannelStatusResponse = {
+  service_running: boolean;
+  channels: Record<string, Record<string, unknown>>;
+};
+
+export function fetchChannelProviders(): Promise<ChannelProvidersResponse> {
+  return request<ChannelProvidersResponse>("/api/channels/providers");
+}
+
+export function fetchChannelStatus(): Promise<ChannelStatusResponse> {
+  return request<ChannelStatusResponse>("/api/channels/");
+}
+
+export function saveChannelRuntimeConfig(
+  provider: string,
+  values: Record<string, string>
+): Promise<ChannelProvider> {
+  return request<ChannelProvider>(`/api/channels/${encodeURIComponent(provider)}/runtime-config`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ values }),
+  });
+}
+
+export function connectChannelProvider(provider: string): Promise<ChannelConnectResponse> {
+  return request<ChannelConnectResponse>(`/api/channels/${encodeURIComponent(provider)}/connect`, {
+    method: "POST",
+  });
+}
+
+export function disconnectChannelProvider(provider: string): Promise<ChannelProvider> {
+  return request<ChannelProvider>(`/api/channels/${encodeURIComponent(provider)}/runtime-config`, {
+    method: "DELETE",
+  });
+}
+
+export function fetchLlmHealth(): Promise<{ connected: boolean; message: string; model?: string; api_base?: string }> {
+  return request("/health/llm");
 }

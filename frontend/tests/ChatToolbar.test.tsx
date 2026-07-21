@@ -2,6 +2,10 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ChatToolbar } from "../src/components/chat/ChatToolbar";
 
+vi.mock("../src/components/chat/ThreadTokenBadge", () => ({
+  ThreadTokenBadge: () => null,
+}));
+
 const baseProps = {
   assistantMode: "auto" as const,
   onAssistantModeChange: vi.fn(),

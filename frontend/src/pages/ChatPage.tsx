@@ -27,7 +27,8 @@ import type {
   StreamEvent,
   ToolTraceItem,
 } from "../api/types";
-import { applyToolStreamEvent } from "../lib/streamTools";
+import { type ExecutionStep } from "../lib/executionTimeline";
+import { reduceStreamTurnEvent } from "../lib/chatStreamTurn";
 import { downloadMarkdown, messagesToMarkdown } from "../lib/exportChatMarkdown";
 import { toast } from "sonner";
 import { PanelLeftClose, PanelLeftOpen, Sparkles } from "lucide-react";
@@ -56,6 +57,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState("");
+  const [streamExecutionSteps, setStreamExecutionSteps] = useState<ExecutionStep[]>([]);
   const [streamGraphViz, setStreamGraphViz] = useState<GraphViz | null>(null);
   const [error, setError] = useState("");
 
@@ -191,12 +193,14 @@ export default function ChatPage() {
 
     setStreaming(true);
     setStreamText("");
+    setStreamExecutionSteps([]);
     setStreamGraphViz(null);
 
     let assistant = "";
     let streamError = "";
     let meta: ChatMessage["meta"] = {};
     let toolTrace: ToolTraceItem[] = [];
+    let executionSteps: ExecutionStep[] = [];
     let graphViz: GraphViz | undefined;
     let clarifyEvt: Extract<StreamEvent, { type: "clarify" }> | null = null;
     let needsClarify = false;
@@ -221,32 +225,42 @@ export default function ChatPage() {
           clarify_choice_id: opts?.clarifyChoiceId,
         },
         (evt: StreamEvent) => {
+          const acc = reduceStreamTurnEvent(
+            {
+              assistant,
+              streamError,
+              meta,
+              toolTrace,
+              executionSteps,
+              graphViz,
+              needsClarify,
+              clarifyEvt,
+            },
+            evt,
+            assistantMode
+          );
+          assistant = acc.assistant;
+          streamError = acc.streamError;
+          meta = acc.meta;
+          toolTrace = acc.toolTrace;
+          executionSteps = acc.executionSteps;
+          graphViz = acc.graphViz;
+          needsClarify = acc.needsClarify;
+          clarifyEvt = acc.clarifyEvt;
+
           if (evt.type === "token") {
-            assistant += evt.content;
             setStreamText(assistant);
-          } else if (evt.type === "clarify") {
-            clarifyEvt = evt;
-          } else if (evt.type === "tool_call" || evt.type === "tool_result") {
-            toolTrace = applyToolStreamEvent(toolTrace, evt);
           } else if (evt.type === "graph_viz") {
-            graphViz = evt.graph;
             setStreamGraphViz(evt.graph);
           } else if (evt.type === "error") {
-            streamError = evt.message;
             setError(evt.message);
-          } else if (evt.type === "done") {
-            needsClarify = Boolean(evt.needs_clarify);
-            assistant = evt.answer || assistant;
-            meta = {
-              sources: evt.sources,
-              source_refs: evt.source_refs,
-              answer_mode: evt.answer_mode,
-              rag_architecture: evt.rag_architecture,
-              verified: evt.verified,
-              trace_id: evt.trace_id,
-              tool_trace: evt.tool_trace?.length ? evt.tool_trace : toolTrace,
-              graph_viz: evt.graph_viz ?? graphViz,
-            };
+          } else if (
+            evt.type === "tool_call" ||
+            evt.type === "tool_result" ||
+            evt.type === "status" ||
+            evt.type === "done"
+          ) {
+            setStreamExecutionSteps([...executionSteps]);
           }
         },
         ctrl.signal
@@ -259,6 +273,7 @@ export default function ChatPage() {
     } finally {
       setStreaming(false);
       setStreamText("");
+      setStreamExecutionSteps([]);
       setStreamGraphViz(null);
       abortRef.current = null;
       setNewTopicPending(false);
@@ -473,6 +488,7 @@ export default function ChatPage() {
               assistantMode={assistantMode}
               onAssistantModeChange={handleAssistantModeChange}
               department={department}
+              sessionId={sessionId}
               newTopicPending={newTopicPending}
               onNewTopicToggle={() => setNewTopicPending((v) => !v)}
               streaming={streaming}

@@ -6,6 +6,7 @@ describe("vite dev proxy", () => {
   it("proxies chat API subpaths but not the SPA /chat route", () => {
     const src = readFileSync(join(__dirname, "../vite.config.ts"), "utf8");
     expect(src).not.toMatch(/["']\/chat["']\s*:\s*\{/);
+    expect(src).toContain('"/api"');
     expect(src).toContain('"/auth"');
     expect(src).toContain('"/chat/sessions"');
     expect(src).toContain('"/chat/stream"');

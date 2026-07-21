@@ -9,6 +9,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from auth.service import STATE_KEY, resolve_session
+from auth.im_internal import resolve_im_internal_user
 from security.department_features import FULL_ACCESS_DEPARTMENT
 
 AUTH_PUBLIC_PREFIXES = (
@@ -61,6 +62,13 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
             user = resolve_session(token)
             if user:
                 setattr(request.state, STATE_KEY, user)
+            return await call_next(request)
+
+        im_user = resolve_im_internal_user(request)
+        if im_user:
+            setattr(request.state, STATE_KEY, im_user)
+            role = "admin" if im_user.get("department") == FULL_ACCESS_DEPARTMENT else "operator"
+            setattr(request.state, "admin_role", role)
             return await call_next(request)
 
         user = resolve_session(token)

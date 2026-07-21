@@ -14,6 +14,7 @@ spec.loader.exec_module(prompts)
 kb_user_content = prompts.kb_user_content
 general_user_content = prompts.general_user_content
 kb_system_prompt = prompts.kb_system_prompt
+general_system_prompt = prompts.general_system_prompt
 
 
 def test_kb_user_content_includes_refs():
@@ -31,3 +32,11 @@ def test_general_user_content():
 def test_kb_system_prompt_with_persona_override():
     out = kb_system_prompt(fast=False, persona="猫娘，喵")
     assert "猫娘" in out
+
+
+def test_system_prompts_include_beijing_time_anchor():
+    kb = kb_system_prompt(fast=True)
+    general = general_system_prompt()
+    assert "【时间基准】" in kb
+    assert "【时间基准】" in general
+    assert "北京时间" in kb

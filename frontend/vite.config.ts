@@ -66,6 +66,7 @@ export default defineConfig({
       "/debug": apiProxy(),
       "/sources": apiProxy(),
       "/retrieve": apiProxy(),
+      "/api": apiProxy(),
       "/admin": adminApiProxy(),
     },
   },

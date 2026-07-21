@@ -1,7 +1,24 @@
-# Assistant 融合实施计划（RAG + 任务 Agent + 多端）
+# Assistant 融合实施计划（RAG + DeerFlow Agent + 多端）
 
-> 目标：一个产品 —— **能问知识库，也能帮你完成任务**；DeerFlow 借鉴 **界面与编排形态**，不替换现有 RAG 内核与 ACL。  
-> **起点：界面融合（Phase A）**，再逐步扩展编排与渠道。
+> **实现唯一依据**：[`docs/deerflow-integration.md`](./deerflow-integration.md) + 本地源码 `D:\bytedance flow\deer-flow`  
+> **禁止**自研平行 Agent 架构（自研 ReAct 主链、自研 Skill 格式、自研 Token 聚合、自研渠道总线）。  
+> **目标**：一个产品 —— **能问知识库，也能帮你完成任务**；编排层 **严格按 DeerFlow Harness/App 分层**，RAG/ACL 仅作 **community 工具 + KB 快路径** 适配。  
+> **北极星**：Agent **准确理解意图**、**准确调用工具**（Skill + `get_available_tools` + Middleware）、**可观测**（TokenUsage）、**可多端**（channels）。
+
+---
+
+## 0. 改动原则（DeerFlow 为准 + 前后端分工）
+
+| 能力 | 实现来源（DeerFlow） | 前端 UI |
+|------|---------------------|---------|
+| **工具层** | `deerflow.tools.get_available_tools` + `config.yaml` + MCP | ❌（Admin 沿用 DeerFlow `/api/mcp` 或现有工具页） |
+| **Skill 层** | `skills/**/SKILL.md` + `SkillActivationMiddleware` | ⚠️ Chat `/` 提示（与 DeerFlow 一致） |
+| **Middleware** | `build_lead_runtime_middlewares` + `build_middlewares` | ❌ |
+| **Token** | `TokenUsageMiddleware` + `GET /api/threads/{id}/token-usage` | ✅ **对齐** `deer-flow/frontend/src/core/messages/usage.ts` |
+| **渠道** | `app/channels/*` + `GET /api/channels/` | ✅ **Admin ChannelsPage**（字段同 DeerFlow） |
+| **KB 快路径** | 本仓库 `stream_rag_chat`（仅 knowledge 模式） | 现有 Chat |
+
+**Code Review 硬规则**：见 [`deerflow-integration.md` §9](./deerflow-integration.md#9-禁止清单code-review-硬规则)。
 
 ---
 
@@ -10,8 +27,8 @@
 | 用户模式 | 说明 | 默认行为 |
 |----------|------|----------|
 | **知识** `knowledge` | 问制度、课程、内部文档 | KB 优先、有引用、低延迟 |
-| **任务** `task` | 多步办事、查+写+工具 | ReAct + 全工具 + agentic 检索 |
-| **自动** `auto` | 系统按意图路由 | 规则 + 可选小模型（Phase B） |
+| **任务** `task` | 多步办事、查+写+工具 | **`make_lead_agent` + LangGraph**（DeerFlow 主链） |
+| **自动** `auto` | 系统按意图路由 | knowledge 快路径 **或** DeerFlow 主链（按 ModeProfile） |
 
 同一 **会话 / thread**、同一 **ToolTrace 时间线**、同一 **SSE 协议**；模式可 per-session 或 per-message 覆盖。
 
@@ -21,47 +38,76 @@
 
 ```mermaid
 flowchart TB
-  subgraph experience [Experience Layer]
+  subgraph experience [Experience Layer - Jnao]
     WEB[React Chat SPA]
-    ADM[Admin 对话设置]
+    ADM[Admin]
   end
 
-  subgraph gateway [Gateway - Phase C]
-    CH[Channel Gateway 飞书/企微]
+  subgraph app [App Layer - 对齐 deer-flow/app]
+    GW[Gateway FastAPI]
+    CH[app/channels 飞书/企微]
   end
 
-  subgraph runtime [Assistant Runtime]
-    ROUTER[Intent / Mode Router]
-    MW[Turn Middleware 澄清/Todo]
-    STREAM[stream_rag_chat 统一入口]
+  subgraph harness [Harness - deerflow.*]
+    LEAD[make_lead_agent]
+    MW[Middleware Chain]
+    TOOLS[get_available_tools]
+    SK[skills/ + SkillActivationMiddleware]
   end
 
-  subgraph capabilities [Capabilities]
-    RAG[pipelines classic/graph/agentic]
-    TOOLS[tools kb_search weather web]
+  subgraph rag [本仓库保留]
+    KB[stream_rag_chat knowledge 快路径]
+    IDX[retrieval / indexing / ACL]
   end
 
-  WEB --> STREAM
-  CH --> STREAM
-  ADM --> UiConfig
-  STREAM --> ROUTER --> MW --> RAG & TOOLS
+  WEB --> GW
+  CH --> GW
+  GW --> LEAD
+  LEAD --> MW --> TOOLS
+  MW --> SK
+  TOOLS --> IDX
+  WEB -->|knowledge mode| KB
+  KB --> IDX
 ```
 
-**代码边界（同 repo，逻辑分离）：**
+**代码边界（DeerFlow Harness / App 拆分）：**
 
 ```text
-enterprise_rag/src/agent/
-  runtime/           # 模式路由、middleware（Phase B 起）
-  pipelines/         # RAG 检索内核（少动）
-  tools/             # 工具注册与执行
-  stream_chat.py     # 唯一对外编排入口
+# 引入（与 D:\bytedance flow\deer-flow 同构）
+backend/packages/harness/deerflow/     # import deerflow.*
+config.yaml                          # 模型、tools、sandbox、token_usage
+extensions_config.json               # MCP + skills enabled
+skills/public|custom/**/SKILL.md
 
-channel_gateway/     # Phase C 新建，调 /chat/stream
+# 本仓库 App 适配
+enterprise_rag/src/api/                # Gateway 扩展（挂载 deerflow routers）
+enterprise_rag/src/app/channels/       # 自 deer-flow/app/channels 适配
+enterprise_rag/src/deerflow_community/ # kb_search 等 RAG 工具（config.yaml use:）
+enterprise_rag/src/agent/stream_chat.py  # 仅 knowledge 快路径
+enterprise_rag/src/retrieval|indexing|security/  # 不变
 
 frontend/src/
-  components/chat/   # 界面融合主战场
-  lib/assistantMode.ts
+  core/messages/usage.ts               # 自 deer-flow 移植 Token UI
+  core/threads/token-usage.ts
+  pages/admin/ChannelsPage.tsx
+  pages/admin/SkillsPage.tsx           # 对齐 /api/skills
 ```
+
+### 2.1 编排北极星（DeerFlow 主链）
+
+```text
+用户消息
+  → assistant_mode：knowledge → stream_rag_chat（KB 快路径，现有）
+  → assistant_mode：task|auto → make_lead_agent(config)
+       → build_lead_runtime_middlewares（ToolOutputBudget、Sandbox…）
+       → SkillActivationMiddleware（/skill-name）
+       → DynamicContextMiddleware（日期/上下文）
+       → get_available_tools（config.yaml + MCP + builtins）
+       → ClarificationMiddleware / TodoMiddleware / TokenUsageMiddleware
+       → LangGraph SSE（messages-tuple + usage_metadata）
+```
+
+**意图与工具准确性**由 DeerFlow 机制保证：`Skill.md` 工作流、`allowed-tools`、`ask_clarification_tool`、community `web_search`（Tavily），**不得**用自研 `routing.py` 替代 task/auto 主路径（routing 仅 KB 快路径辅助，见 integration 文档 §3.4）。
 
 ---
 
@@ -309,45 +355,76 @@ class RagBackend:
 | 修改 | `frontend/src/components/chat/SessionList.tsx` | 模式角标 |
 | 修改 | `frontend/src/api/client.ts` | patchSession |
 
-### Phase B — 编排融合（约 3–4 周）
+### Phase B — DeerFlow 编排接入（DF-0 ~ DF-5，约 4–6 周）
 
-| 动作 | 路径 |
+> 逐步对照 [`deerflow-integration.md`](./deerflow-integration.md) §8；每 PR 附 DeerFlow 源文件路径。
+
+#### B0 引入 Harness
+
+| 动作 | DeerFlow 参照 |
+|------|----------------|
+| 引入 `deerflow-harness` | `D:\bytedance flow\deer-flow\backend\packages\harness` |
+| 根目录 `config.yaml` | `deer-flow/config.example.yaml` |
+| 根目录 `extensions_config.json` | DeerFlow 默认结构 |
+| 边界测试 | `tests/test_harness_boundary.py` |
+
+#### B1 工具层（`get_available_tools`）
+
+| 动作 | DeerFlow 参照 |
+|------|----------------|
+| RAG 工具 | `enterprise_rag/src/deerflow_community/` → `config.yaml` `use:` |
+| 联网搜索 | `deerflow.community.tavily.tools:web_search_tool` |
+| MCP | `deerflow.mcp` + `extensions_config.json` |
+| 废弃 | `agent/tools/runtime/loop.py` 不再作为 task/auto 主编排 |
+
+#### B2 Skill 层
+
+| 动作 | DeerFlow 参照 |
+|------|----------------|
+| 目录 | 仓库根 `skills/public|custom/**/SKILL.md` |
+| 加载/激活 | `deerflow.skills.*` + `SkillActivationMiddleware` |
+| Gateway | `app/gateway/routers/skills.py` |
+| 业务迁移 | `wecom-parent-dm`、`industry-research` 两个 SKILL |
+
+#### B3 Token（后端 + **前端展示**）
+
+| 动作 | DeerFlow 参照 |
+|------|----------------|
+| 后端 | `TokenUsageMiddleware` + `config.yaml` → `token_usage.enabled` |
+| API | `GET /api/threads/{thread_id}/token-usage` |
+| Chat UI | `deer-flow/frontend/src/core/messages/usage.ts` |
+| Thread UI | `deer-flow/frontend/src/core/threads/token-usage.ts` |
+
+#### B4 Gateway 嵌入 Lead Agent
+
+| 动作 | 说明 |
 |------|------|
-| 新增 | `enterprise_rag/src/agent/tools/builtins/todos.py` | write_todos / read_todos |
-| 新增 | `enterprise_rag/src/agent/tools/builtins/clarify.py` | ask_clarification |
-| 新增 | `enterprise_rag/src/agent/runtime/middleware.py` | TurnMiddleware 链 |
-| 新增 | `enterprise_rag/src/agent/runtime/todo_middleware.py` | |
-| 新增 | `enterprise_rag/src/agent/runtime/clarify_middleware.py` | |
-| 修改 | `enterprise_rag/src/agent/stream_chat.py` | 挂 middleware |
-| 新增 | `frontend/src/components/chat/TodoPanel.tsx` | |
-| 新增 | `frontend/src/components/chat/ClarificationCard.tsx` | |
-| 新增 | `frontend/src/lib/streamTodos.ts` | SSE todo 事件 |
-| 修改 | `frontend/src/lib/streamTools.ts` | 合并 todo/clarify |
-| 新增 | `enterprise_rag/src/agent/skills/` | slash → scene_preset（可选） |
+| task/auto | `make_lead_agent` + `RunManager` LangGraph SSE |
+| knowledge | 保留 `stream_rag_chat` 快路径 |
+| 路由 | `agent/runtime/modes.py` 选择路径 |
 
-### Phase C — 渠道多端（约 4–6 周）
+#### B5 澄清 / Todo UI
 
-| 动作 | 路径 |
-|------|------|
-| 新增 | `channel_gateway/__init__.py` | |
-| 新增 | `channel_gateway/message_bus.py` | 自 DeerFlow 瘦身拷贝 |
-| 新增 | `channel_gateway/base.py` | Channel ABC |
-| 新增 | `channel_gateway/manager.py` | RagBackend 替代 langgraph_sdk |
-| 新增 | `channel_gateway/backends/rag.py` | |
-| 新增 | `channel_gateway/adapters/feishu.py` | 首个渠道 |
-| 新增 | `channel_gateway/store.py` | external_id → user_id |
-| 修改 | `enterprise_rag/src/api/main.py` | 挂载 webhook 或独立进程 |
-| 新增 | `frontend/src/pages/admin/ChannelsPage.tsx` | 绑定管理 |
-| 新增 | `scripts/run-channel-gateway.ps1` | |
-| 新增 | `docs/channel_integration.md` | |
+| 动作 | DeerFlow 参照 |
+|------|----------------|
+| 工具 | `ask_clarification_tool`、`TodoMiddleware` |
+| 前端 | 解析 LangGraph 消息（非自研 SSE event type） |
 
-### Phase D — 深度 Agent（按需）
+### Phase C — DeerFlow 渠道（DF-6，约 3–4 周）
 
-| 动作 | 路径 |
-|------|------|
-| 新增 | `enterprise_rag/src/agent/subagents/` | 检索/写作子 agent |
-| 新增 | `enterprise_rag/src/agent/runtime/memory_queue.py` | 跨会话记忆 |
-| 新增 | `frontend/src/components/chat/ArtifactsPanel.tsx` | |
+| 动作 | DeerFlow 参照 |
+|------|----------------|
+| 模块 | `app/channels/base.py`、`message_bus.py`、`manager.py`、`feishu.py` |
+| Gateway | `app/gateway/routers/channels.py` |
+| 前端 | `ChannelsPage.tsx` ← `ChannelStatusResponse` |
+| 运行 | 渠道 worker → LangGraph-compatible runs API |
+
+### Phase D — DeerFlow 子 Agent（按需）
+
+| 动作 | DeerFlow 参照 |
+|------|----------------|
+| 子 Agent | `deerflow.subagents` + `task_tool`（`config.yaml` `subagent_enabled`） |
+| 产物 | `present_file_tool` + `ArtifactsPanel`（对齐 DeerFlow artifacts 路由） |
 
 ---
 
@@ -428,13 +505,32 @@ class RagBackend:
 
 ---
 
-## 8. 与 DeerFlow 的关系（避免重复建设）
+## 8. 与 DeerFlow 的关系（严格对齐，非选择性借鉴）
 
-| 采纳 | 不采纳 |
-|------|--------|
-| 模式切换 UX、执行时间线、Todo/澄清 UI 模式 | 整包 deerflow-harness |
-| Channel adapter 模式（Phase C） | DeerFlow Next.js 前端 |
-| Middleware **思想**（Phase B 自研薄层） | Sandbox/bash（初期） |
+**源码路径**：`D:\bytedance flow\deer-flow`  
+**集成规范**：[`docs/deerflow-integration.md`](./deerflow-integration.md)
+
+| 必须整模块对齐 | 本仓库唯一增量 |
+|----------------|----------------|
+| `deerflow-harness`（agents / tools / skills / mcp / runtime） | `deerflow_community` RAG 工具 |
+| `config.yaml` + `extensions_config.json` | 部门 ACL 注入 kb 工具 |
+| `skills/public|custom` + `SkillActivationMiddleware` | 业务 SKILL 内容 |
+| `TokenUsageMiddleware` + thread token-usage API | Jnao 前端 UI 移植 |
+| `app/channels/*` + `/api/channels` | 飞书/企微凭证与部门映射 |
+| `make_lead_agent` + Middleware 链 | **knowledge** 模式 `stream_rag_chat` 快路径 |
+
+**禁止**：自研 TurnMiddleware、自研 Skill loader、自研 token store、自研 `channel_gateway/` 包名与 DeerFlow 不同的总线。
+
+### 8.1 能力对照
+
+| 维度 | DeerFlow 实现 | 本仓库 |
+|------|---------------|--------|
+| 意图→工具 | Skill + `get_available_tools` + Middleware | **同左**（task/auto）；knowledge 走 KB 快路径 |
+| 联网搜索 | `deerflow.community.tavily` | **同左**（config.yaml） |
+| Skill | `LocalSkillStorage` + `/slash` | **同左** |
+| Token | `TokenUsageMiddleware` + `/api/threads/.../token-usage` | **同左** + 前端 usage 模块 |
+| 渠道 | `app/channels` + LangGraph runs | **同左** |
+| RAG | — | `deerflow_community.kb_search` + 现有 indexing |
 
 ---
 
@@ -457,11 +553,18 @@ feat(admin): default assistant mode in ui config
 
 ---
 
-## 10. 下一步（立即执行）
+## 10. 下一步（执行顺序）
 
-**当前迭代只做 Step A1 + A2 + A3**（契约 + 模式切换 UI），A4 Timeline 紧随其后。
+1. 阅读并锁定 [`deerflow-integration.md`](./deerflow-integration.md)  
+2. **DF-0**：引入 harness + `config.yaml`  
+3. **DF-1 ~ DF-3**：skills + deerflow_community 工具  
+4. **DF-4**：task/auto → `make_lead_agent`  
+5. **DF-5**：TokenUsage + 前端 usage 移植  
+6. **DF-6**：`app/channels` + Admin ChannelsPage  
 
-执行顺序见 [§6 Phase A 分步实现](#6-phase-a-分步实现逐步提交)。
+分支：`feature/deerflow-harness-integration`（B）、`feature/deerflow-channels`（C）。
+
+Phase A 收尾与 Phase B **并行仅限文档/模式路由**；任何编排代码以 DeerFlow 模块为准。
 
 ---
 
@@ -493,11 +596,12 @@ curl -N -X POST "http://127.0.0.1:8010/chat/stream" \
 
 ## 附录 B — 现有代码挂点速查
 
-|  Concern | 文件 |
-|----------|------|
-| 流式入口 | `enterprise_rag/src/api/main.py` → `chat_stream` |
-| 编排主链 | `enterprise_rag/src/agent/stream_chat.py` |
-| 工具循环 | `enterprise_rag/src/agent/tools/runtime/loop.py` |
-| 前端发送 | `frontend/src/pages/ChatPage.tsx` → `handleSend` |
-| 工具 trace UI | `frontend/src/components/chat/ToolTracePanel.tsx` |
-| UI 配置 | `enterprise_rag/src/api/ui_config_store.py` |
+|  Concern | DeerFlow 参照 | 本仓库（过渡期） |
+|----------|---------------|------------------|
+| Lead Agent | `deerflow.agents.lead_agent.agent:make_lead_agent` | Phase B 接入 |
+| 工具 | `deerflow.tools.get_available_tools` | `deerflow_community/`（规划） |
+| Skill | `deerflow.skills` + `skills/` | Phase B |
+| Token | `TokenUsageMiddleware` + `/api/threads/{id}/token-usage` | Phase B |
+| 渠道 | `app/channels/` + `/api/channels/` | Phase C |
+| KB 快路径 | — | `stream_chat.py`（knowledge only） |
+| 集成规范 | — | `docs/deerflow-integration.md` |

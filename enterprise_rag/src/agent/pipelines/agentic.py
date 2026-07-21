@@ -96,6 +96,7 @@ def run_agentic_retrieval(
             max_tokens=mt_int,
             enabled_ids=enabled,
             user_question=str(state.get("question") or ""),
+            metering_state=state,
         )
     finally:
         loop_mod.MAX_TOOL_TURNS = old_max
@@ -186,6 +187,7 @@ def stream_agentic_answer(
             enabled_ids=enabled,
             emit=emit,
             user_question=str(state.get("question") or ""),
+            metering_state=state,
         )
     finally:
         loop_mod.MAX_TOOL_TURNS = old_max
@@ -212,6 +214,7 @@ def stream_agentic_answer(
         messages=messages,
         temperature=temperature,
         max_tokens=max_tokens,
+        metering_state=state,
     ):
         parts.append(delta)
         if emit_tokens:

@@ -28,7 +28,9 @@ from agent.tools.runtime.routing import (
     question_needs_agent_tools,
     question_needs_realtime_tools,
     resolve_relationship_graph_query,
+    resolve_web_search_query,
     should_use_relationship_graph_fast_path,
+    should_use_web_search_followup,
 )
 from agent.tools.runtime.stream import is_tools_active, stream_general_answer
 from agent.clarify import (
@@ -41,20 +43,43 @@ from agent.output_schemas import output_schema_instruction
 from graph.prompts import graph_kb_system_extra
 from config import settings
 from evaluation.stream_langsmith import new_stream_tracer
+from api.stream_errors import format_stream_error
 from openai import OpenAI
 
 
-def _is_realtime_tool_turn(state: dict[str, Any]) -> bool:
-    """Prefer QueryUnderstanding intent from prepare_turn; fallback for direct/test calls."""
+def apply_strict_kb_miss_contexts(
+    *,
+    kb_ok: bool,
+    answer_mode: str,
+    ctx: list[str],
+    meta: list[dict[str, Any]],
+    general_fallback_enabled: bool,
+) -> tuple[str, list[str], list[dict[str, Any]], bool]:
+    """When strict KB judge rejects retrieval, drop weak chunks so they cannot steer the answer.
+
+    Returns (answer_mode, ctx, meta, missed).
+    """
+    if kb_ok or answer_mode != "kb":
+        return answer_mode, ctx, meta, False
+    if general_fallback_enabled:
+        return "general", [], [], True
+    return "kb", [], [], True
+
+
+def _is_realtime_tool_turn(
+    state: dict[str, Any],
+    history: list[dict[str, Any]] | None = None,
+) -> bool:
+    """Realtime / web-search tool turns (DeerFlow-style: regex + confirm follow-ups)."""
     if not is_tools_active():
         return False
-    meta = state.get("turn_meta") or {}
-    intent = meta.get("query_intent")
-    if intent == "realtime":
+    q = str(state.get("question") or "")
+    if history and should_use_web_search_followup(q, history):
         return True
-    if intent in ("kb", "graph", "unknown"):
-        return False
-    return question_needs_realtime_tools(str(state.get("question") or ""))
+    if question_needs_realtime_tools(q):
+        return True
+    meta = state.get("turn_meta") or {}
+    return meta.get("query_intent") == "realtime"
 
 
 def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
@@ -130,10 +155,18 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
         return
 
     raw_question = str(state["question"] or "")
-    realtime_tool_turn = _is_realtime_tool_turn(state)
+    web_search_followup = should_use_web_search_followup(raw_question, history)
+    realtime_tool_turn = _is_realtime_tool_turn(state, history)
     if realtime_tool_turn:
         state = dict(state)
         state["_realtime_tool_turn"] = True
+        state["agent_reasoning_mode"] = "react"
+        reasoning_mode = "react"
+        if web_search_followup:
+            resolved = resolve_web_search_query(raw_question, history)
+            state["question"] = resolved
+            init_state["question"] = resolved
+            state["_web_search_followup"] = True
 
     input_mode, doc_task_type = resolve_input_mode(
         input_mode=state.get("input_mode"),
@@ -238,7 +271,7 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
                 )
         except Exception as e:
             trace.finish({}, error=str(e))
-            yield _evt({"type": "error", "message": str(e), "trace_id": trace.trace_id})
+            yield _evt({"type": "error", "message": format_stream_error(e), "trace_id": trace.trace_id})
             return
 
     with trace.span(
@@ -283,9 +316,15 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
             topic_shift=bool(state.get("topic_shift")),
             kb_llm_judge_always=bool(mem.get("kb_llm_judge_always", False)),
         )
-        if not kb_ok:
+        answer_mode, ctx, meta, missed = apply_strict_kb_miss_contexts(
+            kb_ok=kb_ok,
+            answer_mode=answer_mode,
+            ctx=ctx,
+            meta=meta,
+            general_fallback_enabled=bool(mem.get("general_fallback_enabled", True)),
+        )
+        if missed:
             state["_kb_strict_miss"] = True
-            # 灰/弱命中仍保留检索片段供 LLM 作答，不直接清空 ctx
 
     api_key = (state.get("llm_api_key") or "").strip() or settings.openai_api_key
     api_base = (state.get("llm_api_base") or "").strip() or settings.openai_api_base
@@ -372,10 +411,10 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
                 kw = _gen_kw(model, messages, temp, mt)
                 try:
                     if may_post_fallback:
-                        for _ in _stream_tokens(client, kw, parts, emit=False):
+                        for _ in _stream_tokens(client, kw, parts, emit=False, state=state):
                             pass
                     else:
-                        yield from _stream_tokens(client, kw, parts, emit=True)
+                        yield from _stream_tokens(client, kw, parts, emit=True, state=state)
                 except Exception as e:
                     trace_err = str(e)
                     raise
@@ -411,10 +450,10 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
                 kw = _gen_kw(model, messages, temp, mt)
                 try:
                     if may_post_fallback:
-                        for _ in _stream_tokens(client, kw, parts, emit=False):
+                        for _ in _stream_tokens(client, kw, parts, emit=False, state=state):
                             pass
                     else:
-                        yield from _stream_tokens(client, kw, parts, emit=True)
+                        yield from _stream_tokens(client, kw, parts, emit=True, state=state)
                 except Exception as e:
                     trace_err = str(e)
                     raise
@@ -429,7 +468,7 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
             state["_tool_trace"] = tool_trace
     except Exception as e:
         trace.finish({"answer_mode": answer_mode}, error=str(e))
-        yield _evt({"type": "error", "message": str(e)[:400], "trace_id": trace.trace_id})
+        yield _evt({"type": "error", "message": format_stream_error(e), "trace_id": trace.trace_id})
         return
 
     answer = "".join(parts).strip()
@@ -470,7 +509,7 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
                     )
                     messages = build_llm_messages(system=system, history=history, user_content=user_content)
                     gen_kw = _gen_kw(model, messages, temp, mt)
-                    yield from _stream_tokens(client, gen_kw, parts, emit=True)
+                    yield from _stream_tokens(client, gen_kw, parts, emit=True, state=state)
                 answer = "".join(parts).strip()
                 fb_out.update({"answer_len": len(answer), "tool_trace": tool_trace[:5]})
                 state["_tool_trace"] = tool_trace
@@ -499,6 +538,7 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
                 answer_mode=answer_mode,
                 enabled=True,
                 llm_runtime=runtime,
+                metering_state=state,
             )
             answer = str(vout.get("answer") or answer)
             verified = bool(vout.get("verified", True))
@@ -589,15 +629,38 @@ def _stream_tokens(
     parts: list[str],
     *,
     emit: bool = True,
+    state: dict[str, Any] | None = None,
+    caller: str = "answer",
 ) -> Iterator[str]:
-    stream = client.chat.completions.create(**kw)
+    stream = None
+    try:
+        stream = client.chat.completions.create(**{**kw, "stream_options": {"include_usage": True}})
+    except Exception:
+        stream = client.chat.completions.create(**kw)
+    usage = None
     for chunk in stream:
+        chunk_usage = getattr(chunk, "usage", None)
+        if chunk_usage is not None:
+            usage = chunk_usage
+        if not getattr(chunk, "choices", None):
+            continue
         delta = chunk.choices[0].delta.content or ""
         if not delta:
             continue
         parts.append(delta)
         if emit:
             yield _evt({"type": "token", "content": delta})
+    try:
+        from api.token_usage_store import metering_meta_from_state, record_usage_object
+
+        record_usage_object(
+            usage,
+            model=str(kw.get("model") or ""),
+            caller=caller,
+            **metering_meta_from_state(state),
+        )
+    except Exception:
+        pass
 
 
 def _replay_tokens(parts: list[str]) -> Iterator[str]:

@@ -1,0 +1,98 @@
+# Jnao agent harness — minimal config (schema aligned with upstream harness config.example.yaml)
+# Copy from deer-flow when upgrading: bump config_version and run merge manually.
+
+config_version: 17
+
+log_level: info
+
+token_usage:
+  enabled: true
+
+token_budget:
+  enabled: false
+
+max_recursion_limit: 1000
+
+models:
+  - name: jnao-default
+    display_name: Jnao Default
+    use: langchain_openai:ChatOpenAI
+    model: $OPENAI_CHAT_MODEL
+    openai_api_base: $OPENAI_API_BASE
+    openai_api_key: $OPENAI_API_KEY
+    max_tokens: 4096
+
+tool_groups:
+  - name: web
+  - name: rag
+
+tools:
+  - name: web_search
+    group: web
+    use: deerflow.community.tavily.tools:web_search_tool
+    max_results: 5
+
+  - name: kb_search
+    group: rag
+    use: jnao_community.kb_search:kb_search_tool
+
+  - name: list_kb_sources
+    group: rag
+    use: jnao_community.list_kb_sources:list_kb_sources_tool
+
+  - name: format_structured_output
+    group: rag
+    use: jnao_community.format_structured_output:format_structured_output_tool
+
+database:
+  backend: sqlite
+  sqlite_dir: .deer-flow/data
+
+subagents:
+  enabled: false
+
+sandbox:
+  use: deerflow.sandbox.local:LocalSandboxProvider
+  provider: local
+
+# IM 渠道：Harness Gateway（8011）跑 Worker；凭证可在 Admin → IM 渠道 写入 runtime-config.json
+channel_connections:
+  enabled: true
+  require_bound_identity: false
+  wecom:
+    enabled: true
+  feishu:
+    enabled: true
+  telegram:
+    enabled: true
+  slack:
+    enabled: true
+  discord:
+    enabled: true
+  dingtalk:
+    enabled: true
+  wechat:
+    enabled: true
+
+channels:
+  gateway_url: http://127.0.0.1:8011
+  langgraph_url: http://127.0.0.1:8011/api
+  # IM 消息走 Main RAG API（8010）知识库模式，而非 DeerFlow lead_agent 默认话术
+  rag_api_url: http://127.0.0.1:8010
+  use_rag_backend: true
+  # 企微/IM 未绑定 Jnao 账号的成员统一按此部门查知识库（技术部 internal + public 文档）
+  im_default_department: 技术部
+  wecom:
+    enabled: true
+  feishu:
+    enabled: false
+  telegram:
+    enabled: false
+  slack:
+    enabled: false
+  discord:
+    enabled: false
+  dingtalk:
+    enabled: false
+  wechat:
+    enabled: false
