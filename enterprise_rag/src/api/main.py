@@ -242,6 +242,13 @@ app.include_router(feedback_router)
 app.include_router(feedback_router, prefix="/api/v1")
 
 try:
+    from api.ops_digest_router import router as ops_digest_router
+
+    app.include_router(ops_digest_router)
+except ImportError:
+    pass
+
+try:
     from jnao_harness.gateway.routers.channel_connections import router as channel_connections_router
 
     app.include_router(channel_connections_router)

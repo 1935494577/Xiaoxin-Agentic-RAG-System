@@ -86,7 +86,7 @@ export default function MemoryPage() {
         kb_llm_judge: raw.kb_llm_judge ?? true,
         kb_post_stream_fallback: raw.kb_post_stream_fallback ?? false,
         hybrid_expert_mode: raw.hybrid_expert_mode ?? false,
-        default_assistant_mode: raw.default_assistant_mode ?? "auto",
+        default_assistant_mode: raw.default_assistant_mode ?? "knowledge",
         stream_verifier_enabled: raw.stream_verifier_enabled ?? false,
         graph_verifier_enabled: raw.graph_verifier_enabled ?? false,
         conversation_condense_enabled: raw.conversation_condense_enabled ?? true,

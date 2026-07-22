@@ -10,7 +10,7 @@ from agent.runtime.modes import AssistantMode, ModeProfile, build_mode_profile, 
 def resolve_effective_mode(request_mode: str | None, ui_config: dict[str, Any]) -> AssistantMode:
     if request_mode and normalize_assistant_mode(request_mode) != "auto":
         return normalize_assistant_mode(request_mode)
-    return normalize_assistant_mode(str(ui_config.get("default_assistant_mode") or "auto"))
+    return normalize_assistant_mode(str(ui_config.get("default_assistant_mode") or "knowledge"))
 
 
 def resolve_mode_profile(

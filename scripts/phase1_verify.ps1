@@ -26,8 +26,8 @@ try {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     Pop-Location
 
-    Write-Host "`nPhase 1 automated checks passed." -ForegroundColor Green
-    Write-Host "Manual ops checklist: docs/phase1_acceptance.md" -ForegroundColor Yellow
+    Write-Host "`nAutomated checks passed." -ForegroundColor Green
+    Write-Host "Project overview: docs/项目说明.md" -ForegroundColor Yellow
 }
 finally {
     Pop-Location

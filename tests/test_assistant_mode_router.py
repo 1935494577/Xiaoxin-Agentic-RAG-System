@@ -6,10 +6,10 @@ from agent.runtime.modes import build_mode_profile, normalize_assistant_mode
 from agent.runtime.router import apply_mode_to_memory, resolve_effective_mode
 
 
-def test_normalize_assistant_mode_defaults_to_auto():
-    assert normalize_assistant_mode(None) == "auto"
-    assert normalize_assistant_mode("") == "auto"
-    assert normalize_assistant_mode("invalid") == "auto"
+def test_normalize_assistant_mode_defaults_to_knowledge():
+    assert normalize_assistant_mode(None) == "knowledge"
+    assert normalize_assistant_mode("") == "knowledge"
+    assert normalize_assistant_mode("invalid") == "knowledge"
 
 
 def test_knowledge_mode_profile():

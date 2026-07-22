@@ -39,6 +39,20 @@ export type TokenUsageCallRecord = {
   question_preview: string;
 };
 
+/** Aggregated by session + question (one user turn may include multiple LLM calls). */
+export type TokenUsageTurnRecord = {
+  session_id: string;
+  question_preview: string;
+  created_at: string;
+  model: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  llm_call_count: number;
+  callers: string[];
+  call_ids?: string[];
+};
+
 export type TokenUsageSummaryResponse = {
   total_tokens: number;
   total_input_tokens: number;
@@ -48,6 +62,7 @@ export type TokenUsageSummaryResponse = {
   total_llm_calls: number;
   by_model: Record<string, ThreadTokenUsageModelBreakdown>;
   records: TokenUsageCallRecord[];
+  turns?: TokenUsageTurnRecord[];
   source: string;
   available: boolean;
 };
@@ -102,8 +117,40 @@ export async function fetchTokenUsageSummary(limit = 100): Promise<TokenUsageSum
       total_llm_calls: 0,
       by_model: {},
       records: [],
+      turns: [],
       source: "unavailable",
       available: false,
     };
+  }
+}
+
+export type OpsDigestResponse = {
+  since: string;
+  since_days: number;
+  token_usage: {
+    total_tokens: number;
+    total_input_tokens: number;
+    total_output_tokens: number;
+    total_calls: number;
+  };
+  feedback: {
+    total: number;
+    positive: number;
+    negative: number;
+    pending_triage: number;
+    retrieval_miss: number;
+  };
+  generated_at: string;
+};
+
+export function opsDigestQueryKey(sinceDays = 1) {
+  return ["ops-digest", sinceDays] as const;
+}
+
+export async function fetchOpsDigest(sinceDays = 1): Promise<OpsDigestResponse | null> {
+  try {
+    return await apiGet<OpsDigestResponse>(`/api/ops/digest?since_days=${sinceDays}`);
+  } catch {
+    return null;
   }
 }

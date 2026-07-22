@@ -28,9 +28,13 @@ describe("assistantMode", () => {
     localStorageMock.clear();
   });
 
-  it("normalizes invalid modes to auto", () => {
-    expect(normalizeAssistantMode("nope")).toBe("auto");
+  it("normalizes invalid modes to knowledge", () => {
+    expect(normalizeAssistantMode("nope")).toBe("knowledge");
     expect(normalizeAssistantMode("knowledge")).toBe("knowledge");
+  });
+
+  it("resolveDefaultAssistantMode falls back to knowledge", () => {
+    expect(resolveDefaultAssistantMode(null, null)).toBe("knowledge");
   });
 
   it("persists mode in localStorage", () => {

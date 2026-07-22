@@ -56,7 +56,7 @@ DEFAULT_UI_CONFIG: dict[str, Any] = {
     "agentic_max_turns": 6,
     "agentic_max_kb_searches": 4,
     "clarify_enabled": False,
-    "default_assistant_mode": "auto",
+    "default_assistant_mode": "knowledge",
 }
 
 SUPPORTED_UPLOAD_EXTENSIONS = ("txt", "md", "pdf", "docx", "html")

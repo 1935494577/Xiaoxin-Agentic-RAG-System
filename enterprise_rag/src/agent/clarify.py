@@ -97,7 +97,11 @@ def should_offer_clarify(
 ) -> bool:
     if not enabled or skip_clarify or clarify_choice_id:
         return False
-    if intent in ("realtime", "graph"):
+    if intent in ("realtime", "graph", "chitchat"):
+        return False
+    from agent.chitchat import is_chitchat_message
+
+    if is_chitchat_message(message):
         return False
     text = (message or "").strip()
     if len(text) >= 24 and rule_confidence >= threshold:

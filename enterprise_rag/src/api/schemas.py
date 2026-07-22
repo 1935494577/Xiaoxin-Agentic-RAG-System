@@ -495,7 +495,7 @@ class UiConfigPublic(BaseModel):
     graph_extraction_enabled: bool = True
     agentic_max_turns: int = 6
     agentic_max_kb_searches: int = 4
-    default_assistant_mode: str = "auto"
+    default_assistant_mode: str = "knowledge"
 
 
 class UiConfigUpdate(BaseModel):

@@ -46,6 +46,19 @@ class TokenUsageCallRecord(BaseModel):
     question_preview: str = ""
 
 
+class TokenUsageTurnRecord(BaseModel):
+    session_id: str = ""
+    question_preview: str = ""
+    created_at: str = ""
+    model: str = ""
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    llm_call_count: int = 0
+    callers: list[str] = Field(default_factory=list)
+    call_ids: list[str] = Field(default_factory=list)
+
+
 class TokenUsageSummaryResponse(BaseModel):
     total_tokens: int = 0
     total_input_tokens: int = 0
@@ -56,6 +69,7 @@ class TokenUsageSummaryResponse(BaseModel):
     total_llm_calls: int = 0
     by_model: dict[str, ThreadTokenUsageModelBreakdown] = Field(default_factory=dict)
     records: list[TokenUsageCallRecord] = Field(default_factory=list)
+    turns: list[TokenUsageTurnRecord] = Field(default_factory=list)
     source: str = "jnao_sqlite"
     available: bool = True
 
@@ -98,6 +112,7 @@ async def token_usage_summary(
         for name, row in (out.get("by_model") or {}).items()
     }
     records = [TokenUsageCallRecord(**row) for row in (out.get("records") or [])]
+    turns = [TokenUsageTurnRecord(**row) for row in (out.get("turns") or [])]
     return TokenUsageSummaryResponse(
         total_tokens=int(out.get("total_tokens") or 0),
         total_input_tokens=int(out.get("total_input_tokens") or 0),
@@ -107,6 +122,7 @@ async def token_usage_summary(
         total_llm_calls=total_calls,
         by_model=by_model,
         records=records,
+        turns=turns,
         source="jnao_sqlite",
         available=True,
     )

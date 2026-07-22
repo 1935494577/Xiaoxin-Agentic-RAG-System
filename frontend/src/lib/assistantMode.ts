@@ -27,9 +27,9 @@ export const ASSISTANT_MODE_OPTIONS: AssistantModeOption[] = [
 ];
 
 export function normalizeAssistantMode(raw: string | null | undefined): AssistantMode {
-  const key = (raw || "auto").trim().toLowerCase();
+  const key = (raw || "knowledge").trim().toLowerCase();
   if (key === "knowledge" || key === "task" || key === "auto") return key;
-  return "auto";
+  return "knowledge";
 }
 
 export function loadStoredAssistantMode(): AssistantMode | null {
@@ -55,7 +55,7 @@ export function resolveDefaultAssistantMode(
   stored?: AssistantMode | null
 ): AssistantMode {
   if (stored != null) return stored;
-  return normalizeAssistantMode(uiDefault ?? "auto");
+  return normalizeAssistantMode(uiDefault ?? "knowledge");
 }
 
 export function placeholderForMode(mode: AssistantMode): string {
