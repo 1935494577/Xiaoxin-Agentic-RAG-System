@@ -15,6 +15,7 @@ class AdminPageSpec(TypedDict):
 # Order matches ALL_NAV_ITEMS in departmentAccess.ts (excluding chat).
 ADMIN_PAGES: list[AdminPageSpec] = [
     {"id": "ingest", "label": "数据入库", "url_path": "ingest"},
+    {"id": "exam_bank", "label": "题库组卷", "url_path": "exam-bank"},
     {"id": "scenarios", "label": "业务场景", "url_path": "scenarios"},
     {"id": "processing", "label": "工具", "url_path": "processing"},
     {"id": "vector_store", "label": "向量库", "url_path": "vector-store"},

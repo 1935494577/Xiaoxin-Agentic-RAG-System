@@ -100,6 +100,10 @@ export function apiGet<T>(path: string, init?: RequestInit & { timeoutMs?: numbe
   return request<T>(path, init);
 }
 
+export function apiRequest<T>(path: string, init?: RequestInit & { timeoutMs?: number }): Promise<T> {
+  return request<T>(path, init);
+}
+
 // ===== UI & Nav =====
 export function authLogin(
   username: string,

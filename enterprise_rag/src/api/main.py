@@ -175,6 +175,12 @@ async def lifespan(app: FastAPI):
     from api.token_usage_store import init_token_usage_db
 
     init_token_usage_db()
+    try:
+        from exam_bank.store import init_exam_bank_db
+
+        init_exam_bank_db()
+    except Exception:
+        pass
     init_user_profile_db()
     init_platform_config_db()
     init_auth_db()
@@ -245,6 +251,13 @@ try:
     from api.ops_digest_router import router as ops_digest_router
 
     app.include_router(ops_digest_router)
+except ImportError:
+    pass
+
+try:
+    from api.exam_router import router as exam_router
+
+    app.include_router(exam_router)
 except ImportError:
     pass
 

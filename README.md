@@ -19,7 +19,8 @@
 | **HTTP API** | FastAPI：健康检查、入库、**关系入库**、**领域词表重建**、**语音转写**、检索调试、流式对话、会话记忆、可插拔提示词、**场景预设 API**（`POST /config/ui/scene-preset/{id}`）、模型/向量库/UI 配置（`api`） |
 | **安全** | 可选 `RAG_API_SECRET`、**`RAG_ADMIN_API_SECRET`**（管理 API 独立密钥）、CORS、可信 Host、安全头；**Admin 角色**（`X-Admin-Role`：viewer/operator/admin）；**前端 RequireAuth**（未登录跳转 `/login`）；注入检测；**部门 + 可见范围 ACL** |
 | **租户预留（Sprint E）** | `X-Tenant-ID` 中间件（默认 `internal`）；`/api/v1/*` 路由别名；`FeedbackStore` / `TraceStore` 抽象 |
-| **前端** | **Jnao Chat** React SPA（8502）：流式对话；**助手模式切换**（知识/任务/自动，默认知识）；**执行步骤时间线**；**语音输入**；**Chat 内交互关系图**（ECharts）；**SQLite 登录**与**用户资料**；**新话题**；**部门功能门控**；**React 管理后台**（`/admin`）：侧边栏分组（日常运营 / 质量闭环 / 系统配置）、各页「怎么用」指南、**结构化链路详情**（反馈 Trace）；**Token 用量**（本项目 SQLite：全局总量 + 按用户提问聚合 + 今日一览含反馈/检索未命中；Chat 工具栏会话徽章）；入库、工具、提示词、模型、对话设置（含默认助手模式与场景预设）、评测报告、IM 渠道等 |
+| **前端** | **Jnao Chat** React SPA（8502）：流式对话；**助手模式切换**（知识/任务/自动，默认知识）；**执行步骤时间线**；**语音输入**；**Chat 内交互关系图**（ECharts）；**SQLite 登录**与**用户资料**；**新话题**；**部门功能门控**；**React 管理后台**（`/admin`）：侧边栏分组（日常运营 / 质量闭环 / 系统配置）、各页「怎么用」指南、**结构化链路详情**（反馈 Trace）；**题库组卷**（`/admin/exam-bank`：学科/年级/地区题库、录题、按配比组卷 Markdown；场景 `exam_assemble`）；**Token 用量**（本项目 SQLite：全局总量 + 按用户提问聚合 + 今日一览）；入库、工具、提示词、模型、对话设置、评测报告、IM 渠道等 |
+| **题库子系统** | 独立 SQLite + `/api/exam/*`；**学段×学科**题型模板；**LLM 优先**试卷路由（`analyze-paper`）+ 规则兜底；多选配比/难度档/缺题型提示；**资产可见性** `private` / `tenant_shared` / `platform`（`platform_acl`）；见 [`docs/exam-bank-routing.md`](docs/exam-bank-routing.md)、[`docs/data-platform.md`](docs/data-platform.md) |
 | **用户反馈（Sprint A–D）** | 👍👎 反馈 → Triage → 采纳 → **Actuator**（golden / 重入库工单 / 配置补丁 / **query alias**）→ **alias 候选排序**（`GET /admin/feedback/alias-proposals`）→ **golden 评测**（RAGAS 或 naive 回退，对比上一份 Δ）；`config_revisions` 可回滚；Admin **评测报告**页；Feedback 故障时 **Chat 热路径不受影响** |
 | **Harness / IM** | DeerFlow 对齐的 harness：`config.yaml`、`run-dev-harness.ps1`（8010+8011+8502）；IM Worker 在 **8011**；规范见 [`docs/deerflow-integration.md`](docs/deerflow-integration.md) |
 | **评测与追踪** | 可选 LangSmith / 本地 JSONL trace；`scripts/eval_ingest_dedup.py` 检索去重 A/B；`scripts/eval_query_robustness.py`（分 scenario 汇总）/ `scripts/query_verify.ps1`；`docs/query-understanding.md` |
@@ -57,6 +58,12 @@ xiaoxin_RAG/
 ├── requirements-gpu.txt
 ├── docs/
 │   ├── 项目说明.md              # 当前能力与结构总览（As-Is）
+│   ├── data-platform.md         # 全平台数据层：共享/私有、PG 目标架构
+│   ├── data-platform-issues.md  # 数据平台实施问题记录
+│   ├── exam-bank-api.md         # 题库/组卷 API 实施与闭环
+│   ├── exam-bank-issues.md      # 题库实施问题记录
+│   ├── exam-bank-routing.md     # 试卷 LLM 路由与组卷
+│   ├── exam-bank-assemble-v2.md # 组卷配比 v2
 │   ├── conversation-context.md  # 多轮上下文 L1–L4
 │   ├── query-understanding.md   # Query Understanding
 │   ├── deerflow-integration.md  # DeerFlow / harness 规范
