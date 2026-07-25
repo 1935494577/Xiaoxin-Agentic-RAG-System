@@ -14,6 +14,18 @@
 
 ---
 
+## 延期（Phase 2+，勿局部抢做）
+
+| ID | 项 | 原因 |
+|----|-----|------|
+| DEF-001 | ~~PDF 试卷入库解析~~ | **收窄**：文本 PDF/DOCX 拆题见 `exam-bank-ingest.md`；扫描件 OCR 仍延期 |
+| DEF-002 | ~~教案生成~~ | **MVP 已落地**：`POST /api/exam/papers/{id}/lesson` 规则大纲；LLM 润色可后续增强 |
+| DEF-003 | 爬虫语料洞察库 | 独立数据模型，避免与题表耦合 |
+| DEF-004 | 题干向量相似题 | 可选辅索引，组卷主路径不依赖 |
+| DEF-005 | 扫描件 / 图片 OCR 试卷 | 依赖 OCR 质量闸门 |
+
+---
+
 ## 开放问题
 
 （无）
@@ -21,6 +33,17 @@
 ---
 
 ## 已记录
+
+### ISSUE-004 — Chat 可用但拆题失败
+
+| 字段 | 内容 |
+|------|------|
+| 状态 | resolved |
+| 日期 | 2026-07-23 |
+| 现象 | 蓝条显示模型已配置，橙条「大模型拆题未成功」；Chat 正常 |
+| 根因 | ① 粘贴拆题前端默认 60s 超时，整卷易被 abort；② 失败吞掉上游异常误报成 Key 问题；③ 拆题曾偏好 routing 小模型 |
+| 修复 | parse `timeoutMs=180s`；拆题用 `chat_model`；JSON fence/`json_object`；错误透传 |
+| 测试 | `test_exam_ingest_llm_errors.py` |
 
 ### ISSUE-000 — 文档与实施基线
 
@@ -54,16 +77,17 @@
 | 范围 | store |
 | 修复 | `_lock` 改为 `threading.RLock` |
 
----
+### ISSUE-003 — 缺删除/编辑与试卷入库
 
-## 延期（Phase 2+，勿局部抢做）
-
-| ID | 项 | 原因 |
-|----|-----|------|
-| DEF-001 | PDF 试卷入库解析 | 依赖拆题质量闸门，MVP 先手录/JSON |
-| DEF-002 | 教案生成 | 依赖稳定题 ID 与模板 |
-| DEF-003 | 爬虫语料洞察库 | 独立数据模型，避免与题表耦合 |
-| DEF-004 | 题干向量相似题 | 可选辅索引，组卷主路径不依赖 |
+| 字段 | 内容 |
+|------|------|
+| 状态 | resolved |
+| 日期 | 2026-07-23 |
+| 现象 | Admin 只能增题；粘贴文本识别大节；无 PDF/Word；无答案卷按题号关联 |
+| 期望 | CRUD + 文档拆题预览入库 + source_papers 答案关联 |
+| 范围 | store / api / fe |
+| 决策 | 见 [`exam-bank-ingest.md`](./exam-bank-ingest.md) |
+| 修复 | `update/delete` + `item_split` + `/api/exam/ingest/*` + Admin 编辑/导入/答案区；测试 `test_exam_crud` / `test_exam_ingest` / API |
 
 ---
 
@@ -73,3 +97,4 @@
 |------|------|
 | 2026-07-22 | 创建文档；启动 `feature/exam-bank-mvp` |
 | 2026-07-23 | 试卷路由复用 `.env` deepseek-v4-flash（llm_client + base /v1） |
+| 2026-07-23 | DEF-001 收窄；启动 CRUD/导入/答案关联（ingest） |

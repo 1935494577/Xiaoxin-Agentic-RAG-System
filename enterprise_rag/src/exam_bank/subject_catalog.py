@@ -7,6 +7,7 @@ from typing import Any
 
 BUILTIN_QTYPES = (
     "choice",
+    "multi",
     "fill",
     "short",  # 解答/非选择综合（数学常用）
     "calc",
@@ -21,6 +22,7 @@ BUILTIN_QTYPES = (
 
 QTYPE_LABELS: dict[str, str] = {
     "choice": "选择题",
+    "multi": "多选题",
     "fill": "填空题",
     "short": "解答题",
     "calc": "计算题",
@@ -37,7 +39,8 @@ SECTION_ALIASES: dict[str, str] = {
     "选择题": "choice",
     "选择": "choice",
     "单选题": "choice",
-    "多选题": "choice",
+    "多选题": "multi",
+    "多项选择": "multi",
     "填空题": "fill",
     "填空": "fill",
     "语法填空": "fill",
@@ -77,6 +80,46 @@ DIFFICULTY_BAND_LABELS = {"easy": "简单", "mid": "中等", "hard": "困难"}
 
 STAGES = ("primary", "junior", "senior")
 STAGE_LABELS = {"primary": "小学", "junior": "初中", "senior": "高中"}
+
+# 组卷/入库「优先地区」常用省市（与学科网筛选对齐；库存命中优先展示）
+COMMON_REGIONS: tuple[str, ...] = (
+    "北京",
+    "天津",
+    "河北",
+    "山西",
+    "内蒙古",
+    "辽宁",
+    "吉林",
+    "黑龙江",
+    "上海",
+    "江苏",
+    "浙江",
+    "安徽",
+    "福建",
+    "江西",
+    "山东",
+    "河南",
+    "湖北",
+    "湖南",
+    "广东",
+    "广西",
+    "海南",
+    "重庆",
+    "四川",
+    "贵州",
+    "云南",
+    "西藏",
+    "陕西",
+    "甘肃",
+    "青海",
+    "宁夏",
+    "新疆",
+    "全国",
+)
+
+
+def common_regions_public() -> list[str]:
+    return list(COMMON_REGIONS)
 
 # grade text → stage
 GRADE_TO_STAGE: dict[str, str] = {

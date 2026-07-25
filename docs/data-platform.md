@@ -113,9 +113,12 @@ Chat 检索：先解析用户可见的 `kb_space` / `document_id`，再向量检
 # 空 = 继续用各业务 SQLite（开发默认）
 DATABASE_URL=
 
-# 生产示例
-# DATABASE_URL=postgresql+psycopg://jnao:***@127.0.0.1:5432/jnao
+# Docker PostgreSQL（profile db）：
+# docker compose --profile db up -d
+# DATABASE_URL=postgresql+psycopg://jnao:jnao@127.0.0.1:5432/jnao
 ```
+
+外部依赖与 Compose profiles 见 [`external-dependencies.md`](./external-dependencies.md)。
 
 ---
 
@@ -130,6 +133,7 @@ DATABASE_URL=
 ## 9. 相关文档
 
 - 现状总览：[`项目说明.md`](./项目说明.md)  
+- 外部依赖 / Docker：[`external-dependencies.md`](./external-dependencies.md)  
 - 题库 API：[`exam-bank-api.md`](./exam-bank-api.md)  
 - 题库路由：[`exam-bank-routing.md`](./exam-bank-routing.md)  
 - 部署安全：[`deploy_security.md`](./deploy_security.md)  

@@ -20,12 +20,14 @@
 | 4 | **筛选** | 按 collection + qtype + difficulty + tags 列表 |
 | 5 | **组卷** | 按学科题型多选配比 + 可选难度档；缺题型提示「没有相应题型」 |
 | 5b | **卷面识别** | `detect-sections` 识别「一、选择题」等（规则优先，LLM 可开） |
-| 6 | **导出** | Markdown（题干+答案解析可开关） |
+| 6 | **导出** | Markdown / Word(docx) / PDF 可选；题干+答案解析可开关 |
 | 7 | **隔离** | 独立 SQLite；`/api/exam/*`；Chat 默认不读写题库 |
 | 8 | **测试** | store / assemble / API 契约测试绿 |
 | 9 | **文档** | 本文 + 问题记录 + README / 项目说明更新 |
 
-**后续阶段（本 MVP 之后，不阻塞闭环）**：试卷 PDF 解析入库、教案生成、向量相似题、爬虫语料库。
+**后续阶段（本闭环之后）**：教案生成、向量相似题、爬虫语料库。  
+扫描件 OCR 已落地（可选依赖）：`POST /api/exam/ingest/ocr` + `GET /api/exam/ingest/ocr/status`。  
+**试卷入库（PDF/DOCX/答案关联）**：见 [`exam-bank-ingest.md`](./exam-bank-ingest.md)。
 
 ---
 
@@ -66,7 +68,7 @@ MVP 落地：`exam_assemble` 写入 `scene_presets.py`，并在场景目录/Admi
 ```text
 scene: exam_assemble
   → 操作对象: collection（subject × grade × region）
-  → 动作: list questions → assemble → export markdown
+  → 动作: list questions → assemble → export (markdown|docx|pdf)
 ```
 
 ---
@@ -148,8 +150,10 @@ GET /api/exam/meta
 
 ```http
 POST   /api/exam/collections
-GET    /api/exam/collections?tenant_id=internal
+GET    /api/exam/collections?tenant_id=internal&reader_user_id=
 GET    /api/exam/collections/{id}
+DELETE /api/exam/collections/{id}   # 级联删除题目
+# 创建同名冲突（同租户×学科×年级；私有按 owner 互斥）→ 409 collection_name_conflict
 ```
 
 创建 body：
@@ -168,10 +172,11 @@ GET    /api/exam/collections/{id}
 ### 4.3 Questions
 
 ```http
-POST /api/exam/questions
-GET  /api/exam/questions?collection_id=&qtype=&difficulty=&tag=&status=published&limit=50&offset=0
-GET  /api/exam/questions/{id}
-PATCH /api/exam/questions/{id}   # 可选 MVP：至少支持 status
+POST   /api/exam/questions
+GET    /api/exam/questions?collection_id=&qtype=&difficulty=&tag=&status=published&limit=50&offset=0
+GET    /api/exam/questions/{id}
+PUT    /api/exam/questions/{id}
+DELETE /api/exam/questions/{id}
 ```
 
 创建 body：
@@ -240,10 +245,28 @@ body：
 
 HTTP：业务不足用 **400**；参数错误 **422**。
 
-### 4.5 试卷读取
+### 4.5 试卷读取 / 导出
 
 ```http
 GET /api/exam/papers/{id}
+GET /api/exam/papers/{id}/export?format=markdown|docx|pdf&include_answers=true
+```
+
+`GET /api/exam/meta` 返回 `export_formats: ["markdown","docx","pdf"]`。  
+导出响应为文件流（`Content-Disposition: attachment`）；非法 format → 400。
+
+### 4.6 试卷入库 / 答案关联
+
+详见 [`exam-bank-ingest.md`](./exam-bank-ingest.md)：
+
+```http
+POST /api/exam/ingest/parse
+POST /api/exam/ingest/upload
+GET  /api/exam/ingest/ocr/status
+POST /api/exam/ingest/ocr
+POST /api/exam/ingest/commit
+POST /api/exam/ingest/apply-answers
+GET  /api/exam/source-papers?collection_id=
 ```
 
 ---
@@ -280,6 +303,7 @@ GET /api/exam/papers/{id}
 
 - `exam_bank/store.py` — SQLite CRUD  
 - `exam_bank/assemble.py` — 组卷与 Markdown  
+- `exam_bank/export_formats.py` — Markdown / DOCX / PDF 导出  
 - `exam_bank/types.py` — 常量 qtypes  
 - `api/exam_router.py` — HTTP  
 - `config.py` — `exam_bank_db_path`  
@@ -296,7 +320,7 @@ GET /api/exam/papers/{id}
 
 ## 8. 非目标（MVP 明确不做）
 
-- PDF/OCR 自动拆题  
+- PDF/OCR 自动拆题（`POST /api/exam/ingest/ocr`，可选 PaddleOCR）  
 - 教案全文生成  
 - 爬虫语料分析  
 - 写入 Milvus 主库  

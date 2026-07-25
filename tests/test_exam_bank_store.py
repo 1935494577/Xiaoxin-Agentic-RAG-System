@@ -62,4 +62,80 @@ def test_list_collections_filters_tenant(tmp_path, monkeypatch):
     store.create_collection(name="B", subject="英语", grade="初一", region="西", tenant_id="other")
     rows = store.list_collections(tenant_id="internal")
     assert len(rows) == 1
-    assert rows[0]["name"] == "A"
+    assert rows[0]["region"] == "东"
+    assert "语文" in rows[0]["name"]
+
+
+def test_create_collection_rejects_duplicate_scope_same_owner(tmp_path, monkeypatch):
+    from exam_bank import store
+
+    db = tmp_path / "exam_bank.db"
+    monkeypatch.setattr(store.settings, "exam_bank_db_path", db)
+    store.init_exam_bank_db()
+
+    store.create_collection(
+        name="ignored",
+        subject="数学",
+        grade="初一",
+        region="杭州",
+        visibility="private",
+        owner_user_id="zhan",
+    )
+    try:
+        store.create_collection(
+            name="other",
+            subject="数学",
+            grade="初一",
+            region="杭州",
+            visibility="private",
+            owner_user_id="zhan",
+        )
+        assert False, "expected scope conflict"
+    except ValueError as e:
+        assert "collection_scope_conflict" in str(e)
+
+    # different owner may reuse the same region×subject×grade privately
+    other = store.create_collection(
+        name="x",
+        subject="数学",
+        grade="初一",
+        region="杭州",
+        visibility="private",
+        owner_user_id="other",
+    )
+    assert other["id"]
+
+    # different grade ok
+    ok = store.create_collection(
+        name="x",
+        subject="数学",
+        grade="初二",
+        region="杭州",
+        visibility="private",
+        owner_user_id="zhan",
+    )
+    assert ok["id"]
+
+    # different region ok
+    ok2 = store.create_collection(
+        name="x",
+        subject="数学",
+        grade="初一",
+        region="宁波",
+        visibility="private",
+        owner_user_id="zhan",
+    )
+    assert ok2["id"]
+
+
+def test_create_collection_requires_region(tmp_path, monkeypatch):
+    from exam_bank import store
+
+    db = tmp_path / "exam_bank.db"
+    monkeypatch.setattr(store.settings, "exam_bank_db_path", db)
+    store.init_exam_bank_db()
+    try:
+        store.create_collection(name="无地区", subject="数学", grade="初一", region="")
+        assert False, "expected region_required"
+    except ValueError as e:
+        assert "region_required" in str(e)

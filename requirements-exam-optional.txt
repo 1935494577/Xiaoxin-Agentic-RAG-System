@@ -1,0 +1,32 @@
+# Exam-bank structure OCR（按 PP-StructureV3 + LaTeXOCR 提示词）
+#
+# 安装到项目 .venv：
+#   .\.venv\Scripts\python.exe -m pip uninstall -y rapidocr-onnxruntime onnxruntime
+#   .\.venv\Scripts\python.exe -m pip install -r requirements-exam-optional.txt
+#
+# PaddlePaddle CPU 轮子建议官方源；其余可用清华镜像：
+#   .\.venv\Scripts\python.exe -m pip install paddlepaddle -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
+#   .\.venv\Scripts\python.exe -m pip install "paddleocr[doc-parser]>=3.0.0" pypdfium2 python-docx Pillow opencv-python-headless -i https://pypi.tuna.tsinghua.edu.cn/simple
+#
+# 探测：python -m exam_bank.paper_structure_parse --status
+# CLI：  python -m exam_bank.paper_structure_parse path\to\paper.pdf -o out.json
+#
+# API：GET /api/exam/ingest/ocr/status · POST /api/exam/ingest/ocr
+# 模块：exam_bank.paper_structure_parse（PPStructureV3 + PP-FormulaNet_plus-M → LaTeX；
+#       可选 DeepSeek 后处理。Windows CPU 勿用 LaTeX_OCR_rec：强制 mkldnn 易崩）
+# Word 国标导出：exam_bank.export_docx_gb（A4/2.54cm/多级列表/选项表/LaTeX→OMML）
+
+# --- 核心：版面分析 + 公式识别（LaTeXOCR）---
+paddleocr[doc-parser]>=3.0.0,<4
+
+# paddlepaddle 请优先从官网 CPU/GPU 源安装（见上方注释），此处作版本约束备忘
+# paddlepaddle>=3.0.0
+
+# --- PDF 栅格化 / Word / 图像 / LaTeX→OMML ---
+pypdfium2>=4.30.0
+python-docx>=1.1.0
+Pillow>=10.0.0
+opencv-python-headless>=4.8.0,<4.11
+numpy>=1.26.0,<2.0.0
+latex2mathml>=3.70.0
+mathml-to-omml>=1.0.0

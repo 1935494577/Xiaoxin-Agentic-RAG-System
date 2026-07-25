@@ -77,7 +77,7 @@ def test_assemble_success_deterministic(tmp_path, monkeypatch):
     assert r1["counts"]["choice"] == 3
     assert r1["counts"]["fill"] == 2
     assert "选择题" in r1["markdown"]
-    assert "答案与解析" in r1["markdown"]
+    assert "参考答案与解析" in r1["markdown"]
     assert store.get_paper(r1["paper_id"]) is not None
 
 

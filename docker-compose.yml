@@ -1,9 +1,96 @@
-# Default dev (plan1): Milvus Lite + local rank-bm25 — no containers required.
-# Legacy stack (remote Milvus + Elasticsearch): docker compose --profile legacy up -d
-# API only in Docker (uses Lite inside container): docker compose --profile app up -d
+# Jnao Enterprise RAG — Docker Compose
+#
+# 外部依赖说明：docs/external-dependencies.md
+#
+# 默认开发：Milvus Lite + 本地 BM25 + SQLite —— 不需要 Docker。
+#
+# 常用：
+#   Redis 缓存：     docker compose --profile cache up -d
+#   PostgreSQL：     docker compose --profile db up -d
+#   API 容器：       docker compose --profile app,cache up -d --build
+#   遗留向量栈：     docker compose --profile legacy up -d
+#
+# 本机跑 API、只起中间件时，.env 示例：
+#   REDIS_URL=redis://127.0.0.1:6379/0
+#   DATABASE_URL=postgresql+psycopg://jnao:jnao@127.0.0.1:5432/jnao
 
-version: "3.8"
+name: jnao
+
 services:
+  # ---------- 推荐：检索缓存 ----------
+  redis:
+    profiles: ["cache"]
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    command: redis-server --save "" --appendonly no
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # ---------- 规划：元数据 / ACL（DATABASE_URL）----------
+  postgres:
+    profiles: ["db"]
+    image: postgres:16-alpine
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-jnao}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-jnao}
+      POSTGRES_DB: ${POSTGRES_DB:-jnao}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-jnao} -d ${POSTGRES_DB:-jnao}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ---------- 可选：API 进容器（默认 Lite，workers=1 语义）----------
+  rag-api:
+    profiles: ["app"]
+    build: .
+    image: jnao-rag-api:local
+    ports:
+      - "${RAG_API_HOST_PORT:-8010}:8010"
+    environment:
+      USE_MILVUS_LITE: "true"
+      # 与 cache profile 同网时默认连 redis 服务；无 Redis 时 API 回退进程内缓存
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      # 空 = 各业务 SQLite；起 db profile 后可在 .env 填 postgres 服务
+      DATABASE_URL: ${DATABASE_URL:-}
+      REDIS_SEARCH_CACHE_ENABLED: ${REDIS_SEARCH_CACHE_ENABLED:-true}
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - rag_app_data:/app/enterprise_rag/data
+    depends_on:
+      redis:
+        condition: service_healthy
+        required: false
+      postgres:
+        condition: service_healthy
+        required: false
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/health', timeout=5)",
+        ]
+      interval: 15s
+      timeout: 8s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  # ---------- 遗留：远程 Milvus + Elasticsearch ----------
   milvus:
     profiles: ["legacy"]
     image: milvusdb/milvus:v2.4.7
@@ -25,6 +112,7 @@ services:
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
     ports:
       - "9200:9200"
     volumes:
@@ -33,13 +121,13 @@ services:
   etcd:
     profiles: ["legacy"]
     image: quay.io/coreos/etcd:v3.5.5
-    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls=http://0.0.0.0:2379
     ports:
       - "2379:2379"
 
   minio:
     profiles: ["legacy"]
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2024-09-22T00-33-43Z
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
@@ -50,36 +138,9 @@ services:
     volumes:
       - minio_data:/data
 
-  redis:
-    profiles: ["cache"]
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    command: redis-server --save "" --appendonly no
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
-  rag-api:
-    profiles: ["app"]
-    build: .
-    image: xiaoxin-rag-api:local
-    ports:
-      - "8000:8000"
-    environment:
-      USE_MILVUS_LITE: "true"
-      # 生产建议设置（也可写在 .env）：
-      # RAG_API_SECRET: 网关密钥；CORS_ALLOW_ORIGINS: 逗号分隔前端来源；DISABLE_OPENAPI_DOCS: "true"
-      # TRUSTED_HOSTS: 反 Host 伪造，如 api.example.com,localhost
-    env_file:
-      - .env
-    volumes:
-      - rag_app_data:/app/enterprise_rag/data
-
 volumes:
   milvus_data:
   es_data:
   minio_data:
   rag_app_data:
+  pg_data:

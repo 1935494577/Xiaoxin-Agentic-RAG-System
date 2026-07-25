@@ -7,4 +7,15 @@ __pycache__
 *.egg-info
 .env
 .venv
+.venv-harness
+.venv-deerflow
 venv
+frontend/
+.codegraph
+enterprise_rag/data/milvus_lite/
+enterprise_rag/data/models/
+enterprise_rag/data/*.db
+tests/
+docs/
+scripts/
+*.md

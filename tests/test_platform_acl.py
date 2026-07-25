@@ -59,3 +59,23 @@ def test_platform_readable():
         reader_tenant_id="school-a",
         reader_user_id="u9",
     )
+
+
+def test_batch_ingest_empty_owner_needs_tenant_shared():
+    """Batch ingest creates collections without owner; private hides them from logged-in users."""
+    from platform_acl import can_read_asset
+
+    assert not can_read_asset(
+        visibility="private",
+        tenant_id="internal",
+        owner_user_id="",
+        reader_tenant_id="internal",
+        reader_user_id="tech1",
+    )
+    assert can_read_asset(
+        visibility="tenant_shared",
+        tenant_id="internal",
+        owner_user_id="",
+        reader_tenant_id="internal",
+        reader_user_id="tech1",
+    )

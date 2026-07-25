@@ -71,6 +71,47 @@ def test_by_difficulty_band(tmp_path, monkeypatch):
     assert len(r["question_ids"]) == 5
 
 
+def test_by_qtype_band(tmp_path, monkeypatch):
+    from exam_bank import assemble, store
+
+    db = tmp_path / "exam_bank.db"
+    monkeypatch.setattr(store.settings, "exam_bank_db_path", db)
+    store.init_exam_bank_db()
+    col = _col(store)
+    for i, d in enumerate([1, 1, 3, 5]):
+        store.create_question(
+            collection_id=col["id"],
+            qtype="choice",
+            difficulty=d,
+            stem=f"选{i}",
+            options=["A"],
+            answer="A",
+            quality_status="published",
+        )
+    for i, d in enumerate([1, 3]):
+        store.create_question(
+            collection_id=col["id"],
+            qtype="fill",
+            difficulty=d,
+            stem=f"填{i}",
+            quality_status="published",
+        )
+    r = assemble.assemble_paper(
+        collection_id=col["id"],
+        title="分题型难度",
+        spec={
+            "by_qtype": {"choice": 3, "fill": 2},
+            "by_qtype_band": {
+                "choice": {"easy": 1, "mid": 1, "hard": 1},
+                "fill": {"easy": 1, "mid": 1},
+            },
+            "seed": 2,
+        },
+    )
+    assert r["ok"] is True
+    assert len(r["question_ids"]) == 5
+
+
 def test_custom_qtype_assemble(tmp_path, monkeypatch):
     from exam_bank import assemble, store
     from exam_bank.subject_catalog import normalize_qtype

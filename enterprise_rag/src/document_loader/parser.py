@@ -37,6 +37,15 @@ def load_document_text(path: Path) -> str:
         except Exception as e:
             raise RuntimeError(f"无法解析 PDF: {path}") from e
 
+    if suffix in {".docx", ".doc"}:
+        try:
+            from docx import Document
+
+            doc = Document(str(path))
+            return "\n".join(p.text for p in doc.paragraphs if p.text)
+        except Exception:
+            pass
+
     try:
         from unstructured.partition.auto import partition
 

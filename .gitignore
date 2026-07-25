@@ -78,3 +78,12 @@ debug-*.log
 enterprise_rag/data/_audit_tmp/
 enterprise_rag/data/_bench_tmp/
 enterprise_rag/data/eval/eval_reports.jsonl
+enterprise_rag/data/exam_media/
+
+# Local exam ingest / export scratch (do not push)
+11.txt
+out.json
+_ingest_*.txt
+_sample_*.docx
+_t.docx
+scripts/_debug_dedupe.py
