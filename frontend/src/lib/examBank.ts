@@ -35,6 +35,8 @@ export type ExamQuestion = {
   source_paper_id?: string;
   question_no?: string;
   media_ingest_id?: string;
+  incomplete?: boolean;
+  incomplete_reasons?: string[];
 };
 
 export type ExamIngestItem = {
@@ -233,7 +235,12 @@ export function fetchExamSourcePaper(id: string) {
 
 export function fetchExamQuestions(
   collectionId: string,
-  opts?: { status?: string; q?: string; limit?: number },
+  opts?: {
+    status?: string;
+    q?: string;
+    limit?: number;
+    completeness?: "incomplete" | "complete" | "";
+  },
 ) {
   const q = new URLSearchParams({
     collection_id: collectionId,
@@ -241,7 +248,39 @@ export function fetchExamQuestions(
     limit: String(opts?.limit ?? 200),
   });
   if (opts?.q?.trim()) q.set("q", opts.q.trim());
+  if (opts?.completeness) q.set("completeness", opts.completeness);
   return apiGet<{ items: ExamQuestion[]; total: number }>(`/api/exam/questions?${q}`);
+}
+
+export function llmCompleteExamQuestion(id: string) {
+  return apiRequest<{
+    ok: boolean;
+    skipped?: boolean;
+    updated_fields?: string[];
+    model?: string;
+    question: ExamQuestion;
+  }>(`/api/exam/questions/${encodeURIComponent(id)}/llm-complete`, {
+    method: "POST",
+  });
+}
+
+export function llmCompleteExamCollectionIncomplete(
+  collectionId: string,
+  opts?: { limit?: number },
+) {
+  const q = new URLSearchParams({
+    limit: String(opts?.limit ?? 10),
+  });
+  return apiRequest<{
+    ok: boolean;
+    attempted: number;
+    updated: number;
+    failed: number;
+    errors: string[];
+  }>(
+    `/api/exam/collections/${encodeURIComponent(collectionId)}/llm-complete-incomplete?${q}`,
+    { method: "POST" },
+  );
 }
 
 export function generateExamLesson(paperId: string) {
@@ -501,6 +540,7 @@ export function assembleExamPaper(body: {
     regions_any?: string[];
     years_any?: string[];
     soft_fallback?: boolean;
+    require_complete?: boolean;
     difficulty_target_coef?: number;
     seed?: number;
   };
@@ -580,10 +620,13 @@ export function swapExamQuestion(body: {
 }
 
 export const EXAM_EXPORT_FORMAT_OPTIONS: { id: ExamExportFormat; label: string }[] = [
+  { id: "docx", label: "Word（推荐，公式可编辑）" },
+  { id: "pdf", label: "PDF（预览/打印）" },
   { id: "markdown", label: "Markdown (.md)" },
-  { id: "docx", label: "Word (.docx)" },
-  { id: "pdf", label: "PDF (.pdf)" },
 ];
+
+/** Preferred default — GB Word preserves formulas better than PDF rasterization. */
+export const DEFAULT_EXAM_EXPORT_FORMAT: ExamExportFormat = "docx";
 
 /** Download assembled paper as markdown / docx / pdf via Content-Disposition. */
 export async function downloadExamPaperExport(

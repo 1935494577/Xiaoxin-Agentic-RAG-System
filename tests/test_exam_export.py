@@ -33,6 +33,27 @@ def _seed_paper(store, assemble):
     return r
 
 
+def test_export_default_format_is_docx(tmp_path, monkeypatch):
+    """空格式 / word 别名默认走国标 Word，避免 PDF 栅格化损坏公式。"""
+    from exam_bank import assemble, store
+    from exam_bank.export_formats import DEFAULT_EXPORT_FORMAT, export_paper_file
+
+    assert DEFAULT_EXPORT_FORMAT == "docx"
+
+    db = tmp_path / "exam_bank.db"
+    monkeypatch.setattr(store.settings, "exam_bank_db_path", db)
+    store.init_exam_bank_db()
+    paper_res = _seed_paper(store, assemble)
+    paper = store.get_paper(paper_res["paper_id"])
+    assert paper is not None
+
+    for fmt in ("", None, "word", "doc"):
+        data, ct, name = export_paper_file(paper, fmt=fmt or "")
+        assert data[:2] == b"PK"
+        assert name.endswith(".docx")
+        assert "officedocument" in ct or ct.endswith("document")
+
+
 def test_export_formats_bytes(tmp_path, monkeypatch):
     from exam_bank import assemble, store
     from exam_bank.export_formats import EXPORT_FORMATS, export_paper_file

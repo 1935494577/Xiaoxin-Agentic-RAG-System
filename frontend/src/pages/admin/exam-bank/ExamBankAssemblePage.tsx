@@ -8,6 +8,7 @@ import {
   autoGenerateExamPaper,
   downloadExamPaperExport,
   EXAM_EXPORT_FORMAT_OPTIONS,
+  DEFAULT_EXAM_EXPORT_FORMAT,
   fetchExamCollections,
   fetchExamInventory,
   fetchExamMeta,
@@ -27,7 +28,7 @@ import {
 } from "./ExamDiffProportionCard";
 import { ExamField, ExamWizardChrome, examControlClass } from "./ExamWizardChrome";
 import { ExamBasketPanel, ExamQuestionCard } from "./ExamQuestionBasket";
-import { ExamMathText } from "./ExamMathText";
+import { ExamMathText, collapseSpacedCjk } from "./ExamMathText";
 import { ExamQuestionEditDrawer } from "./ExamQuestionEditDrawer";
 
 type RowSpec = { need: number; easy: number; mid: number; hard: number };
@@ -70,7 +71,62 @@ const DIFF_CHIPS: { id: DiffChip; label: string }[] = [
   { id: "hard", label: "困难" },
 ];
 
-const TEMPLATE_KEY = "examAssembleTemplate:v2";
+function ExamPaperBody({
+  title,
+  questions,
+  includeAnswers,
+}: {
+  title: string;
+  questions: ExamQuestion[];
+  includeAnswers: boolean;
+}) {
+  const anyMedia = questions.some((q) => Boolean(q.media_ingest_id));
+  return (
+    <div
+      className="px-5 py-6 text-[14px] leading-7 text-[#1a1a1a] text-left space-y-5"
+      style={{ fontFamily: '"Songti SC", "SimSun", "Noto Serif SC", serif' }}
+    >
+      <h2 className="text-center text-lg font-semibold tracking-wide">{title || "试卷"}</h2>
+      {!anyMedia ? (
+        <p className="text-[11px] text-warning text-center border border-dashed border-warning/40 rounded px-2 py-1">
+          本题卷无公式图片媒体（多为 PDF 纯文本入库）。几何图会空白；汉字抽字空格已自动合并。优先用
+          Word 卷或 Structure 重入库。
+        </p>
+      ) : null}
+      {questions.map((q, i) => (
+        <div key={q.id} className="space-y-1">
+          <div>
+            <span className="font-medium">{i + 1}. </span>
+            <ExamMathText text={q.stem} mediaIngestId={q.media_ingest_id} />
+          </div>
+          {(q.options || []).map((o, oi) => (
+            <div key={`${q.id}-o-${oi}`} className="pl-4">
+              <ExamMathText text={o} mediaIngestId={q.media_ingest_id} />
+            </div>
+          ))}
+          {includeAnswers && (q.answer || q.analysis) ? (
+            <div className="pl-2 text-[13px] text-[#444] space-y-1 border-l-2 border-border/60 ml-1">
+              {q.answer ? (
+                <div>
+                  <span className="text-text-muted">【答案】</span>
+                  <ExamMathText text={q.answer} mediaIngestId={q.media_ingest_id} />
+                </div>
+              ) : null}
+              {q.analysis ? (
+                <div>
+                  <span className="text-text-muted">【解析】</span>
+                  <ExamMathText text={q.analysis} mediaIngestId={q.media_ingest_id} />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const TEMPLATE_KEY = "examAssembleTemplate:v3";
 
 type SavedTemplate = {
   scenario: ScenarioId;
@@ -160,8 +216,9 @@ export default function ExamBankAssemblePage() {
   const [swapForId, setSwapForId] = useState<string | null>(null);
   const [swapCands, setSwapCands] = useState<ExamQuestion[]>([]);
   const [swapBusyId, setSwapBusyId] = useState<string | null>(null);
-  const [exportFormat, setExportFormat] = useState<ExamExportFormat>("pdf");
+  const [exportFormat, setExportFormat] = useState<ExamExportFormat>(DEFAULT_EXAM_EXPORT_FORMAT);
   const [includeAnswers, setIncludeAnswers] = useState(true);
+  const [requireComplete, setRequireComplete] = useState(true);
   const [error, setError] = useState("");
   const [hint, setHint] = useState("");
 
@@ -324,6 +381,7 @@ export default function ExamBankAssemblePage() {
       ...(diffChip === "all"
         ? { difficulty_target_coef: difficultyCoef }
         : {}),
+      require_complete: requireComplete,
       seed: 42,
     };
   };
@@ -987,6 +1045,9 @@ export default function ExamBankAssemblePage() {
 
             <fieldset className="space-y-2 pt-2 border-t border-border">
               <legend className="text-xs font-medium text-text-muted">导出格式</legend>
+              <p className="text-[11px] text-text-muted">
+                默认 Word（国标 OMML）：公式可编辑，比 PDF 更少损坏版式
+              </p>
               <div className="grid grid-cols-3 gap-2">
                 {formatOptions.map((o) => (
                   <label
@@ -1016,6 +1077,15 @@ export default function ExamBankAssemblePage() {
                   onChange={(e) => setIncludeAnswers(e.target.checked)}
                 />
                 包含答案与解析
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm text-text cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-brand"
+                  checked={requireComplete}
+                  onChange={(e) => setRequireComplete(e.target.checked)}
+                />
+                仅用完整题（排除缺选项/答案）
               </label>
             </fieldset>
               </>
@@ -1102,11 +1172,13 @@ export default function ExamBankAssemblePage() {
                       previewMode === "paper" ? "border-brand text-brand" : "border-border"
                     }`}
                     onClick={() => setPreviewMode("paper")}
-                    disabled={!markdown}
+                    disabled={!(basketQuestions.length || poolQuestions.length)}
                   >
                     卷面
                   </button>
-                  {(previewMode === "cards" ? poolQuestions.length > 0 : Boolean(markdown)) ? (
+                  {(previewMode === "cards"
+                    ? poolQuestions.length > 0
+                    : basketQuestions.length + poolQuestions.length > 0) ? (
                     <Button
                       type="button"
                       size="sm"
@@ -1197,14 +1269,15 @@ export default function ExamBankAssemblePage() {
                     设置题型题量后点「一键抽题入篮」。也可之后在题卡中加减试题篮，再「去组卷并导出」。
                   </p>
                 )
-              ) : markdown ? (
+              ) : poolQuestions.length || basketQuestions.length ? (
                 <div
                   className="rounded-sm border border-border bg-[#faf9f6] text-[#1a1a1a] max-h-[min(72vh,780px)] overflow-auto"
-                  style={{ fontFamily: '"Songti SC", "SimSun", "Noto Serif SC", serif' }}
                 >
-                  <pre className="whitespace-pre-wrap text-[14px] leading-7 px-5 py-6 text-left">
-                    {markdown}
-                  </pre>
+                  <ExamPaperBody
+                    title={title}
+                    questions={basketQuestions.length ? basketQuestions : poolQuestions}
+                    includeAnswers={includeAnswers}
+                  />
                 </div>
               ) : (
                 <p className="text-xs text-text-muted text-center py-16">暂无卷面</p>
@@ -1312,12 +1385,11 @@ export default function ExamBankAssemblePage() {
                 ))}
               </div>
             ) : (
-              <pre
-                className="whitespace-pre-wrap text-[15px] leading-7 px-8 py-10 text-[#1a1a1a]"
-                style={{ fontFamily: '"Songti SC", "SimSun", "Noto Serif SC", serif' }}
-              >
-                {markdown}
-              </pre>
+              <ExamPaperBody
+                title={title}
+                questions={basketQuestions.length ? basketQuestions : poolQuestions}
+                includeAnswers={includeAnswers}
+              />
             )}
           </div>
         </div>
@@ -1353,7 +1425,7 @@ export default function ExamBankAssemblePage() {
               </button>
             </div>
             <pre className="whitespace-pre-wrap text-xs leading-5 rounded-md border border-border bg-surface-muted/40 px-3 py-3 max-h-[60vh] overflow-auto">
-              {sourceModal.raw_text || "（无原文文本）"}
+              {collapseSpacedCjk(sourceModal.raw_text || "") || "（无原文文本）"}
             </pre>
           </div>
         </div>

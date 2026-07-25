@@ -21,6 +21,39 @@ _INLINE_OPT_SPLIT_RE = re.compile(
     r"(?<![\[])(?P<head>[A-Da-d])\s*[.、．)]\s*"
 )
 
+# CJK + fullwidth punct — PDF extract often inserts spaces between each glyph
+_CJK_FW_RE = (
+    r"[\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f"
+    r"\uff01-\uff60\uffe0-\uffe6]"
+)
+
+
+def collapse_spaced_cjk(text: str) -> str:
+    """Collapse PDF-injected spaces between Chinese/fullwidth glyphs.
+
+    ``【 详 解 】可 知`` → ``【详解】可知``；保留 ``[[EQ:n]]``；
+    拉丁词之间多空格压成单空格。
+    """
+    s = text or ""
+    if not s:
+        return s
+    parts = re.split(r"(\[\[EQ:\d+\]\])", s)
+    out: list[str] = []
+    pair = re.compile(rf"({_CJK_FW_RE})\s+({_CJK_FW_RE})")
+    for part in parts:
+        if part.startswith("[[EQ:"):
+            out.append(part)
+            continue
+        prev = None
+        cur = part
+        while prev != cur:
+            prev = cur
+            cur = pair.sub(r"\1\2", cur)
+        # keep newlines; collapse horizontal runs of spaces/tabs
+        cur = re.sub(r"[^\S\n]{2,}", " ", cur)
+        out.append(cur)
+    return "".join(out)
+
 
 def split_inline_options_line(line: str) -> list[str]:
     """If a line has multiple A/B/C/D markers, split into separate option lines."""
@@ -102,6 +135,7 @@ def clean_exam_paper(text: str) -> dict[str, Any]:
         out_lines.extend(parts)
 
     cleaned = "\n".join(out_lines)
+    cleaned = collapse_spaced_cjk(cleaned)
     # collapse excessive blank (already stripped)
     stats = {
         "line_count": len(out_lines),

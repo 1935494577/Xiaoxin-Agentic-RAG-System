@@ -10,6 +10,7 @@ Usage (repo root):
   set PYTHONPATH=enterprise_rag/src
   python scripts/ingest_all_exam_papers.py
   python scripts/ingest_all_exam_papers.py --root "d:\\试卷资料\\试卷资料"
+  python scripts/ingest_all_exam_papers.py --no-llm   # 仅规则拆题（不推荐灌生产库）
 """
 
 from __future__ import annotations
@@ -23,6 +24,46 @@ SRC = ROOT / "enterprise_rag" / "src"
 sys.path.insert(0, str(SRC))
 
 DEFAULT_CORPUS = Path(r"d:\试卷资料\试卷资料")
+
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Batch-ingest exam corpus into exam bank (LLM split by default)"
+    )
+    parser.add_argument("--root", type=str, default=str(DEFAULT_CORPUS))
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--limit", type=int, default=0, help="0=all")
+    parser.add_argument(
+        "--purge",
+        action="store_true",
+        help="Clear exam bank (+ optional media) before ingest so formula extract is rebuilt",
+    )
+    parser.add_argument(
+        "--purge-media",
+        action="store_true",
+        help="Also delete exam_media folders (use with --purge)",
+    )
+    parser.add_argument(
+        "--structure",
+        action="store_true",
+        help="Use PP-StructureV3+FormulaNet(+LLM) for PDF/图片 so stems keep $LaTeX$",
+    )
+    parser.add_argument(
+        "--no-structure-llm",
+        action="store_true",
+        help="Structure OCR only; item split uses --no-llm / default LLM separately",
+    )
+    parser.add_argument(
+        "--no-llm",
+        action="store_true",
+        help="Rule split only (skip DeepSeek item extract). Default is LLM-first.",
+    )
+    return parser
+
+
+def resolve_use_llm(args: argparse.Namespace) -> bool:
+    """Batch ingest defaults to LLM; --no-llm opts out."""
+    return not bool(getattr(args, "no_llm", False))
 
 
 def _load_text(path: Path) -> tuple[str, list, str]:
@@ -147,31 +188,8 @@ def _get_or_create_collection(store, *, region: str, subject: str, grade: str):
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--root", type=str, default=str(DEFAULT_CORPUS))
-    parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--limit", type=int, default=0, help="0=all")
-    parser.add_argument(
-        "--purge",
-        action="store_true",
-        help="Clear exam bank (+ optional media) before ingest so formula extract is rebuilt",
-    )
-    parser.add_argument(
-        "--purge-media",
-        action="store_true",
-        help="Also delete exam_media folders (use with --purge)",
-    )
-    parser.add_argument(
-        "--structure",
-        action="store_true",
-        help="Use PP-StructureV3+LaTeXOCR(+LLM) for PDF/图片/DOCX so stems keep $LaTeX$",
-    )
-    parser.add_argument(
-        "--no-structure-llm",
-        action="store_true",
-        help="Structure OCR only; split items with rules/LLM ingest separately",
-    )
-    args = parser.parse_args()
+    args = build_arg_parser().parse_args()
+    use_llm = resolve_use_llm(args)
 
     from exam_bank import store
     from exam_bank.corpus_meta import select_corpus_files
@@ -206,7 +224,7 @@ def main() -> int:
     seen = _already_ingested_filenames(store)
     print(
         f"selected {len(selected)} papers after dedupe (from {root}); "
-        f"already={len(seen)}; structure={args.structure}"
+        f"already={len(seen)}; structure={args.structure}; use_llm={use_llm}"
     )
 
     ok = 0
@@ -274,16 +292,23 @@ def main() -> int:
                     grade=grade if grade != "未分年级" else "",
                     region=region if region != "未知" else "",
                     stage=str(meta.get("stage") or ""),
-                    use_llm=False,
+                    use_llm=use_llm,
                     clean=True,
                 )
             except Exception as e:
                 print(f"  FAIL parse: {e}")
                 failed += 1
                 continue
+            if use_llm and (parsed.get("error") or parsed.get("router") == "llm_failed"):
+                print(
+                    f"  FAIL llm_split: {parsed.get('message') or parsed.get('error')}"
+                )
+                failed += 1
+                continue
             items = list(parsed.get("items") or [])
+            print(f"  split router={parsed.get('router') or '-'} items={len(items)}")
         elif used_structure and len(items) < 3 and (text or "").strip():
-            # Structure OCR ok but LLM empty → rule split on reading text
+            # Structure OCR ok but structure-LLM empty → item split (LLM default)
             try:
                 parsed = parse_paper_items(
                     text,
@@ -291,11 +316,21 @@ def main() -> int:
                     grade=grade if grade != "未分年级" else "",
                     region=region if region != "未知" else "",
                     stage=str(meta.get("stage") or ""),
-                    use_llm=False,
+                    use_llm=use_llm,
                     clean=True,
                 )
+                if use_llm and (parsed.get("error") or parsed.get("router") == "llm_failed"):
+                    print(
+                        f"  FAIL llm_split after structure: "
+                        f"{parsed.get('message') or parsed.get('error')}"
+                    )
+                    failed += 1
+                    continue
                 items = list(parsed.get("items") or [])
-                print(f"  structure text → rule split items={len(items)}")
+                print(
+                    f"  structure text → split router={parsed.get('router') or '-'} "
+                    f"items={len(items)}"
+                )
             except Exception as e:
                 print(f"  FAIL parse after structure: {e}")
                 failed += 1

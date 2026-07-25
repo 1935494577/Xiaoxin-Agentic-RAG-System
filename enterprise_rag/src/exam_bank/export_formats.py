@@ -15,7 +15,8 @@ from exam_bank.export_rich import (
     split_eq_segments,
 )
 
-EXPORT_FORMATS = ("markdown", "docx", "pdf")
+EXPORT_FORMATS = ("docx", "pdf", "markdown")
+DEFAULT_EXPORT_FORMAT = "docx"
 
 _MEDIA = {
     "markdown": ("text/markdown; charset=utf-8", ".md"),
@@ -33,12 +34,14 @@ def _safe_filename(title: str, ext: str) -> str:
 
 
 def _ordered_questions(paper: dict[str, Any]) -> list[dict[str, Any]]:
+    from exam_bank.question_quality import normalize_question_display
+
     qids = paper.get("question_ids") or []
     out: list[dict[str, Any]] = []
     for qid in qids:
         row = store.get_question(str(qid))
         if row:
-            out.append(sanitize_question_fields(row))
+            out.append(sanitize_question_fields(normalize_question_display(row)))
     return out
 
 
@@ -305,7 +308,7 @@ def export_paper_file(
     include_answers: bool = True,
 ) -> tuple[bytes, str, str]:
     """Return (bytes, content_type, filename)."""
-    f = (fmt or "markdown").strip().lower()
+    f = (fmt or DEFAULT_EXPORT_FORMAT).strip().lower()
     if f in ("md", "text"):
         f = "markdown"
     if f in ("word", "doc"):

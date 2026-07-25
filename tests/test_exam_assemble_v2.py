@@ -26,7 +26,7 @@ def test_missing_qtype_message(tmp_path, monkeypatch):
         qtype="choice",
         difficulty=3,
         stem="仅有选择",
-        options=["A"],
+        options=["A. 1", "B. 2", "C. 3", "D. 4"],
         answer="A",
         quality_status="published",
     )
@@ -54,7 +54,7 @@ def test_by_difficulty_band(tmp_path, monkeypatch):
             qtype="choice",
             difficulty=d,
             stem=f"题{i}",
-            options=["A"],
+            options=["A. 1", "B. 2", "C. 3", "D. 4"],
             answer="A",
             quality_status="published",
         )
@@ -84,7 +84,7 @@ def test_by_qtype_band(tmp_path, monkeypatch):
             qtype="choice",
             difficulty=d,
             stem=f"选{i}",
-            options=["A"],
+            options=["A. 1", "B. 2", "C. 3", "D. 4"],
             answer="A",
             quality_status="published",
         )
@@ -94,6 +94,7 @@ def test_by_qtype_band(tmp_path, monkeypatch):
             qtype="fill",
             difficulty=d,
             stem=f"填{i}",
+            answer="答案",
             quality_status="published",
         )
     r = assemble.assemble_paper(

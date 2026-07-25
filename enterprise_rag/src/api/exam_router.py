@@ -98,6 +98,8 @@ class AssembleSpec(BaseModel):
     regions_any: list[str] = Field(default_factory=list)
     years_any: list[str] = Field(default_factory=list)
     soft_fallback: bool = False
+    # 默认只组「完整」题（有实质选项与答案）；soft_fallback 末档可放宽
+    require_complete: bool = True
     seed: int = 0
 
 
@@ -181,7 +183,7 @@ def exam_meta(
         "subjects": subject_catalog_public(stage=st),
         "common_regions": common_regions_public(),
         "scene_presets": list(EXAM_SCENE_PRESETS),
-        "export_formats": ["markdown", "docx", "pdf"],
+        "export_formats": ["docx", "pdf", "markdown"],
         "llm": {
             "model": llm_rt.get("model") or "",
             "chat_model": llm_rt.get("chat_model") or "",
@@ -362,9 +364,19 @@ def list_questions(
     tag: str | None = None,
     q: str | None = None,
     status: str | None = "published",
+    completeness: str | None = Query(
+        default=None,
+        description="incomplete|complete — filter by field completeness",
+    ),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> dict[str, Any]:
+    from exam_bank.question_quality import (
+        annotate_completeness,
+        is_question_incomplete,
+        normalize_question_display,
+    )
+
     items, total = store.list_questions(
         collection_id=collection_id,
         qtype=normalize_qtype(qtype) if qtype else None,
@@ -375,7 +387,100 @@ def list_questions(
         limit=limit,
         offset=offset,
     )
+    items = [annotate_completeness(normalize_question_display(it)) for it in items]
+    flag = (completeness or "").strip().lower()
+    if flag == "incomplete":
+        items = [it for it in items if is_question_incomplete(it)]
+        total = len(items)
+    elif flag == "complete":
+        items = [it for it in items if not is_question_incomplete(it)]
+        total = len(items)
     return {"items": items, "total": total}
+
+
+@router.post("/questions/{question_id}/llm-complete")
+def llm_complete_question(question_id: str) -> dict[str, Any]:
+    """补全单题缺失的选项/答案/解析（大模型）。"""
+    from exam_bank.llm_ingest import complete_question_fields_with_llm
+    from exam_bank.question_quality import annotate_completeness
+
+    q = store.get_question(question_id)
+    if not q:
+        raise HTTPException(status_code=404, detail="question_not_found")
+    result = complete_question_fields_with_llm(q)
+    if result.get("skipped"):
+        return {"ok": True, "skipped": True, "question": annotate_completeness(q)}
+    if not result.get("ok"):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": result.get("error") or "llm_complete_failed",
+                "message": result.get("message") or "补全失败",
+            },
+        )
+    fields = dict(result.get("fields") or {})
+    try:
+        updated = store.update_question(question_id, **fields)
+    except ValueError as e:
+        if str(e) == "question_not_found":
+            raise HTTPException(status_code=404, detail="question_not_found") from e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return {
+        "ok": True,
+        "updated_fields": list(fields.keys()),
+        "model": result.get("model") or "",
+        "question": annotate_completeness(updated),
+    }
+
+
+@router.post("/collections/{collection_id}/llm-complete-incomplete")
+def llm_complete_incomplete_batch(
+    collection_id: str,
+    limit: int = Query(default=10, ge=1, le=50),
+) -> dict[str, Any]:
+    """对本库待补全题目批量调用大模型补全（默认最多 10 题）。"""
+    from exam_bank.llm_ingest import complete_question_fields_with_llm
+    from exam_bank.question_quality import is_question_incomplete
+
+    if not store.get_collection(collection_id):
+        raise HTTPException(status_code=404, detail="collection_not_found")
+    items, _ = store.list_questions(
+        collection_id=collection_id,
+        status=None,
+        limit=200,
+        offset=0,
+    )
+    todo = [q for q in items if is_question_incomplete(q)][:limit]
+    updated = 0
+    failed = 0
+    errors: list[str] = []
+    for q in todo:
+        result = complete_question_fields_with_llm(q)
+        if result.get("skipped"):
+            continue
+        if not result.get("ok"):
+            failed += 1
+            errors.append(
+                f"{q.get('id')}: {result.get('message') or result.get('error')}"
+            )
+            continue
+        fields = dict(result.get("fields") or {})
+        if not fields:
+            failed += 1
+            continue
+        try:
+            store.update_question(q["id"], **fields)
+            updated += 1
+        except ValueError as e:
+            failed += 1
+            errors.append(f"{q.get('id')}: {e}")
+    return {
+        "ok": True,
+        "attempted": len(todo),
+        "updated": updated,
+        "failed": failed,
+        "errors": errors[:10],
+    }
 
 
 @router.get("/questions/{question_id}")
@@ -507,7 +612,7 @@ def paper_lesson(paper_id: str) -> dict[str, Any]:
 @router.get("/papers/{paper_id}/export")
 def export_paper(
     paper_id: str,
-    format: str = Query(default="markdown", alias="format"),
+    format: str = Query(default="docx", alias="format"),
     include_answers: bool = Query(default=True),
 ):
     from urllib.parse import quote

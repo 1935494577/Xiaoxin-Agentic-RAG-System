@@ -50,3 +50,14 @@ def test_preserve_eq_placeholders():
     assert "注意事项" not in cleaned
     lines = cleaned.splitlines()
     assert any(ln.startswith("A. ") and "[[EQ:2]]" in ln for ln in lines)
+
+
+def test_collapse_pdf_spaced_cjk():
+    from exam_bank.paper_clean import clean_exam_paper, collapse_spaced_cjk
+
+    raw = "【 详 解 】可 知 k         AC: y  1"
+    assert collapse_spaced_cjk(raw) == "【详解】可知 k AC: y 1"
+    assert "[[EQ:12]]" in collapse_spaced_cjk("已 知[[EQ:12]]，则")
+    cleaned = clean_exam_paper("一、选择题\n1. 【 答 案 】A\n")["cleaned"]
+    assert "【答案】" in cleaned
+    assert "【 答" not in cleaned

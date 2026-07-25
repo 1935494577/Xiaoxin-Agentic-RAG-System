@@ -296,3 +296,118 @@ def extract_items_with_llm(
             "api_base": rt.get("llm_api_base"),
             "paper_label": label,
         }
+
+
+_COMPLETE_SYSTEM = """你是中学试题结构化补全助手。根据已有题干与残缺字段，补全选择题选项、答案与解析。
+只输出一个 JSON 对象，字段：
+stem（可微调保真）、options（选择题须为 ["A. …","B. …",…] 完整正文）、answer、analysis、
+qtype、knowledge_tags（字符串数组）。
+不要编造与题干无关的内容；题干已含公式占位 [[EQ:n]] 或 $LaTeX$ 时请保留。
+"""
+
+
+def complete_question_fields_with_llm(
+    question: dict[str, Any],
+    *,
+    timeout_sec: float = 90.0,
+) -> dict[str, Any]:
+    """Fill missing options/answer/analysis for one bank question via chat model."""
+    from exam_bank.llm_client import build_openai_client
+    from exam_bank.question_quality import incomplete_reasons
+
+    q = dict(question or {})
+    reasons = incomplete_reasons(q)
+    if not reasons:
+        return {"ok": True, "skipped": True, "message": "already_complete", "fields": {}}
+
+    client, rt = build_openai_client(timeout_sec=timeout_sec)
+    if client is None:
+        return {
+            "ok": False,
+            "error": "llm_not_configured",
+            "message": "未配置 API Key / 模型，无法补全",
+        }
+    model = str(rt.get("chat_model") or rt.get("model") or "").strip()
+    if not model:
+        return {
+            "ok": False,
+            "error": "llm_not_configured",
+            "message": "未配置 Chat 模型，无法补全",
+        }
+
+    user_payload = {
+        "incomplete_reasons": reasons,
+        "question": {
+            "qtype": q.get("qtype") or "",
+            "stem": q.get("stem") or "",
+            "options": q.get("options") or [],
+            "answer": q.get("answer") or "",
+            "analysis": q.get("analysis") or "",
+            "subject": q.get("subject") or "",
+            "grade": q.get("grade") or "",
+            "region": q.get("region") or "",
+            "year": q.get("year") or "",
+        },
+    }
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": _COMPLETE_SYSTEM},
+            {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)},
+        ],
+        "temperature": 0.0,
+        "max_tokens": 4096,
+    }
+    try:
+        try:
+            kwargs["response_format"] = {"type": "json_object"}
+            resp = client.chat.completions.create(**kwargs)
+        except Exception:
+            kwargs.pop("response_format", None)
+            resp = client.chat.completions.create(**kwargs)
+        content = (resp.choices[0].message.content or "").strip()
+        parsed = _extract_json(content)
+        if not parsed:
+            return {
+                "ok": False,
+                "error": "llm_json_parse_failed",
+                "message": "大模型未返回合法 JSON",
+                "raw_preview": content[:240],
+                "model": model,
+            }
+        fields: dict[str, Any] = {}
+        if "options" in reasons or (parsed.get("options") and not (q.get("options") or [])):
+            opts = parsed.get("options")
+            if isinstance(opts, list) and opts:
+                fields["options"] = [str(x) for x in opts]
+        if "answer" in reasons and str(parsed.get("answer") or "").strip():
+            fields["answer"] = str(parsed.get("answer") or "").strip()
+        if str(parsed.get("analysis") or "").strip() and not str(q.get("analysis") or "").strip():
+            fields["analysis"] = str(parsed.get("analysis") or "").strip()
+        stem_new = str(parsed.get("stem") or "").strip()
+        if stem_new and len(stem_new) >= len(str(q.get("stem") or "").strip()) * 0.6:
+            # allow mild cleanup; avoid wiping EQ placeholders away if model drops them
+            old_stem = str(q.get("stem") or "")
+            if "[[EQ:" in old_stem and "[[EQ:" not in stem_new:
+                pass
+            else:
+                fields["stem"] = stem_new
+        tags = parsed.get("knowledge_tags")
+        if isinstance(tags, list) and tags and not (q.get("knowledge_tags") or []):
+            fields["knowledge_tags"] = [str(x).strip() for x in tags if str(x).strip()]
+        if not fields:
+            return {
+                "ok": False,
+                "error": "llm_no_fields",
+                "message": "大模型未给出可写入的补全字段",
+                "model": model,
+            }
+        return {"ok": True, "fields": fields, "model": model, "reasons": reasons}
+    except Exception as e:  # noqa: BLE001
+        _log.exception("complete_question_fields_with_llm failed")
+        return {
+            "ok": False,
+            "error": "llm_api_error",
+            "message": str(e),
+            "model": model,
+        }

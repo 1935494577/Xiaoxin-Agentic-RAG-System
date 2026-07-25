@@ -95,13 +95,45 @@ function KatexChunk({ text }: { text: string }) {
   return <span dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
+function collapseSpacedCjk(raw: string): string {
+  // Mirror backend paper_clean.collapse_spaced_cjk for already-loaded cards
+  const cjk =
+    /([\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f\uff01-\uff60\uffe0-\uffe6])\s+([\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f\uff01-\uff60\uffe0-\uffe6])/g;
+  const parts = (raw || "").split(/(\[\[EQ:\d+\]\])/);
+  return parts
+    .map((part) => {
+      if (part.startsWith("[[EQ:")) return part;
+      let cur = part;
+      let prev = "";
+      while (prev !== cur) {
+        prev = cur;
+        cur = cur.replace(cjk, "$1$2");
+      }
+      return cur.replace(/[^\S\n]{2,}/g, " ");
+    })
+    .join("");
+}
+
+export { collapseSpacedCjk };
+
 /** Render stem/options with KaTeX and authenticated [[EQ:n]] images. */
 export function ExamMathText({ text, className, mediaIngestId }: ExamMathTextProps) {
   const mid = (mediaIngestId || "").trim();
-  const segs = splitEqSegments(text || "");
+  const normalized = collapseSpacedCjk(text || "");
+  const segs = splitEqSegments(normalized);
+
+  const missingFig =
+    !mid &&
+    !/\[\[EQ:\d+\]\]/.test(normalized) &&
+    (normalized.match(/\n{3,}/g) || []).length > 0;
 
   return (
     <span className={className}>
+      {missingFig ? (
+        <span className="mb-1 block rounded border border-dashed border-warning/40 bg-warning/5 px-2 py-1 text-[11px] text-warning">
+          几何图/插图未随 PDF 纯文本入库；请用 Word 卷或 Structure 公式识别重入库。
+        </span>
+      ) : null}
       {segs.map((seg, i) => {
         if (seg.kind === "eq") {
           if (!mid) {

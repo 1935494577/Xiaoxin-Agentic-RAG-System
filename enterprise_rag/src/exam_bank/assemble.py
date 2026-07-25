@@ -185,6 +185,7 @@ def assemble_paper(
         ("knowledge_tags_any", [], "已放宽：按知识点精确匹配 → 不限标签"),
         ("by_difficulty_band", {}, "已放宽：取消整卷难度档约束"),
         ("by_qtype_band", {}, "已放宽：取消分题型难度档约束"),
+        ("require_complete", False, "已放宽：允许选用待补全题目"),
     ]
 
     last: dict[str, Any] = {"ok": False, "error": "assemble_failed"}
@@ -193,8 +194,14 @@ def assemble_paper(
             if not soft:
                 break
             key, val, note = step
+            # require_complete defaults True when absent — treat as "set" for relax
             cur = working.get(key)
-            if cur:
+            if key == "require_complete":
+                if cur is False:
+                    continue
+                working[key] = val
+                notes.append(note)
+            elif cur:
                 working[key] = val
                 notes.append(note)
             else:
@@ -280,6 +287,13 @@ def _assemble_paper_once(
                 pool_all,
                 **_pool_kwargs(),
             )
+            require_complete = spec.get("require_complete")
+            if require_complete is None:
+                require_complete = True
+            if require_complete:
+                from exam_bank.question_quality import is_question_incomplete
+
+                pool_all = [q for q in pool_all if not is_question_incomplete(q)]
             # Restrict to requested qtypes
             wanted = set(by_qtype)
             pool_all = [q for q in pool_all if normalize_qtype(str(q.get("qtype"))) in wanted]
@@ -344,6 +358,14 @@ def _assemble_paper_once(
         pool,
         **_pool_kwargs(),
     )
+    # Closed loop: default exclude incomplete (empty options/answer)
+    require_complete = spec.get("require_complete")
+    if require_complete is None:
+        require_complete = True
+    if require_complete:
+        from exam_bank.question_quality import is_question_incomplete
+
+        pool = [q for q in pool if not is_question_incomplete(q)]
 
     selected: list[dict[str, Any]] = []
     counts: dict[str, int] = {}
@@ -377,6 +399,9 @@ def _assemble_paper_once(
                 if b in shared_bands:
                     shared_bands[b] = shared_bands.get(b, 0) - 1
 
+    from exam_bank.question_quality import normalize_question_display
+
+    selected = [normalize_question_display(q) for q in selected]
     md = render_markdown(title=title or "未命名试卷", ordered=selected, include_answers=include_answers)
     qids = [str(q["id"]) for q in selected]
     paper = store.save_paper(
