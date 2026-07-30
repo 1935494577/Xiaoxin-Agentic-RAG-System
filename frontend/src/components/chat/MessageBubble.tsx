@@ -356,6 +356,9 @@ export default memo(MessageBubble, (prev, next) => {
   const prevGraph = prev.graphViz ?? graphVizFromMessageMeta(prev.message.meta);
   const nextGraph = next.graphViz ?? graphVizFromMessageMeta(next.message.meta);
   if (prevGraph !== nextGraph) return false;
+  const prevBlocks = prev.message.meta?.ui_blocks;
+  const nextBlocks = next.message.meta?.ui_blocks;
+  if (prevBlocks !== nextBlocks) return false;
   return (
     prev.message.content === next.message.content &&
     prev.message.role === next.message.role &&

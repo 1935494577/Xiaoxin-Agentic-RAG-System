@@ -16,7 +16,10 @@ _LETTER_RE = re.compile(r"^\s*([A-Da-d])\b")
 def normalize_objective_answer(raw: str, qtype: str) -> str:
     s = (raw or "").strip()
     qt = (qtype or "").strip().lower()
-    if qt in ("choice", "multi"):
+    if qt == "multi":
+        letters = sorted({c.upper() for c in re.findall(r"[A-Da-d]", s)})
+        return "".join(letters)
+    if qt == "choice":
         m = _LETTER_RE.match(s)
         if m:
             return m.group(1).upper()
@@ -47,10 +50,14 @@ def build_chat_paper(
     source_paper_id: str,
     *,
     include_answers: bool = False,
+    reader_user_id: str | None = None,
 ) -> dict[str, Any]:
     sp = store.get_source_paper(source_paper_id)
     if not sp:
         return {"ok": False, "error": "source_paper_not_found", "message": "试卷不存在"}
+    cid = str(sp.get("collection_id") or "").strip()
+    if cid and not store.reader_can_access_collection(cid, reader_user_id):
+        return {"ok": False, "error": "forbidden", "message": "无权访问该试卷所属题库"}
 
     questions: list[dict[str, Any]] = []
     for qid in sp.get("question_ids") or []:
@@ -93,7 +100,7 @@ def build_chat_paper(
         "source_filename": sp.get("source_filename") or "",
         "media_ingest_id": sp.get("media_ingest_id") or "",
         "meta": {
-            "total_score": total_score or len(questions) * 5,
+            "total_score": total_score,
             "question_count": len(questions),
             "duration_min": 120,
         },
@@ -103,7 +110,11 @@ def build_chat_paper(
 
 
 def start_attempt(source_paper_id: str, *, user_id: str = "") -> dict[str, Any]:
-    paper = build_chat_paper(source_paper_id, include_answers=False)
+    paper = build_chat_paper(
+        source_paper_id,
+        include_answers=False,
+        reader_user_id=(user_id or None),
+    )
     if not paper.get("ok"):
         return paper
     row = store.create_exam_attempt(
@@ -169,10 +180,20 @@ def grade_attempt(
     }
 
 
-def submit_attempt(attempt_id: str, *, answers: dict[str, str]) -> dict[str, Any]:
+def submit_attempt(
+    attempt_id: str,
+    *,
+    answers: dict[str, str],
+    user_id: str | None = None,
+) -> dict[str, Any]:
     row = store.get_exam_attempt(attempt_id)
     if not row:
         return {"ok": False, "error": "attempt_not_found", "message": "答题会话不存在"}
+    owner = str(row.get("user_id") or "").strip()
+    if owner:
+        reader = str(user_id or "").strip()
+        if reader != owner:
+            return {"ok": False, "error": "forbidden", "message": "无权操作该答题会话"}
     if row.get("status") == "submitted":
         return {
             "ok": True,

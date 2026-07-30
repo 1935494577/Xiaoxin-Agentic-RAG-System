@@ -63,12 +63,18 @@ def search_exam_papers_tool(query: str, limit: int = 10) -> str:
             "q": q,
             "total": n,
             "items": slim,
-            "ui_block": {
-                "type": "exam_candidates",
-                "items": slim,
-            }
-            if n > 1
-            else None,
+            "ui_block": (
+                {
+                    "type": "exam_paper",
+                    "source_paper_id": slim[0]["id"],
+                    "paper_id": slim[0]["id"],
+                    "title": slim[0]["title"],
+                }
+                if n == 1
+                else {"type": "exam_candidates", "items": slim}
+                if n > 1
+                else None
+            ),
             "guidance": guidance,
         },
         ensure_ascii=False,

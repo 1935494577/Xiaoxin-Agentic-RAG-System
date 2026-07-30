@@ -88,15 +88,27 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
     """Yield SSE lines: data: {json}\n\n"""
     # Deterministic exam-bank awareness: do not invent papers from KB / general LLM
     try:
-        from exam_bank.chat_exam_gate import iter_exam_gate_sse, resolve_exam_chat_gate
+        from exam_bank.chat_exam_gate import (
+            exam_gate_failure_response,
+            iter_exam_gate_sse,
+            resolve_exam_chat_gate,
+        )
 
-        gate = resolve_exam_chat_gate(str(state.get("question") or ""))
+        gate = resolve_exam_chat_gate(
+            str(state.get("question") or ""),
+            reader_user_id=str(state.get("user_id") or "").strip() or None,
+        )
         if gate and gate.get("handled"):
             for ev in iter_exam_gate_sse(gate):
                 yield _evt(ev)
             return
     except Exception:
-        logging.getLogger(__name__).exception("exam chat gate failed; continue RAG path")
+        logging.getLogger(__name__).exception("exam chat gate failed")
+        from exam_bank.chat_exam_gate import exam_gate_failure_response, iter_exam_gate_sse
+
+        for ev in iter_exam_gate_sse(exam_gate_failure_response()):
+            yield _evt(ev)
+        return
 
     init_state: dict[str, Any] = {
         "question": state["question"],

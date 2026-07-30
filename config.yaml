@@ -56,6 +56,10 @@ tools:
     group: rag
     use: jnao_community.search_exam_papers:search_exam_papers_tool
 
+  - name: explain_exam_question
+    group: rag
+    use: jnao_community.explain_exam_question:explain_exam_question_tool
+
 database:
   backend: sqlite
   sqlite_dir: .deer-flow/data

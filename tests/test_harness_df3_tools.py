@@ -12,9 +12,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 RAG_TOOLS = (
     "kb_search",
     "list_kb_sources",
+    "list_exam_bank",
     "format_structured_output",
     "present_exam_paper",
     "search_exam_papers",
+    "explain_exam_question",
 )
 
 def _load_config() -> dict:
@@ -63,6 +65,14 @@ def test_search_exam_papers_tool_missing_query():
 
     assert search_exam_papers_tool.name == "search_exam_papers"
     raw = search_exam_papers_tool.invoke({"query": ""})
+    assert "missing" in raw.lower() or "error" in raw.lower()
+
+
+def test_explain_exam_question_tool_missing_id():
+    from jnao_community.explain_exam_question import explain_exam_question_tool
+
+    assert explain_exam_question_tool.name == "explain_exam_question"
+    raw = explain_exam_question_tool.invoke({"question_id": ""})
     assert "missing" in raw.lower() or "error" in raw.lower()
 
 

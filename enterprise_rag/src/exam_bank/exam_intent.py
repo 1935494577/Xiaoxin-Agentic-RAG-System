@@ -74,6 +74,31 @@ def is_exam_inventory_intent(text: str) -> bool:
     return False
 
 
+_GRADE_TOKEN_RE = re.compile(r"(高[一二三]|初[一二三])")
+_REGION_GRADE_RE = re.compile(r"([\u4e00-\u9fff]{2,4}?)(高[一二三]|初[一二三])")
+
+
+def _expand_search_parts(parts: list[str]) -> list[str]:
+    """Split combined CJK tokens like 浙江高三 → 浙江, 高三 for LIKE search."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for p in parts:
+        if p and p not in seen:
+            out.append(p)
+            seen.add(p)
+        m = _REGION_GRADE_RE.search(p)
+        if m:
+            for piece in (m.group(1), m.group(2)):
+                if piece and piece not in seen:
+                    out.append(piece)
+                    seen.add(piece)
+        for g in _GRADE_TOKEN_RE.findall(p):
+            if g and g not in seen:
+                out.append(g)
+                seen.add(g)
+    return out
+
+
 def extract_exam_search_query(text: str) -> str:
     """Derive LIKE keywords from a natural-language take-exam request."""
     s = (text or "").strip()
@@ -90,6 +115,7 @@ def extract_exam_search_query(text: str) -> str:
     parts = [p for p in cur.split() if len(p) >= 1 and p.lower() not in {"vol", "pdf", "docx"}]
     # Drop ultra-generic leftovers
     parts = [p for p in parts if p not in {"卷", "卷子", "试卷", "试题", "题", "做"}]
+    parts = _expand_search_parts(parts)
     if years:
         for y in years:
             if y not in parts:

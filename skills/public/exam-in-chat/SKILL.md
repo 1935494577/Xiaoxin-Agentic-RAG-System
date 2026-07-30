@@ -5,6 +5,7 @@ allowed-tools:
   - list_exam_bank
   - search_exam_papers
   - present_exam_paper
+  - explain_exam_question
   - kb_search
 ---
 
@@ -51,6 +52,13 @@ allowed-tools:
 
    Do not call `present_exam_paper` until the user chooses (or there is exactly one match).
 5. Math you write yourself must use `$...$` / `$$...$$` delimiters.
+
+## Workflow — after submit / explain
+
+1. User clicks **交卷** on ExamPaperCard → objective items auto-graded; essay items show「主观题未自动判分」.
+2. User asks to explain a question (e.g. 讲解第 5 题、为什么错了) → call `explain_exam_question` with `question_id` and optional `user_answer` from their attempt.
+3. Present the `explanation` field; use `key_points` as bullets; mention `score_hint` for subjective items.
+4. Do **not** reveal answers before submit unless the user already submitted that attempt.
 
 ## Hard rules
 

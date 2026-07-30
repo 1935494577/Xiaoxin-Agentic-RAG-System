@@ -755,6 +755,20 @@ export type ChatAttemptSubmit = {
   }>;
 };
 
+export type ChatExplainResult = {
+  ok: boolean;
+  question_id: string;
+  explanation: string;
+  is_correct?: boolean | null;
+  score_hint?: string;
+  key_points?: string[];
+  reference_answer?: string;
+  reference_analysis?: string;
+  model?: string;
+  error?: string;
+  message?: string;
+};
+
 export function fetchChatExamPaper(sourcePaperId: string, includeAnswers = false) {
   const q = new URLSearchParams({ include_answers: String(includeAnswers) });
   return apiGet<ChatExamPaper>(
@@ -787,13 +801,32 @@ export function startChatExamAttempt(sourcePaperId: string, userId = "") {
   });
 }
 
-export function submitChatExamAttempt(attemptId: string, answers: Record<string, string>) {
+export function submitChatExamAttempt(
+  attemptId: string,
+  answers: Record<string, string>,
+  userId = "",
+) {
   return apiRequest<ChatAttemptSubmit>(
     `/api/exam/chat/attempts/${encodeURIComponent(attemptId)}/submit`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ answers }),
+      body: JSON.stringify({ answers, user_id: userId }),
+    },
+  );
+}
+
+export function explainChatExamQuestion(
+  questionId: string,
+  userAnswer = "",
+  userId = "",
+) {
+  return apiRequest<ChatExplainResult>(
+    `/api/exam/chat/questions/${encodeURIComponent(questionId)}/explain`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_answer: userAnswer, user_id: userId }),
     },
   );
 }

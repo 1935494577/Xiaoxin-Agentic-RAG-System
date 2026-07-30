@@ -28,9 +28,13 @@ def _slim(it: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_exam_bank_overview(*, paper_limit: int = 20) -> dict[str, Any]:
+def build_exam_bank_overview(
+    *,
+    paper_limit: int = 20,
+    reader_user_id: str | None = None,
+) -> dict[str, Any]:
     """Snapshot of exam_bank collections + recent source papers (not KB docs)."""
-    cols = store.list_collections(apply_acl=False)
+    cols = store.list_collections(reader_user_id=reader_user_id or None)
     collections_out: list[dict[str, Any]] = []
     total_questions = 0
     for c in cols:
@@ -54,7 +58,13 @@ def build_exam_bank_overview(*, paper_limit: int = 20) -> dict[str, Any]:
                 "by_qtype_label": "、".join(qt_bits) if qt_bits else "暂无已发布题目",
             }
         )
-    papers = [_slim(p) for p in store.list_recent_source_papers(limit=paper_limit)]
+    papers = [
+        _slim(p)
+        for p in store.list_recent_source_papers(
+            limit=paper_limit,
+            reader_user_id=reader_user_id,
+        )
+    ]
     return {
         "collection_count": len(collections_out),
         "question_total": total_questions,
@@ -64,8 +74,8 @@ def build_exam_bank_overview(*, paper_limit: int = 20) -> dict[str, Any]:
     }
 
 
-def _inventory_gate() -> dict[str, Any]:
-    overview = build_exam_bank_overview(paper_limit=20)
+def _inventory_gate(*, reader_user_id: str | None = None) -> dict[str, Any]:
+    overview = build_exam_bank_overview(paper_limit=20, reader_user_id=reader_user_id)
     tool_trace = [
         {
             "tool": "list_exam_bank",
@@ -164,7 +174,30 @@ def _inventory_gate() -> dict[str, Any]:
     }
 
 
-def resolve_exam_chat_gate(question: str, *, limit: int = 10) -> dict[str, Any] | None:
+def _take_empty_response(
+    *,
+    keywords: str,
+    tool_trace: list[dict[str, Any]],
+    message: str,
+) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "handled": True,
+        "mode": "take",
+        "answer": message,
+        "ui_blocks": [],
+        "tool_trace": tool_trace,
+        "keywords": keywords,
+        "hit_count": 0,
+    }
+
+
+def resolve_exam_chat_gate(
+    question: str,
+    *,
+    limit: int = 10,
+    reader_user_id: str | None = None,
+) -> dict[str, Any] | None:
     """
     If the user wants exam-bank content, search/list exam_bank and return a Chat gate payload.
 
@@ -172,49 +205,55 @@ def resolve_exam_chat_gate(question: str, *, limit: int = 10) -> dict[str, Any] 
     """
     q_raw = (question or "").strip()
     if is_exam_inventory_intent(q_raw):
-        return _inventory_gate()
+        return _inventory_gate(reader_user_id=reader_user_id)
     if not is_exam_take_intent(q_raw):
         return None
 
     keywords = extract_exam_search_query(q_raw)
-    hits = store.search_source_papers(keywords, limit=limit) if keywords else []
-    if not hits and keywords:
-        # broaden: try each token alone
-        for tok in keywords.split():
-            hits = store.search_source_papers(tok, limit=limit)
-            if hits:
-                break
-    if not hits:
-        # last resort: recent papers so user can still pick
-        hits = store.list_recent_source_papers(limit=min(limit, 8))
+    reader = reader_user_id
+    hits: list[dict[str, Any]] = []
+    if keywords:
+        hits = store.search_source_papers(keywords, limit=limit, reader_user_id=reader)
+        if not hits:
+            for tok in keywords.split():
+                hits = store.search_source_papers(tok, limit=limit, reader_user_id=reader)
+                if hits:
+                    break
 
-    slim = [_slim(h) for h in hits]
     tool_trace = [
         {
             "tool": "search_exam_papers",
             "arguments": {"query": keywords or q_raw},
-            "output": json.dumps({"ok": True, "total": len(slim), "items": slim}, ensure_ascii=False),
+            "output": json.dumps({"ok": True, "total": 0, "items": []}, ensure_ascii=False),
             "ok": True,
         }
     ]
 
-    if not slim:
-        answer = (
-            "我在**题库**里没有找到可作答的试卷（不是知识库）。\n\n"
-            "请到 Admin **数据入库 → 试卷题库**（或题库矩阵「试卷入库」）完成入库后，"
-            "再说「把某某卷拿出来做」。\n\n"
-            "制度/手册请走知识文档通道；整卷不要只丢进向量知识库。"
+    if not keywords:
+        return _take_empty_response(
+            keywords=keywords,
+            tool_trace=tool_trace,
+            message=(
+                "请说明要做哪一份试卷（例如：2024 浙江高三数学卷），"
+                "或先说「题库里有什么」查看已入库列表。\n\n"
+                "我不会从知识库 PDF 里编造可答题卷。"
+            ),
         )
-        return {
-            "ok": True,
-            "handled": True,
-            "mode": "take",
-            "answer": answer,
-            "ui_blocks": [],
-            "tool_trace": tool_trace,
-            "keywords": keywords,
-            "hit_count": 0,
-        }
+
+    if not hits:
+        return _take_empty_response(
+            keywords=keywords,
+            tool_trace=tool_trace,
+            message=(
+                f"题库中未找到匹配「{keywords}」的试卷（不是知识库）。\n\n"
+                "请核对卷名/年份/地区，或到 Admin **数据入库 → 试卷题库** 入库后再试。"
+            ),
+        )
+
+    slim = [_slim(h) for h in hits]
+    tool_trace[0]["output"] = json.dumps(
+        {"ok": True, "total": len(slim), "items": slim}, ensure_ascii=False
+    )
 
     if len(slim) == 1:
         one = slim[0]
@@ -271,7 +310,6 @@ def resolve_exam_chat_gate(question: str, *, limit: int = 10) -> dict[str, Any] 
             "hit_count": 1,
         }
 
-    # multi
     cand_fence = (
         "```exam_candidates\n"
         + json.dumps({"items": slim}, ensure_ascii=False)
@@ -283,7 +321,7 @@ def resolve_exam_chat_gate(question: str, *, limit: int = 10) -> dict[str, Any] 
         for it in slim
     )
     answer = (
-        f"题库中匹配到 **{len(slim)}** 份试卷（关键词：{keywords or '最近入库'}）。"
+        f"题库中匹配到 **{len(slim)}** 份试卷（关键词：{keywords}）。"
         f"请点选下方列表中的一份开始作答：\n\n{lines}\n\n{cand_fence}"
     )
     return {
@@ -336,3 +374,20 @@ def iter_exam_gate_sse(gate: dict[str, Any]) -> list[dict[str, Any]]:
         }
     )
     return events
+
+
+def exam_gate_failure_response() -> dict[str, Any]:
+    """Structured gate payload when exam_bank lookup throws."""
+    return {
+        "ok": True,
+        "handled": True,
+        "mode": "error",
+        "answer": (
+            "试卷题库服务暂时不可用，请稍后重试，或到 Admin **题库组卷** 页面查看。\n\n"
+            "本次不会改用知识库文档作答。"
+        ),
+        "ui_blocks": [],
+        "tool_trace": [],
+        "keywords": "",
+        "hit_count": 0,
+    }

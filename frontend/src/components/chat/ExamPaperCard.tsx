@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ExamMathText } from "../../pages/admin/exam-bank/ExamMathText";
 import {
+  explainChatExamQuestion,
   fetchChatExamPaper,
   startChatExamAttempt,
   submitChatExamAttempt,
   type ChatAttemptSubmit,
   type ChatExamPaper,
+  type ChatExplainResult,
   type ChatPaperItem,
 } from "../../lib/examBank";
 import { useAuth } from "../../hooks/useAuth";
@@ -24,6 +26,24 @@ function optionLetter(opt: string, index: number): string {
   return String.fromCharCode(65 + index);
 }
 
+function parseMultiValue(value: string): Set<string> {
+  return new Set(
+    (value || "")
+      .toUpperCase()
+      .split("")
+      .filter((c) => /[A-D]/.test(c)),
+  );
+}
+
+function toggleMultiLetter(value: string, letter: string, checked: boolean): string {
+  const set = parseMultiValue(value);
+  if (checked) set.add(letter);
+  else set.delete(letter);
+  return Array.from(set)
+    .sort()
+    .join("");
+}
+
 function QuestionBlock({
   item,
   index,
@@ -32,6 +52,9 @@ function QuestionBlock({
   value,
   onChange,
   result,
+  onExplain,
+  explainLoading,
+  llmExplain,
 }: {
   item: ChatPaperItem;
   index: number;
@@ -40,11 +63,16 @@ function QuestionBlock({
   value: string;
   onChange: (v: string) => void;
   result?: ChatAttemptSubmit["results"][number];
+  onExplain?: () => void;
+  explainLoading?: boolean;
+  llmExplain?: ChatExplainResult | null;
 }) {
   const no = item.no || String(index + 1);
   const mid = item.media_ingest_id || mediaIngestId;
   const answering = phase === "answering";
   const reviewed = phase === "submitted";
+  const isMulti = (item.qtype || "").toLowerCase() === "multi";
+  const multiSet = parseMultiValue(value);
 
   return (
     <div className="py-3 border-b border-border-light last:border-0">
@@ -59,7 +87,7 @@ function QuestionBlock({
         <div className="space-y-1.5 pl-1">
           {item.options.map((opt, oi) => {
             const letter = optionLetter(opt, oi);
-            const selected = value.toUpperCase() === letter;
+            const selected = isMulti ? multiSet.has(letter) : value.toUpperCase() === letter;
             const isCorrect = reviewed && result?.correct === true && selected;
             const isWrong = reviewed && result?.correct === false && selected;
             return (
@@ -77,11 +105,17 @@ function QuestionBlock({
               >
                 {answering ? (
                   <input
-                    type="radio"
+                    type={isMulti ? "checkbox" : "radio"}
                     className="mt-1"
-                    name={`q-${item.id}`}
+                    name={isMulti ? undefined : `q-${item.id}`}
                     checked={selected}
-                    onChange={() => onChange(letter)}
+                    onChange={() => {
+                      if (isMulti) {
+                        onChange(toggleMultiLetter(value, letter, !selected));
+                      } else {
+                        onChange(letter);
+                      }
+                    }}
                   />
                 ) : (
                   <span className="w-4 shrink-0 text-text-muted">{letter}.</span>
@@ -94,9 +128,8 @@ function QuestionBlock({
           })}
         </div>
       ) : answering || reviewed ? (
-        <input
-          type="text"
-          className="mt-1 w-full max-w-md border border-border rounded-md px-2.5 py-1.5 text-sm bg-white"
+        <textarea
+          className="mt-1 w-full max-w-xl border border-border rounded-md px-2.5 py-1.5 text-sm bg-white min-h-[72px]"
           placeholder="填写答案"
           value={value}
           disabled={!answering}
@@ -128,6 +161,34 @@ function QuestionBlock({
               <ExamMathText text={result.analysis} className="inline" mediaIngestId={mid} />
             </p>
           ) : null}
+          {onExplain ? (
+            <button
+              type="button"
+              disabled={explainLoading}
+              onClick={onExplain}
+              className="mt-1 text-xs px-2 py-0.5 rounded border border-brand/40 text-brand hover:bg-brand/5 disabled:opacity-50 cursor-pointer"
+            >
+              {explainLoading ? "AI 讲解中…" : "AI 讲解本题"}
+            </button>
+          ) : null}
+          {llmExplain?.explanation ? (
+            <div className="mt-2 p-2 rounded-md bg-surface-muted/80 text-text leading-5 space-y-1">
+              <p className="font-medium text-text text-xs">AI 讲解</p>
+              <ExamMathText text={llmExplain.explanation} mediaIngestId={mid} />
+              {llmExplain.score_hint ? (
+                <p className="text-text-muted">{llmExplain.score_hint}</p>
+              ) : null}
+              {llmExplain.key_points?.length ? (
+                <ul className="list-disc pl-4 space-y-0.5">
+                  {llmExplain.key_points.map((kp, i) => (
+                    <li key={i}>
+                      <ExamMathText text={kp} className="inline" mediaIngestId={mid} />
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -143,6 +204,8 @@ export function ExamPaperCard({ sourcePaperId, titleHint }: Props) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [submitResult, setSubmitResult] = useState<ChatAttemptSubmit | null>(null);
   const [busy, setBusy] = useState(false);
+  const [explainMap, setExplainMap] = useState<Record<string, ChatExplainResult>>({});
+  const [explainLoadingId, setExplainLoadingId] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -191,6 +254,7 @@ export function ExamPaperCard({ sourcePaperId, titleHint }: Props) {
       if (res.paper) setPaper(res.paper);
       setAnswers({});
       setSubmitResult(null);
+      setExplainMap({});
       setPhase("answering");
     } catch (e) {
       setError(e instanceof Error ? e.message : "无法开始答题");
@@ -204,15 +268,41 @@ export function ExamPaperCard({ sourcePaperId, titleHint }: Props) {
     setBusy(true);
     setError("");
     try {
-      const res = await submitChatExamAttempt(attemptId, answers);
+      const res = await submitChatExamAttempt(attemptId, answers, userId || "");
       setSubmitResult(res);
+      setExplainMap({});
       setPhase("submitted");
     } catch (e) {
       setError(e instanceof Error ? e.message : "交卷失败");
     } finally {
       setBusy(false);
     }
-  }, [attemptId, answers, busy]);
+  }, [attemptId, answers, busy, userId]);
+
+  const onExplainQuestion = useCallback(
+    async (questionId: string) => {
+      if (explainLoadingId) return;
+      setExplainLoadingId(questionId);
+      setError("");
+      try {
+        const res = await explainChatExamQuestion(
+          questionId,
+          answers[questionId] || "",
+          userId || "",
+        );
+        if (res.ok) {
+          setExplainMap((prev) => ({ ...prev, [questionId]: res }));
+        } else {
+          setError(res.message || "AI 讲解失败");
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "AI 讲解失败");
+      } finally {
+        setExplainLoadingId("");
+      }
+    },
+    [answers, explainLoadingId, userId],
+  );
 
   if (phase === "loading") {
     return (
@@ -263,6 +353,11 @@ export function ExamPaperCard({ sourcePaperId, titleHint }: Props) {
                   value={answers[item.id] || ""}
                   onChange={(v) => setAnswers((prev) => ({ ...prev, [item.id]: v }))}
                   result={resultById.get(item.id)}
+                  onExplain={
+                    phase === "submitted" ? () => void onExplainQuestion(item.id) : undefined
+                  }
+                  explainLoading={explainLoadingId === item.id}
+                  llmExplain={explainMap[item.id]}
                 />
               );
             })}
@@ -272,14 +367,17 @@ export function ExamPaperCard({ sourcePaperId, titleHint }: Props) {
 
       <div className="px-4 py-3 border-t border-border bg-white flex flex-wrap items-center gap-2">
         {phase === "preview" ? (
-          <button
-            type="button"
-            onClick={() => void onStart()}
-            disabled={busy}
-            className="text-sm px-3.5 py-1.5 rounded-md bg-brand text-white hover:bg-brand-dark disabled:opacity-50 cursor-pointer"
-          >
-            {busy ? "准备中…" : "开始答题"}
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => void onStart()}
+              disabled={busy}
+              className="text-sm px-3.5 py-1.5 rounded-md bg-brand text-white hover:bg-brand-dark disabled:opacity-50 cursor-pointer"
+            >
+              {busy ? "准备中…" : "开始答题"}
+            </button>
+            <span className="text-xs text-text-muted">点击开始后可选择选项并交卷</span>
+          </>
         ) : null}
         {phase === "answering" ? (
           <>

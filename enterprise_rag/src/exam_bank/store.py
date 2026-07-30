@@ -506,6 +506,47 @@ def list_collections(
     )
 
 
+def reader_can_access_collection(
+    collection_id: str,
+    reader_user_id: str | None = None,
+    *,
+    tenant_id: str = DEFAULT_TENANT,
+) -> bool:
+    """Whether reader may see papers/questions in this exam collection."""
+    col = get_collection(collection_id)
+    if not col:
+        return False
+    owner = str(col.get("owner_user_id") or "").strip()
+    reader = (reader_user_id or "").strip()
+    # Legacy rows without owner: readable within tenant (matches list_collections).
+    if not owner:
+        return True
+    if not reader:
+        vis = str(col.get("visibility") or "private")
+        return vis in ("tenant_shared", "platform")
+    from platform_acl import can_read_asset
+
+    return can_read_asset(
+        visibility=str(col.get("visibility") or ""),
+        tenant_id=str(col.get("tenant_id") or tenant_id),
+        owner_user_id=str(col.get("owner_user_id") or ""),
+        reader_tenant_id=tenant_id,
+        reader_user_id=reader,
+    )
+
+
+def _filter_papers_for_reader(
+    papers: list[dict[str, Any]],
+    reader_user_id: str | None,
+) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for p in papers:
+        cid = str(p.get("collection_id") or "").strip()
+        if cid and reader_can_access_collection(cid, reader_user_id):
+            out.append(p)
+    return out
+
+
 def get_collection(collection_id: str) -> dict[str, Any] | None:
     with _lock:
         conn = _connect()
@@ -1143,6 +1184,7 @@ def search_source_papers(
     *,
     collection_id: str | None = None,
     limit: int = 10,
+    reader_user_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Fuzzy match title / filename / collection region·subject·grade·name."""
     tokens = [t for t in (q or "").strip().split() if t]
@@ -1190,10 +1232,14 @@ def search_source_papers(
         item["subject"] = r["col_subject"] if "col_subject" in keys else ""
         item["grade"] = r["col_grade"] if "col_grade" in keys else ""
         out.append(item)
-    return out
+    return _filter_papers_for_reader(out, reader_user_id)
 
 
-def list_recent_source_papers(*, limit: int = 8) -> list[dict[str, Any]]:
+def list_recent_source_papers(
+    *,
+    limit: int = 8,
+    reader_user_id: str | None = None,
+) -> list[dict[str, Any]]:
     lim = max(1, min(50, int(limit or 8)))
     with _lock:
         conn = _connect()
@@ -1220,7 +1266,7 @@ def list_recent_source_papers(*, limit: int = 8) -> list[dict[str, Any]]:
         item["subject"] = r["col_subject"] if "col_subject" in keys else ""
         item["grade"] = r["col_grade"] if "col_grade" in keys else ""
         out.append(item)
-    return out
+    return _filter_papers_for_reader(out, reader_user_id)
 
 
 def update_source_paper(

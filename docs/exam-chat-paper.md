@@ -24,7 +24,17 @@
 | GET | `/api/exam/chat/papers/search?q=` | 按标题/文件名/题库属性模糊检索 |
 | GET | `/api/exam/chat/papers/{source_paper_id}` | 标准卷面 JSON（默认无答案） |
 | POST | `/api/exam/chat/attempts` | 开始答题 |
-| POST | `/api/exam/chat/attempts/{id}/submit` | 交卷 |
+| POST | `/api/exam/chat/attempts/{id}/submit` | 交卷（客观题规则判分） |
+| POST | `/api/exam/chat/questions/{question_id}/explain` | **大模型分步讲解**（可选带 user_answer） |
+
+## 判题 / 讲解方案
+
+| 能力 | 实现 | 说明 |
+|------|------|------|
+| 单选 / 多选 / 填空（有标答） | `chat_paper.grade_attempt` 规则判分 | 交卷即时出分，不耗 LLM |
+| 解答 / 作文 | 交卷标记「未自动判分」 | 卷面 **AI 讲解本题** 或对话「讲解第 N 题」 |
+| 分步讲解 | Tool `explain_exam_question` + API `/explain` | 复用 `exam_bank.llm_client`，Skill `exam-in-chat` 交卷后 workflow |
+| Agent 追问 | 任务模式 + Skill | 用户说「为什么第 3 题错了」→ 调 tool |
 
 ## 关键模块
 
@@ -34,7 +44,7 @@
 
 ## Skill / Tool（补充）
 
-- `list_exam_bank` + `search_exam_papers` + `present_exam_paper` 可供 Agent 显式调用  
+- `list_exam_bank` + `search_exam_papers` + `present_exam_paper` + **`explain_exam_question`** 可供 Agent 显式调用  
 - 门闸保证「没调工具也能感知题库」，且 **题库盘点不会误走知识库**
 
 ## 手动验证

@@ -75,6 +75,47 @@ def test_build_chat_paper_hides_answers(tmp_path, monkeypatch):
     assert flat[0]["id"] == q1["id"]
     assert "answer" not in flat[0] or flat[0].get("answer") in ("", None)
     assert not flat[0].get("analysis")
+    # 2 choice × 5 + 1 fill × 0
+    assert paper["meta"]["total_score"] == 10
+
+
+def test_build_chat_paper_total_score_subjective_only(tmp_path, monkeypatch):
+    from exam_bank import store
+    from exam_bank.chat_paper import build_chat_paper
+
+    db = tmp_path / "exam_bank.db"
+    monkeypatch.setattr(store.settings, "exam_bank_db_path", db)
+    store.init_exam_bank_db()
+    col = store.create_collection(name="主观卷", subject="语文", grade="高三", region="全国")
+    q1 = store.create_question(
+        collection_id=col["id"],
+        qtype="fill",
+        stem="填空 1",
+        options=[],
+        answer="x",
+        quality_status="published",
+        question_no="1",
+    )
+    q2 = store.create_question(
+        collection_id=col["id"],
+        qtype="essay",
+        stem="作文题",
+        options=[],
+        answer="",
+        quality_status="published",
+        question_no="2",
+    )
+    sp = store.create_source_paper(
+        collection_id=col["id"],
+        title="纯主观卷",
+        source_filename="subjective.docx",
+        question_ids=[q1["id"], q2["id"]],
+    )
+
+    paper = build_chat_paper(sp["id"])
+    assert paper["ok"] is True
+    assert paper["meta"]["question_count"] == 2
+    assert paper["meta"]["total_score"] == 0
 
 
 def test_start_and_submit_attempt_grades_choice(tmp_path, monkeypatch):
@@ -98,6 +139,7 @@ def test_start_and_submit_attempt_grades_choice(tmp_path, monkeypatch):
     result = submit_attempt(
         aid,
         answers={q1["id"]: "A", q2["id"]: "B", q3["id"]: "2"},
+        user_id="u1",
     )
     assert result["ok"] is True
     assert result["status"] == "submitted"

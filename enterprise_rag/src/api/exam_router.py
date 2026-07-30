@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -26,6 +26,27 @@ from exam_bank.types import (
 )
 
 router = APIRouter(prefix="/api/exam", tags=["exam-bank"])
+
+
+def _chat_reader_user_id(request: Request, fallback: str = "") -> str:
+    try:
+        from auth.middleware import get_auth_user
+
+        user = get_auth_user(request)
+        if user:
+            return str(user.get("id") or user.get("username") or "").strip()
+    except Exception:
+        pass
+    return (fallback or "").strip()
+
+
+def _assert_attempt_owner(row: dict[str, Any], reader_user_id: str) -> None:
+    owner = str(row.get("user_id") or "").strip()
+    reader = (reader_user_id or "").strip()
+    if owner and reader and owner != reader:
+        raise HTTPException(status_code=403, detail={"error": "forbidden", "message": "无权访问该答题会话"})
+    if owner and not reader:
+        raise HTTPException(status_code=401, detail={"error": "unauthorized", "message": "请登录后再查看答题会话"})
 
 
 class CollectionCreate(BaseModel):
@@ -1068,19 +1089,28 @@ class ChatAttemptStartRequest(BaseModel):
 
 class ChatAttemptSubmitRequest(BaseModel):
     answers: dict[str, str] = Field(default_factory=dict)
+    user_id: str = ""
+
+
+class ChatExplainRequest(BaseModel):
+    user_answer: str = ""
+    user_id: str = ""
 
 
 @router.get("/chat/papers/search")
 def chat_search_papers(
+    request: Request,
     q: str = Query(..., min_length=1),
     collection_id: str | None = Query(default=None),
     limit: int = Query(default=10, ge=1, le=50),
 ) -> dict[str, Any]:
     """按标题/文件名模糊检索已入库试卷（供 Chat / Agent Tool）。"""
+    reader = _chat_reader_user_id(request)
     items = store.search_source_papers(
         q,
         collection_id=collection_id,
         limit=limit,
+        reader_user_id=reader or None,
     )
     # slim payload for tool / list UI
     slim = [
@@ -1099,23 +1129,44 @@ def chat_search_papers(
 
 @router.get("/chat/papers/{source_paper_id}")
 def chat_get_paper(
+    request: Request,
     source_paper_id: str,
     include_answers: bool = Query(default=False),
 ) -> dict[str, Any]:
     """标准卷面 JSON（默认不含答案），供 Chat ExamPaperCard 使用。"""
     from exam_bank.chat_paper import build_chat_paper
 
-    result = build_chat_paper(source_paper_id, include_answers=include_answers)
+    if include_answers:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "include_answers_forbidden",
+                "message": "Chat 卷面接口不允许提前获取答案，请交卷后查看",
+            },
+        )
+    reader = _chat_reader_user_id(request)
+    result = build_chat_paper(
+        source_paper_id,
+        include_answers=False,
+        reader_user_id=reader or None,
+    )
     if not result.get("ok"):
+        if result.get("error") == "forbidden":
+            raise HTTPException(status_code=403, detail=result)
         raise HTTPException(status_code=404, detail=result)
     return result
 
 
 @router.post("/chat/attempts")
-def chat_start_attempt(body: ChatAttemptStartRequest) -> dict[str, Any]:
-    from exam_bank.chat_paper import start_attempt
+def chat_start_attempt(request: Request, body: ChatAttemptStartRequest) -> dict[str, Any]:
+    from exam_bank.chat_paper import build_chat_paper, start_attempt
 
-    result = start_attempt(body.source_paper_id, user_id=body.user_id)
+    reader = _chat_reader_user_id(request, body.user_id)
+    pre = build_chat_paper(body.source_paper_id, reader_user_id=reader or None)
+    if not pre.get("ok"):
+        code = 403 if pre.get("error") == "forbidden" else 404
+        raise HTTPException(status_code=code, detail=pre)
+    result = start_attempt(body.source_paper_id, user_id=reader)
     if not result.get("ok"):
         code = 404 if result.get("error") == "source_paper_not_found" else 400
         raise HTTPException(status_code=code, detail=result)
@@ -1123,21 +1174,53 @@ def chat_start_attempt(body: ChatAttemptStartRequest) -> dict[str, Any]:
 
 
 @router.get("/chat/attempts/{attempt_id}")
-def chat_get_attempt(attempt_id: str) -> dict[str, Any]:
+def chat_get_attempt(request: Request, attempt_id: str) -> dict[str, Any]:
     row = store.get_exam_attempt(attempt_id)
     if not row:
         raise HTTPException(status_code=404, detail="attempt_not_found")
+    _assert_attempt_owner(row, _chat_reader_user_id(request))
     return {"ok": True, **row}
 
 
 @router.post("/chat/attempts/{attempt_id}/submit")
-def chat_submit_attempt(attempt_id: str, body: ChatAttemptSubmitRequest) -> dict[str, Any]:
+def chat_submit_attempt(
+    request: Request,
+    attempt_id: str,
+    body: ChatAttemptSubmitRequest,
+) -> dict[str, Any]:
     from exam_bank.chat_paper import submit_attempt
 
-    result = submit_attempt(attempt_id, answers=body.answers or {})
+    reader = _chat_reader_user_id(request, body.user_id)
+    result = submit_attempt(attempt_id, answers=body.answers or {}, user_id=reader)
     if not result.get("ok"):
+        if result.get("error") == "forbidden":
+            raise HTTPException(status_code=403, detail=result)
         code = 404 if result.get("error") == "attempt_not_found" else 400
         raise HTTPException(status_code=code, detail=result)
+    return result
+
+
+@router.post("/chat/questions/{question_id}/explain")
+def chat_explain_question(
+    request: Request,
+    question_id: str,
+    body: ChatExplainRequest,
+) -> dict[str, Any]:
+    """LLM step-by-step explanation (and subjective feedback when applicable)."""
+    from exam_bank.exam_tutor import explain_question_by_id
+
+    reader = _chat_reader_user_id(request, body.user_id)
+    result = explain_question_by_id(
+        question_id,
+        user_answer=body.user_answer or "",
+        reader_user_id=reader or None,
+    )
+    if not result.get("ok"):
+        if result.get("error") == "forbidden":
+            raise HTTPException(status_code=403, detail=result)
+        if result.get("error") == "question_not_found":
+            raise HTTPException(status_code=404, detail=result)
+        raise HTTPException(status_code=400, detail=result)
     return result
 
 
