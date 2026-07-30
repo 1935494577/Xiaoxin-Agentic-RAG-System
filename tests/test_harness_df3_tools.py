@@ -9,8 +9,13 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-RAG_TOOLS = ("kb_search", "list_kb_sources", "format_structured_output")
-
+RAG_TOOLS = (
+    "kb_search",
+    "list_kb_sources",
+    "format_structured_output",
+    "present_exam_paper",
+    "search_exam_papers",
+)
 
 def _load_config() -> dict:
     data = yaml.safe_load((REPO_ROOT / "config.yaml").read_text(encoding="utf-8"))
@@ -43,6 +48,22 @@ def test_format_structured_output_tool_unknown_schema():
     assert format_structured_output_tool.name == "format_structured_output"
     raw = format_structured_output_tool.invoke({"content": "draft", "schema_id": "not_a_schema"})
     assert "not_a_schema" in raw or "error" in raw.lower()
+
+
+def test_present_exam_paper_tool_missing_id():
+    from jnao_community.present_exam_paper import present_exam_paper_tool
+
+    assert present_exam_paper_tool.name == "present_exam_paper"
+    raw = present_exam_paper_tool.invoke({"source_paper_id": ""})
+    assert "missing" in raw.lower() or "error" in raw.lower()
+
+
+def test_search_exam_papers_tool_missing_query():
+    from jnao_community.search_exam_papers import search_exam_papers_tool
+
+    assert search_exam_papers_tool.name == "search_exam_papers"
+    raw = search_exam_papers_tool.invoke({"query": ""})
+    assert "missing" in raw.lower() or "error" in raw.lower()
 
 
 @pytest.mark.harness

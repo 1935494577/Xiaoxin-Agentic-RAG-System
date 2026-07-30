@@ -688,3 +688,112 @@ export function formatExamApiError(raw: string): string {
   }
   return raw;
 }
+
+// ===== Chat 标准卷面 / 答题 =====
+
+export type ChatPaperItem = {
+  id: string;
+  no: string;
+  qtype: string;
+  qtype_label?: string;
+  score?: number;
+  stem: string;
+  options: string[];
+  media_ingest_id?: string;
+  answer?: string;
+  analysis?: string;
+};
+
+export type ChatPaperSection = {
+  heading: string;
+  qtype: string;
+  items: ChatPaperItem[];
+};
+
+export type ChatExamPaper = {
+  ok?: boolean;
+  type: "exam_paper";
+  paper_id: string;
+  source_paper_id?: string;
+  collection_id?: string;
+  title: string;
+  source_filename?: string;
+  media_ingest_id?: string;
+  meta: {
+    total_score: number;
+    question_count: number;
+    duration_min?: number;
+  };
+  sections: ChatPaperSection[];
+  mode: "preview" | "review" | string;
+};
+
+export type ChatAttemptStart = {
+  ok: boolean;
+  attempt_id: string;
+  status: string;
+  paper: ChatExamPaper;
+  started_at?: string;
+};
+
+export type ChatAttemptSubmit = {
+  ok: boolean;
+  attempt_id: string;
+  status: string;
+  correct_count: number;
+  graded_count: number;
+  score: number;
+  max_score: number;
+  results: Array<{
+    question_id: string;
+    qtype: string;
+    user_answer: string;
+    answer: string;
+    analysis: string;
+    correct: boolean | null;
+    scored: boolean;
+  }>;
+};
+
+export function fetchChatExamPaper(sourcePaperId: string, includeAnswers = false) {
+  const q = new URLSearchParams({ include_answers: String(includeAnswers) });
+  return apiGet<ChatExamPaper>(
+    `/api/exam/chat/papers/${encodeURIComponent(sourcePaperId)}?${q}`,
+  );
+}
+
+export function searchChatExamPapers(query: string, limit = 10) {
+  const q = new URLSearchParams({ q: query, limit: String(limit) });
+  return apiGet<{
+    ok: boolean;
+    q: string;
+    items: Array<{
+      id: string;
+      title: string;
+      source_filename: string;
+      collection_id: string;
+      question_count: number;
+      created_at: string;
+    }>;
+    total: number;
+  }>(`/api/exam/chat/papers/search?${q}`);
+}
+
+export function startChatExamAttempt(sourcePaperId: string, userId = "") {
+  return apiRequest<ChatAttemptStart>("/api/exam/chat/attempts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source_paper_id: sourcePaperId, user_id: userId }),
+  });
+}
+
+export function submitChatExamAttempt(attemptId: string, answers: Record<string, string>) {
+  return apiRequest<ChatAttemptSubmit>(
+    `/api/exam/chat/attempts/${encodeURIComponent(attemptId)}/submit`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ answers }),
+    },
+  );
+}

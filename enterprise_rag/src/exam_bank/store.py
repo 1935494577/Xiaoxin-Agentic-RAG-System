@@ -187,6 +187,32 @@ def _migrate_exam_columns(conn: sqlite3.Connection) -> None:
             ON source_papers(collection_id, created_at DESC)
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS exam_attempts (
+            id TEXT PRIMARY KEY,
+            source_paper_id TEXT NOT NULL,
+            user_id TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'in_progress',
+            paper_snapshot_json TEXT NOT NULL DEFAULT '{}',
+            answers_json TEXT NOT NULL DEFAULT '{}',
+            results_json TEXT NOT NULL DEFAULT '[]',
+            score INTEGER NOT NULL DEFAULT 0,
+            max_score INTEGER NOT NULL DEFAULT 0,
+            correct_count INTEGER NOT NULL DEFAULT 0,
+            graded_count INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            submitted_at TEXT NOT NULL DEFAULT '',
+            FOREIGN KEY(source_paper_id) REFERENCES source_papers(id)
+        );
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_exam_attempt_paper
+            ON exam_attempts(source_paper_id, created_at DESC)
+        """
+    )
 
 
 def _connect() -> sqlite3.Connection:
@@ -1112,6 +1138,91 @@ def list_source_papers(*, collection_id: str) -> list[dict[str, Any]]:
     return [_row_source_paper(r) for r in rows]
 
 
+def search_source_papers(
+    q: str,
+    *,
+    collection_id: str | None = None,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Fuzzy match title / filename / collection region·subject·grade·name."""
+    tokens = [t for t in (q or "").strip().split() if t]
+    if not tokens:
+        return []
+    lim = max(1, min(50, int(limit or 10)))
+    col = (collection_id or "").strip()
+    with _lock:
+        conn = _connect()
+        try:
+            clauses = ["1=1"]
+            params: list[Any] = []
+            if col:
+                clauses.append("sp.collection_id = ?")
+                params.append(col)
+            for tok in tokens:
+                clauses.append(
+                    "("
+                    "sp.title LIKE ? OR sp.source_filename LIKE ? OR "
+                    "IFNULL(c.name,'') LIKE ? OR IFNULL(c.region,'') LIKE ? OR "
+                    "IFNULL(c.subject,'') LIKE ? OR IFNULL(c.grade,'') LIKE ?"
+                    ")"
+                )
+                like = f"%{tok}%"
+                params.extend([like, like, like, like, like, like])
+            params.append(lim)
+            sql = f"""
+                SELECT sp.*, c.name AS collection_name, c.region AS col_region,
+                       c.subject AS col_subject, c.grade AS col_grade
+                FROM source_papers sp
+                LEFT JOIN collections c ON c.id = sp.collection_id
+                WHERE {' AND '.join(clauses)}
+                ORDER BY sp.created_at DESC
+                LIMIT ?
+            """
+            rows = conn.execute(sql, params).fetchall()
+        finally:
+            conn.close()
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        item = _row_source_paper(r)
+        keys = set(r.keys()) if hasattr(r, "keys") else set()
+        item["collection_name"] = r["collection_name"] if "collection_name" in keys else ""
+        item["region"] = r["col_region"] if "col_region" in keys else ""
+        item["subject"] = r["col_subject"] if "col_subject" in keys else ""
+        item["grade"] = r["col_grade"] if "col_grade" in keys else ""
+        out.append(item)
+    return out
+
+
+def list_recent_source_papers(*, limit: int = 8) -> list[dict[str, Any]]:
+    lim = max(1, min(50, int(limit or 8)))
+    with _lock:
+        conn = _connect()
+        try:
+            rows = conn.execute(
+                """
+                SELECT sp.*, c.name AS collection_name, c.region AS col_region,
+                       c.subject AS col_subject, c.grade AS col_grade
+                FROM source_papers sp
+                LEFT JOIN collections c ON c.id = sp.collection_id
+                ORDER BY sp.created_at DESC
+                LIMIT ?
+                """,
+                (lim,),
+            ).fetchall()
+        finally:
+            conn.close()
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        item = _row_source_paper(r)
+        keys = set(r.keys()) if hasattr(r, "keys") else set()
+        item["collection_name"] = r["collection_name"] if "collection_name" in keys else ""
+        item["region"] = r["col_region"] if "col_region" in keys else ""
+        item["subject"] = r["col_subject"] if "col_subject" in keys else ""
+        item["grade"] = r["col_grade"] if "col_grade" in keys else ""
+        out.append(item)
+    return out
+
+
 def update_source_paper(
     source_paper_id: str,
     *,
@@ -1144,3 +1255,127 @@ def update_source_paper(
         finally:
             conn.close()
     return _row_source_paper(row)
+
+
+def _row_exam_attempt(row: sqlite3.Row) -> dict[str, Any]:
+    def _load(key: str, default: Any) -> Any:
+        empty = "{}" if isinstance(default, dict) else "[]"
+        try:
+            return json.loads(row[key] or empty)
+        except Exception:
+            return default
+
+    return {
+        "id": row["id"],
+        "source_paper_id": row["source_paper_id"],
+        "user_id": row["user_id"] or "",
+        "status": row["status"],
+        "paper_snapshot": _load("paper_snapshot_json", {}),
+        "answers": _load("answers_json", {}),
+        "results": _load("results_json", []),
+        "score": int(row["score"] or 0),
+        "max_score": int(row["max_score"] or 0),
+        "correct_count": int(row["correct_count"] or 0),
+        "graded_count": int(row["graded_count"] or 0),
+        "created_at": row["created_at"],
+        "submitted_at": row["submitted_at"] or "",
+    }
+
+
+def create_exam_attempt(
+    *,
+    source_paper_id: str,
+    user_id: str = "",
+    paper_snapshot: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if not get_source_paper(source_paper_id):
+        raise ValueError("source_paper_not_found")
+    now = _utc_now()
+    aid = str(uuid.uuid4())
+    snap = paper_snapshot or {}
+    with _lock:
+        conn = _connect()
+        try:
+            conn.execute(
+                """
+                INSERT INTO exam_attempts
+                (id, source_paper_id, user_id, status, paper_snapshot_json,
+                 answers_json, results_json, score, max_score, correct_count,
+                 graded_count, created_at, submitted_at)
+                VALUES (?, ?, ?, 'in_progress', ?, '{}', '[]', 0, 0, 0, 0, ?, '')
+                """,
+                (
+                    aid,
+                    source_paper_id,
+                    (user_id or "").strip(),
+                    json.dumps(snap, ensure_ascii=False),
+                    now,
+                ),
+            )
+            conn.commit()
+            row = conn.execute("SELECT * FROM exam_attempts WHERE id = ?", (aid,)).fetchone()
+        finally:
+            conn.close()
+    return _row_exam_attempt(row)
+
+
+def get_exam_attempt(attempt_id: str) -> dict[str, Any] | None:
+    with _lock:
+        conn = _connect()
+        try:
+            row = conn.execute(
+                "SELECT * FROM exam_attempts WHERE id = ?", (attempt_id,)
+            ).fetchone()
+        finally:
+            conn.close()
+    return _row_exam_attempt(row) if row else None
+
+
+def finish_exam_attempt(
+    attempt_id: str,
+    *,
+    answers: dict[str, str],
+    results: list[dict[str, Any]],
+    score: int,
+    max_score: int,
+    correct_count: int,
+    graded_count: int,
+) -> dict[str, Any]:
+    existing = get_exam_attempt(attempt_id)
+    if not existing:
+        raise ValueError("attempt_not_found")
+    now = _utc_now()
+    with _lock:
+        conn = _connect()
+        try:
+            conn.execute(
+                """
+                UPDATE exam_attempts SET
+                    status = 'submitted',
+                    answers_json = ?,
+                    results_json = ?,
+                    score = ?,
+                    max_score = ?,
+                    correct_count = ?,
+                    graded_count = ?,
+                    submitted_at = ?
+                WHERE id = ?
+                """,
+                (
+                    json.dumps(answers or {}, ensure_ascii=False),
+                    json.dumps(results or [], ensure_ascii=False),
+                    int(score),
+                    int(max_score),
+                    int(correct_count),
+                    int(graded_count),
+                    now,
+                    attempt_id,
+                ),
+            )
+            conn.commit()
+            row = conn.execute(
+                "SELECT * FROM exam_attempts WHERE id = ?", (attempt_id,)
+            ).fetchone()
+        finally:
+            conn.close()
+    return _row_exam_attempt(row)

@@ -1,6 +1,10 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
 import type { Components } from "react-markdown";
+import { needsMathRender, prepareMathMarkdown } from "../../lib/mathDelimiters";
+import "katex/dist/katex.min.css";
 
 const mdComponents: Components = {
   h1: ({ children }) => (
@@ -75,10 +79,21 @@ type Props = {
 };
 
 export function MarkdownContent({ content }: Props) {
+  const prepared = prepareMathMarkdown(content);
+  const enableMath = needsMathRender(prepared);
+  const remarkPlugins = enableMath
+    ? [[remarkGfm, { singleTilde: false }] as const, remarkMath]
+    : [[remarkGfm, { singleTilde: false }] as const];
+  const rehypePlugins = enableMath ? [rehypeKatex] : [];
+
   return (
     <div className="markdown-body">
-      <ReactMarkdown remarkPlugins={[[remarkGfm, { singleTilde: false }]]} components={mdComponents}>
-        {content}
+      <ReactMarkdown
+        remarkPlugins={remarkPlugins as never}
+        rehypePlugins={rehypePlugins as never}
+        components={mdComponents}
+      >
+        {prepared}
       </ReactMarkdown>
     </div>
   );

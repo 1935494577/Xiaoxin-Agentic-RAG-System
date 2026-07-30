@@ -523,9 +523,17 @@ def auto_generate_paper(body: AssembleRequest) -> dict[str, Any]:
     fields_set = getattr(body.spec, "model_fields_set", set()) or set()
     if "soft_fallback" not in fields_set:
         spec["soft_fallback"] = True
-    # Map target ease coef → difficulty band when min/max unset
+    # Map target ease coef → difficulty band only when caller asked for
+    # difficulty constraints (bands) or left min/max unset *with* coef intent.
+    # 未选易/中/难配比时不套用系数，按库内全难度随机抽题。
     coef = spec.get("difficulty_target_coef")
-    if coef is not None and spec.get("difficulty_min") is None and spec.get("difficulty_max") is None:
+    has_band = bool(spec.get("by_qtype_band") or spec.get("by_difficulty_band"))
+    if (
+        coef is not None
+        and has_band
+        and spec.get("difficulty_min") is None
+        and spec.get("difficulty_max") is None
+    ):
         c = max(0.0, min(1.0, float(coef)))
         # higher coef = easier → lower difficulty int
         if c >= 0.8:
@@ -1051,6 +1059,86 @@ def get_source_paper(source_paper_id: str) -> dict[str, Any]:
     if not row:
         raise HTTPException(status_code=404, detail="source_paper_not_found")
     return row
+
+
+class ChatAttemptStartRequest(BaseModel):
+    source_paper_id: str
+    user_id: str = ""
+
+
+class ChatAttemptSubmitRequest(BaseModel):
+    answers: dict[str, str] = Field(default_factory=dict)
+
+
+@router.get("/chat/papers/search")
+def chat_search_papers(
+    q: str = Query(..., min_length=1),
+    collection_id: str | None = Query(default=None),
+    limit: int = Query(default=10, ge=1, le=50),
+) -> dict[str, Any]:
+    """按标题/文件名模糊检索已入库试卷（供 Chat / Agent Tool）。"""
+    items = store.search_source_papers(
+        q,
+        collection_id=collection_id,
+        limit=limit,
+    )
+    # slim payload for tool / list UI
+    slim = [
+        {
+            "id": it["id"],
+            "title": it.get("title") or "",
+            "source_filename": it.get("source_filename") or "",
+            "collection_id": it.get("collection_id") or "",
+            "question_count": len(it.get("question_ids") or []),
+            "created_at": it.get("created_at") or "",
+        }
+        for it in items
+    ]
+    return {"ok": True, "q": q, "items": slim, "total": len(slim)}
+
+
+@router.get("/chat/papers/{source_paper_id}")
+def chat_get_paper(
+    source_paper_id: str,
+    include_answers: bool = Query(default=False),
+) -> dict[str, Any]:
+    """标准卷面 JSON（默认不含答案），供 Chat ExamPaperCard 使用。"""
+    from exam_bank.chat_paper import build_chat_paper
+
+    result = build_chat_paper(source_paper_id, include_answers=include_answers)
+    if not result.get("ok"):
+        raise HTTPException(status_code=404, detail=result)
+    return result
+
+
+@router.post("/chat/attempts")
+def chat_start_attempt(body: ChatAttemptStartRequest) -> dict[str, Any]:
+    from exam_bank.chat_paper import start_attempt
+
+    result = start_attempt(body.source_paper_id, user_id=body.user_id)
+    if not result.get("ok"):
+        code = 404 if result.get("error") == "source_paper_not_found" else 400
+        raise HTTPException(status_code=code, detail=result)
+    return result
+
+
+@router.get("/chat/attempts/{attempt_id}")
+def chat_get_attempt(attempt_id: str) -> dict[str, Any]:
+    row = store.get_exam_attempt(attempt_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="attempt_not_found")
+    return {"ok": True, **row}
+
+
+@router.post("/chat/attempts/{attempt_id}/submit")
+def chat_submit_attempt(attempt_id: str, body: ChatAttemptSubmitRequest) -> dict[str, Any]:
+    from exam_bank.chat_paper import submit_attempt
+
+    result = submit_attempt(attempt_id, answers=body.answers or {})
+    if not result.get("ok"):
+        code = 404 if result.get("error") == "attempt_not_found" else 400
+        raise HTTPException(status_code=code, detail=result)
+    return result
 
 
 class PaperFromQuestionsRequest(BaseModel):

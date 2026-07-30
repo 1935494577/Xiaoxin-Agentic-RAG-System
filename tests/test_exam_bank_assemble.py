@@ -1,4 +1,4 @@
-"""Exam paper assemble — TDD."""
+"""Exam paper assemble - TDD."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ def _seed_bank(store, n_choice=5, n_fill=3):
             qtype="choice",
             difficulty=2 + (i % 3),
             stem=f"选择题{i+1}",
-            options=["A", "B", "C", "D"],
+            options=["A. 1", "B. 2", "C. 3", "D. 4"],
             answer="A",
             analysis="解析",
             knowledge_tags=["一次函数"] if i % 2 == 0 else ["几何"],
@@ -45,7 +45,7 @@ def _seed_bank(store, n_choice=5, n_fill=3):
         qtype="choice",
         difficulty=3,
         stem="草稿题",
-        options=["A"],
+        options=["A. 1", "B. 2"],
         answer="A",
         quality_status="draft",
     )

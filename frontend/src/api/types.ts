@@ -154,6 +154,18 @@ export type ChatMessage = {
     rag_architecture?: string;
     assistant_mode?: string;
     execution_summary?: ExecutionSummary;
+    ui_blocks?: Array<{
+      type: string;
+      source_paper_id?: string;
+      paper_id?: string;
+      title?: string;
+      items?: Array<{
+        id?: string;
+        title?: string;
+        source_filename?: string;
+        question_count?: number;
+      }>;
+    }>;
   };
 };
 
@@ -207,6 +219,18 @@ export type StreamEvent =
       routing_model?: string;
       chat_routing_tier?: string;
       condense_used_llm?: boolean;
+      ui_blocks?: Array<{
+        type: string;
+        source_paper_id?: string;
+        paper_id?: string;
+        title?: string;
+        items?: Array<{
+          id?: string;
+          title?: string;
+          source_filename?: string;
+          question_count?: number;
+        }>;
+      }>;
     };
 
 export type StreamPayload = {

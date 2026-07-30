@@ -106,3 +106,14 @@ def test_wecom_parent_dm_skill_frontmatter_and_allowed_tools():
     tools = fm["allowed-tools"]
     assert "kb_search" in tools
     assert "format_structured_output" in tools
+
+
+def test_exam_in_chat_skill_frontmatter_and_allowed_tools():
+    skill_md = REPO_ROOT / "skills" / "public" / "exam-in-chat" / "SKILL.md"
+    assert skill_md.is_file()
+    fm = _parse_skill_frontmatter(skill_md)
+    assert fm["name"] == "exam-in-chat"
+    tools = fm["allowed-tools"]
+    assert "present_exam_paper" in tools
+    assert "search_exam_papers" in tools
+    assert "kb_search" in tools

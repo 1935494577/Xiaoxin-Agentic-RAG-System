@@ -59,7 +59,9 @@ def _filter_pool(
             if str(q.get("chapter") or "").strip() not in chapters:
                 continue
         if regions:
-            if str(q.get("region") or "").strip() not in regions:
+            qreg = str(q.get("region") or "").strip()
+            # 空地区视为继承题库地区，避免库内统计含题、组卷却被地区锁踢掉
+            if qreg and qreg not in regions:
                 continue
         if years:
             if str(q.get("year") or "").strip() not in years:
@@ -90,6 +92,7 @@ def _pick_for_qtype(
     seed: int,
     qt: str,
     remaining_bands: dict[str, int] | None,
+    allow_partial: bool = False,
 ) -> list[dict[str, Any]] | dict[str, Any]:
     """Return list of questions or an error dict."""
     if not group:
@@ -120,22 +123,25 @@ def _pick_for_qtype(
             ]
             take = min(want, need_n - len(picked), len(cand))
             if take < want and want > 0 and len(cand) < want:
-                return {
-                    "ok": False,
-                    "error": "insufficient_difficulty",
-                    "detail": {
-                        "qtype": qt,
-                        "label": qtype_label(qt),
-                        "band": band,
-                        "need": want,
-                        "have": len(cand),
-                        "message": (
-                            f"题型「{qtype_label(qt)}」缺少"
-                            f"「{DIFFICULTY_BAND_LABELS.get(band, band)}」难度："
-                            f"需要 {want}，仅有 {len(cand)}"
-                        ),
-                    },
-                }
+                if allow_partial and cand:
+                    take = min(want, need_n - len(picked), len(cand))
+                else:
+                    return {
+                        "ok": False,
+                        "error": "insufficient_difficulty",
+                        "detail": {
+                            "qtype": qt,
+                            "label": qtype_label(qt),
+                            "band": band,
+                            "need": want,
+                            "have": len(cand),
+                            "message": (
+                                f"题型「{qtype_label(qt)}」缺少"
+                                f"「{DIFFICULTY_BAND_LABELS.get(band, band)}」难度："
+                                f"需要 {want}，仅有 {len(cand)}"
+                            ),
+                        },
+                    }
             for q in cand[:take]:
                 picked.append(q)
                 used_ids.add(q["id"])
@@ -150,6 +156,8 @@ def _pick_for_qtype(
         used_ids.add(q["id"])
 
     if len(picked) < need_n:
+        if allow_partial and picked:
+            return picked
         return {
             "ok": False,
             "error": "insufficient_questions",
@@ -185,7 +193,10 @@ def assemble_paper(
         ("knowledge_tags_any", [], "已放宽：按知识点精确匹配 → 不限标签"),
         ("by_difficulty_band", {}, "已放宽：取消整卷难度档约束"),
         ("by_qtype_band", {}, "已放宽：取消分题型难度档约束"),
+        ("difficulty_min", None, "已放宽：取消难度下限"),
+        ("difficulty_max", None, "已放宽：取消难度上限"),
         ("require_complete", False, "已放宽：允许选用待补全题目"),
+        ("_allow_partial", True, "已按库内实际可用题量出卷"),
     ]
 
     last: dict[str, Any] = {"ok": False, "error": "assemble_failed"}
@@ -198,6 +209,16 @@ def assemble_paper(
             cur = working.get(key)
             if key == "require_complete":
                 if cur is False:
+                    continue
+                working[key] = val
+                notes.append(note)
+            elif key in ("difficulty_min", "difficulty_max"):
+                if cur is None:
+                    continue
+                working[key] = val
+                notes.append(note)
+            elif key == "_allow_partial":
+                if working.get("_allow_partial"):
                     continue
                 working[key] = val
                 notes.append(note)
@@ -235,6 +256,7 @@ def _assemble_paper_once(
     tenant_id: str = DEFAULT_TENANT,
 ) -> dict[str, Any]:
     spec = dict(spec or {})
+    allow_partial = bool(spec.get("_allow_partial") or spec.get("allow_partial"))
     raw_by = spec.get("by_qtype") or {}
     if not isinstance(raw_by, dict) or not raw_by:
         return {"ok": False, "error": "invalid_spec", "detail": {"reason": "by_qtype required"}}
@@ -300,7 +322,7 @@ def _assemble_paper_once(
             for band, need in remaining_bands.items():
                 lo, hi = DIFFICULTY_BANDS[band]
                 have = sum(1 for q in pool_all if lo <= int(q.get("difficulty") or 0) <= hi)
-                if have < need:
+                if have < need and not allow_partial:
                     return {
                         "ok": False,
                         "error": "insufficient_difficulty",
@@ -386,18 +408,26 @@ def _assemble_paper_once(
             seed=seed,
             qt=qt,
             remaining_bands=pick_bands,
+            allow_partial=allow_partial,
         )
         if isinstance(result, dict) and result.get("ok") is False:
             return result
         assert isinstance(result, list)
         selected.extend(result)
-        counts[qt] = need_n
+        counts[qt] = len(result)
         # Consume from shared global bands when used
         if shared_bands is not None and bands_for_qt is None:
             for q in result:
                 b = _band_of(int(q.get("difficulty") or 3))
                 if b in shared_bands:
                     shared_bands[b] = shared_bands.get(b, 0) - 1
+
+    if not selected:
+        return {
+            "ok": False,
+            "error": "insufficient_questions",
+            "detail": {"message": "筛选后没有可用题目"},
+        }
 
     from exam_bank.question_quality import normalize_question_display
 

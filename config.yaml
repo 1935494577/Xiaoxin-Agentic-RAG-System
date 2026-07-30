@@ -40,9 +40,21 @@ tools:
     group: rag
     use: jnao_community.list_kb_sources:list_kb_sources_tool
 
+  - name: list_exam_bank
+    group: rag
+    use: jnao_community.list_exam_bank:list_exam_bank_tool
+
   - name: format_structured_output
     group: rag
     use: jnao_community.format_structured_output:format_structured_output_tool
+
+  - name: present_exam_paper
+    group: rag
+    use: jnao_community.present_exam_paper:present_exam_paper_tool
+
+  - name: search_exam_papers
+    group: rag
+    use: jnao_community.search_exam_papers:search_exam_papers_tool
 
 database:
   backend: sqlite

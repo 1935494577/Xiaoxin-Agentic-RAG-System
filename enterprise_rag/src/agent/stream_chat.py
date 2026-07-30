@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Iterator
 
 from agent.answer_prompts import (
@@ -85,6 +86,18 @@ def _is_realtime_tool_turn(
 
 def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
     """Yield SSE lines: data: {json}\n\n"""
+    # Deterministic exam-bank awareness: do not invent papers from KB / general LLM
+    try:
+        from exam_bank.chat_exam_gate import iter_exam_gate_sse, resolve_exam_chat_gate
+
+        gate = resolve_exam_chat_gate(str(state.get("question") or ""))
+        if gate and gate.get("handled"):
+            for ev in iter_exam_gate_sse(gate):
+                yield _evt(ev)
+            return
+    except Exception:
+        logging.getLogger(__name__).exception("exam chat gate failed; continue RAG path")
+
     init_state: dict[str, Any] = {
         "question": state["question"],
         "user_id": state.get("user_id", "demo"),

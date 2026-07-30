@@ -358,30 +358,34 @@ export default function ExamBankAssemblePage() {
   const buildSpec = () => {
     const by_qtype: Record<string, number> = {};
     const by_qtype_band: Record<string, Record<string, number>> = {};
+    let anyBandConstraint = false;
     for (const [id, r] of Object.entries(rows)) {
       if (r.need <= 0) continue;
       by_qtype[id] = r.need;
       const bandSum = r.easy + r.mid + r.hard;
       if (bandSum > 0) {
+        anyBandConstraint = true;
         by_qtype_band[id] = {
           ...(r.easy > 0 ? { easy: r.easy } : {}),
           ...(r.mid > 0 ? { mid: r.mid } : {}),
           ...(r.hard > 0 ? { hard: r.hard } : {}),
         };
       } else if (diffChip !== "all") {
+        anyBandConstraint = true;
         by_qtype_band[id] = { [diffChip]: r.need };
       }
     }
+    // 易/中/难均为 0 且选「全部难度」：不传难度系数，按库内随机抽题
+    const useCoef = diffChip === "all" && anyBandConstraint;
     return {
       by_qtype,
       ...(Object.keys(by_qtype_band).length ? { by_qtype_band } : {}),
       ...(selectedTags.length ? { knowledge_tags_any: selectedTags } : {}),
       ...(selectedChapters.length ? { chapters_any: selectedChapters } : {}),
       ...(yearsAny.length ? { years_any: yearsAny } : {}),
-      ...(diffChip === "all"
-        ? { difficulty_target_coef: difficultyCoef }
-        : {}),
+      ...(useCoef ? { difficulty_target_coef: difficultyCoef } : {}),
       require_complete: requireComplete,
+      soft_fallback: true,
       seed: 42,
     };
   };
@@ -897,8 +901,11 @@ export default function ExamBankAssemblePage() {
                   </div>
                   {diffChip === "all" ? (
                     <div className="mt-3 space-y-1">
+                      <p className="text-[11px] text-text-muted leading-relaxed">
+                        易/中/难均填 0 时从库内随机抽题（不套用下方难度系数）；题量不足时自动按库内实际题量出卷。
+                      </p>
                       <div className="flex justify-between text-xs text-text-muted">
-                        <span>难度系数（越高越易）</span>
+                        <span>难度系数（填写易/中/难配比后才参与过滤；越高越易）</span>
                         <span className="text-brand">
                           {difficultyCoef.toFixed(2)} · 预估均分 ≈{" "}
                           {Math.round(difficultyCoef * 100)}

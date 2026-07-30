@@ -57,7 +57,7 @@ describe("departmentAccess", () => {
 
   it("filters sidebar nav for 运营部", () => {
     const ids = getVisibleNavItems("运营部").map((item) => item.id);
-    expect(ids).toEqual(["chat", "ingest", "scenarios", "prompts", "models", "tutorial"]);
+    expect(ids).toEqual(["chat", "ingest", "exam_bank", "scenarios", "prompts", "models", "tutorial"]);
   });
 
   it("shows all nav items for 技术部", () => {

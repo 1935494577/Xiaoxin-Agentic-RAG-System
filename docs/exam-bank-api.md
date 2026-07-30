@@ -27,7 +27,9 @@
 
 **后续阶段（本闭环之后）**：教案生成、向量相似题、爬虫语料库。  
 扫描件 OCR 已落地（可选依赖）：`POST /api/exam/ingest/ocr` + `GET /api/exam/ingest/ocr/status`。  
-**试卷入库（PDF/DOCX/答案关联）**：见 [`exam-bank-ingest.md`](./exam-bank-ingest.md)。
+**试卷入库（PDF/DOCX/答案关联）**：见 [`exam-bank-ingest.md`](./exam-bank-ingest.md)。  
+**Chat 标准卷面 / 开始答题 / 题库检索**：见 [`exam-chat-paper.md`](./exam-chat-paper.md)。  
+Admin **数据入库**页含「知识文档 | 试卷题库」双通道（`?channel=exam`）。
 
 ---
 
