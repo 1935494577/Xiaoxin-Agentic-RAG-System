@@ -11,10 +11,10 @@ _VALID: frozenset[str] = frozenset({"knowledge", "task", "auto"})
 
 
 def normalize_assistant_mode(raw: str | None) -> AssistantMode:
-    key = (raw or "auto").strip().lower()
+    key = (raw or "knowledge").strip().lower()
     if key in _VALID:
         return key  # type: ignore[return-value]
-    return "auto"
+    return "knowledge"
 
 
 @dataclass(frozen=True)

@@ -17,7 +17,7 @@ Multi-context monorepo:
 /
 ├── CONTEXT-MAP.md                 ← index of contexts (create when needed)
 ├── docs/adr/                      ← system-wide architectural decisions
-├── docs/                          ← project docs (目标.md, conversation-context.md, …)
+├── docs/                          ← project docs (项目说明.md, conversation-context.md, …)
 ├── enterprise_rag/
 │   ├── CONTEXT.md                 ← backend: RAG pipeline, API, agent, feedback loop
 │   └── docs/adr/                  ← backend-specific ADRs (optional)

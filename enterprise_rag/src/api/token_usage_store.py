@@ -196,6 +196,54 @@ def record_usage_object(
     )
 
 
+def aggregate_question_turns(
+    records: list[dict[str, Any]],
+    *,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    """Group LLM call rows by session + question into user-facing turns."""
+    groups: dict[tuple[str, str], dict[str, Any]] = {}
+    order: list[tuple[str, str]] = []
+    for row in records:
+        sid = str(row.get("session_id") or "")
+        q = str(row.get("question_preview") or "").strip() or "(无摘要)"
+        key = (sid, q)
+        if key not in groups:
+            groups[key] = {
+                "session_id": sid,
+                "question_preview": q,
+                "created_at": str(row.get("created_at") or ""),
+                "model": str(row.get("model") or ""),
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "llm_call_count": 0,
+                "callers": [],
+                "call_ids": [],
+            }
+            order.append(key)
+        g = groups[key]
+        g["prompt_tokens"] += int(row.get("prompt_tokens") or 0)
+        g["completion_tokens"] += int(row.get("completion_tokens") or 0)
+        g["total_tokens"] += int(row.get("total_tokens") or 0)
+        g["llm_call_count"] += 1
+        caller = str(row.get("caller") or "")
+        if caller and caller not in g["callers"]:
+            g["callers"].append(caller)
+        cid = str(row.get("id") or "")
+        if cid:
+            g["call_ids"].append(cid)
+        created = str(row.get("created_at") or "")
+        if created > str(g["created_at"] or ""):
+            g["created_at"] = created
+            if row.get("model"):
+                g["model"] = str(row.get("model") or "")
+
+    ordered = sorted(order, key=lambda k: str(groups[k].get("created_at") or ""), reverse=True)
+    cap = max(1, min(int(limit), 500))
+    return [groups[k] for k in ordered[:cap]]
+
+
 def summarize_calls(*, limit: int = 100, session_id: str | None = None) -> dict[str, Any]:
     """Global or session totals + recent call records."""
     init_token_usage_db()
@@ -209,6 +257,7 @@ def summarize_calls(*, limit: int = 100, session_id: str | None = None) -> dict[
             "total_calls": 0,
             "by_model": {},
             "records": [],
+            "turns": [],
         }
 
     where = ""
@@ -257,7 +306,7 @@ def summarize_calls(*, limit: int = 100, session_id: str | None = None) -> dict[
                 ORDER BY created_at DESC
                 LIMIT ?
             """
-            records = conn.execute(list_sql, [*params, cap]).fetchall()
+            records = conn.execute(list_sql, [*params, max(cap * 3, 50)]).fetchall()
         finally:
             conn.close()
 
@@ -271,28 +320,32 @@ def summarize_calls(*, limit: int = 100, session_id: str | None = None) -> dict[
             "total_runs": int(row["total_runs"] or 0),
         }
 
+    record_dicts = [
+        {
+            "id": str(r["id"]),
+            "created_at": str(r["created_at"] or ""),
+            "session_id": str(r["session_id"] or ""),
+            "user_id": str(r["user_id"] or ""),
+            "channel": str(r["channel"] or ""),
+            "model": str(r["model"] or ""),
+            "caller": str(r["caller"] or ""),
+            "prompt_tokens": int(r["prompt_tokens"] or 0),
+            "completion_tokens": int(r["completion_tokens"] or 0),
+            "total_tokens": int(r["total_tokens"] or 0),
+            "question_preview": str(r["question_preview"] or ""),
+        }
+        for r in records
+    ]
+    turns = aggregate_question_turns(record_dicts, limit=cap)
+
     return {
         "total_tokens": int(agg["total_tokens"] or 0) if agg else 0,
         "total_input_tokens": int(agg["total_input_tokens"] or 0) if agg else 0,
         "total_output_tokens": int(agg["total_output_tokens"] or 0) if agg else 0,
         "total_calls": int(agg["total_calls"] or 0) if agg else 0,
         "by_model": by_model,
-        "records": [
-            {
-                "id": str(r["id"]),
-                "created_at": str(r["created_at"] or ""),
-                "session_id": str(r["session_id"] or ""),
-                "user_id": str(r["user_id"] or ""),
-                "channel": str(r["channel"] or ""),
-                "model": str(r["model"] or ""),
-                "caller": str(r["caller"] or ""),
-                "prompt_tokens": int(r["prompt_tokens"] or 0),
-                "completion_tokens": int(r["completion_tokens"] or 0),
-                "total_tokens": int(r["total_tokens"] or 0),
-                "question_preview": str(r["question_preview"] or ""),
-            }
-            for r in records
-        ],
+        "records": record_dicts[:cap],
+        "turns": turns,
     }
 
 

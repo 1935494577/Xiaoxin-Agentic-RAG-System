@@ -149,7 +149,11 @@ python -m uvicorn api.main:app \
 
 ## 7. 与 Docker 的关系
 
-- **无 Docker**：本指南路径，直接 Python + Redis + Nginx，适合 Windows 开发机与 Linux VPS
-- **有 Docker**：`docker compose --profile cache up -d` 启 Redis；API 见 `docker-compose.yml` 的 `app` profile
+- **无 Docker**：本指南路径，直接 Python +（可选）系统 Redis + Nginx，适合 Windows 开发机与 Linux VPS
+- **有 Docker**：见 [`external-dependencies.md`](./external-dependencies.md)
+  - `docker compose --profile cache up -d` → Redis
+  - `docker compose --profile db up -d` → PostgreSQL（`DATABASE_URL`）
+  - `docker compose --profile app,cache up -d --build` → API 镜像（**8010**）+ Redis
+  - `docker compose --profile legacy up -d` → 远程 Milvus + ES（一般不需要）
 
 Docker 未安装不影响落地，按上文 Linux 原生部署即可。

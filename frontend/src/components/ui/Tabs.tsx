@@ -6,11 +6,21 @@ type Tab = { id: string; label: string; content: ReactNode };
 type Props = {
   tabs: Tab[];
   defaultTab?: string;
+  /** Controlled active tab id (sync with URL etc.). */
+  activeTab?: string;
+  onTabChange?: (id: string) => void;
   className?: string;
 };
 
-export function Tabs({ tabs, defaultTab, className }: Props) {
-  const [active, setActive] = useState(defaultTab || tabs[0]?.id || "");
+export function Tabs({ tabs, defaultTab, activeTab, onTabChange, className }: Props) {
+  const [internal, setInternal] = useState(defaultTab || tabs[0]?.id || "");
+  const controlled = activeTab !== undefined;
+  const active = controlled ? activeTab! : internal;
+
+  const select = (id: string) => {
+    if (!controlled) setInternal(id);
+    onTabChange?.(id);
+  };
 
   return (
     <div className={className}>
@@ -19,7 +29,7 @@ export function Tabs({ tabs, defaultTab, className }: Props) {
           <button
             key={t.id}
             type="button"
-            onClick={() => setActive(t.id)}
+            onClick={() => select(t.id)}
             className={cn(
               "px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer",
               active === t.id

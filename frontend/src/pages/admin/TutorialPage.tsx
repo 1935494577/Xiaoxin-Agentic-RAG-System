@@ -63,10 +63,15 @@ export default function TutorialPage() {
           <h3 className="text-base font-semibold mb-2">2. 上传文档入库</h3>
           <p className="text-sm text-text-muted mb-1">左侧导航进入 <strong>数据入库</strong> 页：</p>
           <ul className="list-disc pl-5 text-sm text-text-muted space-y-0.5">
-            <li>支持格式：<strong>{fmt}</strong></li>
+            <li>
+              顶部分通道：<strong>知识文档</strong>（进向量库问答）与{" "}
+              <strong>试卷题库</strong>（切题/公式/Chat 答题，勿与知识库混用）
+            </li>
+            <li>知识文档支持格式：<strong>{fmt}</strong></li>
             <li>可选<strong>入库标签</strong>（预设 + 自定义，逗号分隔）</li>
             <li><strong>已清洗数据</strong> / <strong>未清洗数据</strong> 两种模式；未清洗将走<strong>工具</strong>页配置的解析清洗链</li>
             <li>侧边栏设置<strong>归属部门</strong>与可见范围后上传</li>
+            <li>试卷请点「试卷题库」→「前往题库入库向导」，不要走知识文档上传</li>
           </ul>
         </section>
 

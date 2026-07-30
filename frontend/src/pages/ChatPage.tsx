@@ -72,7 +72,7 @@ export default function ChatPage() {
     options: ClarifyOption[];
     sessionId: string;
   } | null>(null);
-  const [assistantMode, setAssistantMode] = useState<AssistantMode>("auto");
+  const [assistantMode, setAssistantMode] = useState<AssistantMode>("knowledge");
 
   const { data: uiConfig } = useQuery({
     queryKey: ["uiConfig", userId],
@@ -115,7 +115,7 @@ export default function ChatPage() {
       setAssistantMode(stored);
       return;
     }
-    setAssistantMode(normalizeAssistantMode(uiConfig.default_assistant_mode ?? "auto"));
+    setAssistantMode(normalizeAssistantMode(uiConfig.default_assistant_mode ?? "knowledge"));
   }, [uiConfig?.default_assistant_mode, uiConfig]);
 
   const handleAssistantModeChange = useCallback((mode: AssistantMode) => {

@@ -167,6 +167,31 @@ def stream_agent_lead(state: dict[str, Any]) -> Iterator[str]:
     """Yield Jnao SSE lines for a Jnao lead-agent turn."""
     if not should_use_agent_lead(state):
         raise RuntimeError("Jnao lead path not enabled for this state")
+
+    # Prefer exam-bank gate over free-form agent answers for take-exam intents
+    try:
+        from exam_bank.chat_exam_gate import (
+            exam_gate_failure_response,
+            iter_exam_gate_sse,
+            resolve_exam_chat_gate,
+        )
+
+        gate = resolve_exam_chat_gate(
+            str(state.get("question") or ""),
+            reader_user_id=str(state.get("user_id") or "").strip() or None,
+        )
+        if gate and gate.get("handled"):
+            for ev in iter_exam_gate_sse(gate):
+                yield _evt(ev)
+            return
+    except Exception:
+        logger.exception("exam chat gate failed on lead path")
+        from exam_bank.chat_exam_gate import exam_gate_failure_response, iter_exam_gate_sse
+
+        for ev in iter_exam_gate_sse(exam_gate_failure_response()):
+            yield _evt(ev)
+        return
+
     runtime = get_runtime()
     if runtime is None:
         raise RuntimeError("Jnao runtime not initialized")

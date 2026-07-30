@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Iterator
 
 from agent.answer_prompts import (
@@ -39,6 +40,7 @@ from agent.clarify import (
     resolve_clarify_choice,
     should_offer_clarify,
 )
+from agent.chitchat import canned_chitchat_reply, is_chitchat_message
 from agent.output_schemas import output_schema_instruction
 from graph.prompts import graph_kb_system_extra
 from config import settings
@@ -84,6 +86,30 @@ def _is_realtime_tool_turn(
 
 def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
     """Yield SSE lines: data: {json}\n\n"""
+    # Deterministic exam-bank awareness: do not invent papers from KB / general LLM
+    try:
+        from exam_bank.chat_exam_gate import (
+            exam_gate_failure_response,
+            iter_exam_gate_sse,
+            resolve_exam_chat_gate,
+        )
+
+        gate = resolve_exam_chat_gate(
+            str(state.get("question") or ""),
+            reader_user_id=str(state.get("user_id") or "").strip() or None,
+        )
+        if gate and gate.get("handled"):
+            for ev in iter_exam_gate_sse(gate):
+                yield _evt(ev)
+            return
+    except Exception:
+        logging.getLogger(__name__).exception("exam chat gate failed")
+        from exam_bank.chat_exam_gate import exam_gate_failure_response, iter_exam_gate_sse
+
+        for ev in iter_exam_gate_sse(exam_gate_failure_response()):
+            yield _evt(ev)
+        return
+
     init_state: dict[str, Any] = {
         "question": state["question"],
         "user_id": state.get("user_id", "demo"),
@@ -144,6 +170,42 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
         return
 
     schema_extra = output_schema_instruction(str(state.get("output_schema_id") or ""))
+
+    # Pure greeting / courtesy: skip retrieval & tools (canned reply, no LLM).
+    if is_chitchat_message(str(state.get("question") or "")):
+        answer = canned_chitchat_reply(str(state.get("question") or ""))
+        if not quiet:
+            yield _evt(
+                {
+                    "type": "status",
+                    "phase": "generating",
+                    "answer_mode": "general",
+                    "rag_architecture": "classic",
+                    "chitchat": True,
+                    "trace_id": trace.trace_id,
+                }
+            )
+        yield from _replay_tokens([answer])
+        done_payload = {
+            "type": "done",
+            "answer": answer,
+            "rewritten_query": state["question"],
+            "sources": [],
+            "source_refs": [],
+            "answer_mode": "general",
+            "rag_architecture": "classic",
+            "input_mode": "chat",
+            "verified": True,
+            "trace_id": trace.trace_id,
+            "tool_trace": [],
+            "graph_viz": None,
+            "topic_shift": False,
+            "retrieval_query": state["question"],
+            "chitchat": True,
+        }
+        trace.finish({"answer_mode": "general", "chitchat": True, "trace_id": trace.trace_id})
+        yield _evt(done_payload)
+        return
 
     if should_use_relationship_graph_fast_path(state["question"], history):
         graph_state = dict(state)

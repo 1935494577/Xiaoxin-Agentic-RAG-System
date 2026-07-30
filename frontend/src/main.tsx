@@ -37,6 +37,19 @@ const router = createBrowserRouter([
             children: [
               { index: true, lazy: lazyPage(() => import("./pages/admin/IngestPage")) },
               { path: "ingest", lazy: lazyPage(() => import("./pages/admin/IngestPage")) },
+              { path: "exam-bank", lazy: lazyPage(() => import("./pages/admin/ExamBankPage")) },
+              {
+                path: "exam-bank/ingest",
+                lazy: lazyPage(() => import("./pages/admin/exam-bank/ExamBankIngestPage")),
+              },
+              {
+                path: "exam-bank/assemble",
+                lazy: lazyPage(() => import("./pages/admin/exam-bank/ExamBankAssemblePage")),
+              },
+              {
+                path: "exam-bank/manage",
+                lazy: lazyPage(() => import("./pages/admin/exam-bank/ExamBankManagePage")),
+              },
               { path: "processing", lazy: lazyPage(() => import("./pages/admin/ProcessingPage")) },
               { path: "vector-store", lazy: lazyPage(() => import("./pages/admin/VectorStorePage")) },
               { path: "memory", lazy: lazyPage(() => import("./pages/admin/MemoryPage")) },

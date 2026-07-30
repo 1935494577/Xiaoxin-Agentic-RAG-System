@@ -15,7 +15,7 @@ from retrieval.query_normalize import (
     normalize_query,
 )
 
-QueryIntent = Literal["kb", "realtime", "graph", "unknown"]
+QueryIntent = Literal["kb", "realtime", "graph", "chitchat", "unknown"]
 
 _DEFAULT_REWRITE_THRESHOLD = 0.65
 
@@ -40,7 +40,13 @@ class QueryUnderstanding:
         return bool(self.raw and self.message and self.raw.strip() != self.message.strip())
 
     def intent_label(self) -> str:
-        mapping = {"kb": "kb_definition", "realtime": "realtime_tools", "graph": "org_graph", "unknown": "chitchat"}
+        mapping = {
+            "kb": "kb_definition",
+            "realtime": "realtime_tools",
+            "graph": "org_graph",
+            "chitchat": "chitchat",
+            "unknown": "chitchat",
+        }
         return mapping.get(self.intent, self.intent)
 
     def to_dict(self) -> dict[str, Any]:
@@ -96,6 +102,7 @@ def needs_llm_retrieval_rewrite(confidence: float, *, threshold: float | None = 
 
 
 def detect_query_intent(message: str) -> QueryIntent:
+    from agent.chitchat import is_chitchat_message
     from agent.tools.runtime.routing import (
         is_relationship_graph_question,
         question_needs_realtime_tools,
@@ -108,6 +115,8 @@ def detect_query_intent(message: str) -> QueryIntent:
         return "graph"
     if question_needs_realtime_tools(q):
         return "realtime"
+    if is_chitchat_message(q):
+        return "chitchat"
     return "kb"
 
 

@@ -4,6 +4,7 @@ import {
   BarChart3,
   BookOpen,
   Brain,
+  ClipboardList,
   Coins,
   Cpu,
   Database,
@@ -34,6 +35,7 @@ export const ADMIN_FEATURES = [
   "eval_reports",
   "trace",
   "token_usage",
+  "exam_bank",
   "tutorial",
   "scenarios",
   "channels",
@@ -50,6 +52,7 @@ export const STANDARD_DEPARTMENT_FEATURES: ReadonlySet<AdminFeature> = new Set([
   "models",
   "tutorial",
   "scenarios",
+  "exam_bank",
 ]);
 
 export type NavGroupId = "daily" | "quality" | "system" | "administration";
@@ -65,7 +68,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     id: "daily",
     label: "日常运营",
-    featureIds: ["ingest", "scenarios", "tutorial"],
+    featureIds: ["ingest", "exam_bank", "scenarios", "tutorial"],
   },
   {
     id: "quality",
@@ -95,6 +98,7 @@ export type NavItem = {
 export const ALL_NAV_ITEMS: NavItem[] = [
   { id: "chat", label: "Jnao Chat", href: "/chat", icon: MessageSquare, primary: true },
   { id: "ingest", label: "数据入库", href: "/admin/ingest", icon: Database },
+  { id: "exam_bank", label: "题库组卷", href: "/admin/exam-bank", icon: ClipboardList },
   { id: "scenarios", label: "业务场景", href: "/admin/scenarios", icon: Sparkles },
   { id: "processing", label: "工具", href: "/admin/processing", icon: Wrench },
   { id: "vector_store", label: "向量库", href: "/admin/vector-store", icon: HardDrive },
@@ -112,6 +116,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
 
 const ADMIN_PATH_FEATURE: Array<{ prefix: string; feature: AdminFeature }> = [
   { prefix: "/admin/ingest", feature: "ingest" },
+  { prefix: "/admin/exam-bank", feature: "exam_bank" },
   { prefix: "/admin/processing", feature: "processing" },
   { prefix: "/admin/vector-store", feature: "vector_store" },
   { prefix: "/admin/memory", feature: "memory" },

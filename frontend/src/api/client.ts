@@ -27,7 +27,8 @@ import type {
 import { AUTH_SESSION_KEY } from "../lib/constants";
 import { resolveAdminRole, type AdminRole } from "../lib/adminRoles";
 
-function readAuthHeaders(): Record<string, string> {
+/** Exported for authenticated media fetches (e.g. EQ formula <img> via blob). */
+export function readAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
   try {
     const raw =
@@ -98,6 +99,63 @@ async function request<T>(
 
 export function apiGet<T>(path: string, init?: RequestInit & { timeoutMs?: number }): Promise<T> {
   return request<T>(path, init);
+}
+
+export function apiRequest<T>(path: string, init?: RequestInit & { timeoutMs?: number }): Promise<T> {
+  return request<T>(path, init);
+}
+
+/** Binary download (PDF/DOCX/etc). Returns blob + filename from Content-Disposition when present. */
+export async function apiFetchBlob(
+  path: string,
+  init?: RequestInit & { timeoutMs?: number },
+): Promise<{ blob: Blob; filename: string | null }> {
+  const { timeoutMs = 60_000, ...fetchInit } = init ?? {};
+  const authHeaders = readAuthHeaders();
+  const headers = new Headers(fetchInit.headers);
+  for (const [key, value] of Object.entries(authHeaders)) {
+    if (!headers.has(key)) headers.set(key, value);
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let r: Response;
+  try {
+    r = await fetch(path, { ...fetchInit, headers, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error("请求超时，请确认后端 API 已启动（8010 端口）");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+  if (r.status === 401) {
+    localStorage.removeItem(AUTH_SESSION_KEY);
+    sessionStorage.removeItem(AUTH_SESSION_KEY);
+    const from = encodeURIComponent(window.location.pathname + window.location.search);
+    if (!window.location.pathname.startsWith("/login")) {
+      window.location.assign(`/login?from=${from}`);
+    }
+    throw new Error("Unauthorized");
+  }
+  if (!r.ok) {
+    const text = await r.text();
+    throw new Error(text || r.statusText);
+  }
+  const cd = r.headers.get("Content-Disposition") || "";
+  let filename: string | null = null;
+  const star = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(cd);
+  const plain = /filename\s*=\s*"?([^";]+)"?/i.exec(cd);
+  if (star?.[1]) {
+    try {
+      filename = decodeURIComponent(star[1].trim());
+    } catch {
+      filename = star[1].trim();
+    }
+  } else if (plain?.[1]) {
+    filename = plain[1].trim();
+  }
+  return { blob: await r.blob(), filename };
 }
 
 // ===== UI & Nav =====

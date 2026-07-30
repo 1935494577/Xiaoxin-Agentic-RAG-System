@@ -1,4 +1,4 @@
-.PHONY: install install-official install-torch-gpu install-torch-gpu-cn infra-up infra-down run-api run-dev run-frontend stop-dev test verify-env eval e2e demo build-rag up down
+.PHONY: install install-official install-torch-gpu install-torch-gpu-cn infra-up infra-down infra-cache infra-db run-api run-dev run-frontend stop-dev test verify-env eval e2e demo build-rag up down
 
 PY ?= python
 PIP_MIRROR := https://pypi.tuna.tsinghua.edu.cn/simple
@@ -20,6 +20,13 @@ install-torch-gpu:
 # 国内：PyPI 走镜像 + PyTorch CUDA 轮子走官方 index（依赖解析更稳）
 install-torch-gpu-cn:
 	$(PY) -m pip install --upgrade torch torchvision torchaudio -i $(PIP_MIRROR) --trusted-host $(PIP_TRUSTED) --extra-index-url https://download.pytorch.org/whl/cu124
+
+# 推荐中间件（见 docs/external-dependencies.md）
+infra-cache:
+	docker compose -f docker-compose.yml --profile cache up -d
+
+infra-db:
+	docker compose -f docker-compose.yml --profile db up -d
 
 infra-up:
 	docker compose -f docker-compose.yml --profile legacy up -d
@@ -59,7 +66,7 @@ e2e:
 build-rag:
 	docker compose -f docker-compose.yml --profile app build rag-api
 
-up: infra-up
+up: infra-cache
 
 down: infra-down
 
@@ -67,6 +74,8 @@ demo:
 	@echo "plan1 (no Docker): make install && python scripts/run_closed_loop.py"
 	@echo "Dev (all):  Windows: scripts/run-dev.ps1   macOS: ./scripts/run-dev.sh"
 	@echo "API only:   make run-api   Frontend: make run-frontend  (or make run-chat-spa)"
+	@echo "Deps:       docs/external-dependencies.md"
+	@echo "Cache/DB:   make infra-cache / make infra-db"
 	@echo "Deploy/security: docs/deploy_security.md"
 	@echo "Windows venv: powershell -File scripts/bootstrap_venv.ps1 && powershell -File scripts/verify_env.ps1"
 	@echo "Legacy stack: make infra-up  (docker compose --profile legacy)"

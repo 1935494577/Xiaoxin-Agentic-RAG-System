@@ -72,6 +72,46 @@ SCENE_PRESETS: dict[str, dict[str, Any]] = {
             "clarify_enabled": True,
         },
     },
+    "exam_assemble": {
+        "label": "题库组卷",
+        "description": "按学科/年级/地区题库约束组卷（真题重组）。管理端使用「题库」页；Chat 保持知识模式、少工具干扰。",
+        "patch": {
+            "hybrid_expert_mode": False,
+            "general_fallback_enabled": False,
+            "kb_post_stream_fallback": False,
+            "agent_reasoning_mode": "direct",
+            "stream_fast_mode": True,
+            "rag_arch_router_enabled": False,
+            "default_rag_architecture": "classic",
+            "kb_llm_judge": True,
+            "condense_llm_enabled": False,
+            "clarify_enabled": False,
+        },
+    },
+    "exam_lesson": {
+        "label": "教案备课（预留）",
+        "description": "挂题生成教案结构（Phase 2）。MVP 仅占位场景分类。",
+        "patch": {
+            "hybrid_expert_mode": False,
+            "general_fallback_enabled": False,
+            "agent_reasoning_mode": "direct",
+            "stream_fast_mode": True,
+            "rag_arch_router_enabled": False,
+            "default_rag_architecture": "classic",
+        },
+    },
+    "exam_ingest": {
+        "label": "试卷入库（预留）",
+        "description": "试卷解析审核入库（Phase 2）。MVP 仅占位场景分类。",
+        "patch": {
+            "hybrid_expert_mode": False,
+            "general_fallback_enabled": False,
+            "agent_reasoning_mode": "direct",
+            "stream_fast_mode": True,
+            "rag_arch_router_enabled": False,
+            "default_rag_architecture": "classic",
+        },
+    },
 }
 
 DEFAULT_SCENE_PRESET: ScenePresetId = "kb_frontline"

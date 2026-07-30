@@ -8,7 +8,14 @@ import { MarkdownContent, StreamingPlainText } from "./MarkdownContent";
 import { ChatAvatar } from "./ChatAvatar";
 import { SourcePreviewButton } from "./SourcePreviewButton";
 import RelationshipGraphView from "./RelationshipGraphView";
+import { ExamPaperCard } from "./ExamPaperCard";
+import { ExamCandidateList } from "./ExamCandidateList";
 import { graphVizFromMessageMeta } from "../../lib/graphViz";
+import {
+  collectExamCandidateBlocks,
+  collectExamPaperBlocks,
+  stripExamPaperFences,
+} from "../../lib/examPaperBlocks";
 
 type Props = {
   message: ChatMessage;
@@ -81,7 +88,17 @@ function MessageBubble({
   const [submitting, setSubmitting] = useState(false);
 
   const isUser = message.role === "user";
-  const body = isUser ? message.content : stripFootnotes(message.content);
+  const rawBody = isUser ? message.content : stripFootnotes(message.content);
+  const examBlocks = !isUser
+    ? collectExamPaperBlocks(rawBody, message.meta?.ui_blocks)
+    : [];
+  const candidateBlocks = !isUser
+    ? collectExamCandidateBlocks(rawBody, message.meta?.ui_blocks)
+    : [];
+  const body =
+    !isUser && (examBlocks.length || candidateBlocks.length)
+      ? stripExamPaperFences(rawBody)
+      : rawBody;
   const sources = sourceLabels(message);
   const answerMode = !isUser && !hideModeTag ? resolveAnswerMode(message) : null;
   const graphViz = graphVizProp ?? graphVizFromMessageMeta(message.meta);
@@ -192,9 +209,21 @@ function MessageBubble({
               <StreamingPlainText content={body} />
             ) : body ? (
               <MarkdownContent content={body} />
-            ) : (
+            ) : examBlocks.length || candidateBlocks.length ? null : (
               <p className="text-text-muted text-sm">…</p>
             )}
+            {!streaming &&
+              candidateBlocks.map((block, i) => (
+                <ExamCandidateList key={`cand-${i}`} items={block.items} />
+              ))}
+            {!streaming &&
+              examBlocks.map((b) => (
+                <ExamPaperCard
+                  key={b.source_paper_id}
+                  sourcePaperId={b.source_paper_id}
+                  titleHint={b.title}
+                />
+              ))}
           </div>
         )}
 
@@ -327,6 +356,9 @@ export default memo(MessageBubble, (prev, next) => {
   const prevGraph = prev.graphViz ?? graphVizFromMessageMeta(prev.message.meta);
   const nextGraph = next.graphViz ?? graphVizFromMessageMeta(next.message.meta);
   if (prevGraph !== nextGraph) return false;
+  const prevBlocks = prev.message.meta?.ui_blocks;
+  const nextBlocks = next.message.meta?.ui_blocks;
+  if (prevBlocks !== nextBlocks) return false;
   return (
     prev.message.content === next.message.content &&
     prev.message.role === next.message.role &&
