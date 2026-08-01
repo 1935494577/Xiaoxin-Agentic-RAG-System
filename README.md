@@ -17,12 +17,11 @@
 | **入库去重** | **L1** 文档 content_hash 别名跳过重复嵌入；**L2** 父块 simhash 近似去重（`indexing/ingest_dedup`） |
 | **对话智能体** | LangGraph / SSE；**助手模式**（知识 / 任务 / 自动，默认知识）；**寒暄短路**；**ExecutionTimeline**；**多架构 RAG 调度**（Classic / Graph / Agentic，见 `docs/rag_architecture_router.md`）；**KB-only 默认 direct**；业务场景预设；检索置信度路由；多轮 L1–L4（`docs/conversation-context.md`）；思考模式；**kb_search**；人物关系图。总览见 [`docs/项目说明.md`](docs/项目说明.md) |
 | **HTTP API** | FastAPI：健康检查、入库、**关系入库**、**领域词表重建**、**语音转写**、检索调试、流式对话、会话记忆、可插拔提示词、**场景预设 API**（`POST /config/ui/scene-preset/{id}`）、模型/向量库/UI 配置（`api`） |
-| **安全** | 可选 `RAG_API_SECRET`、**`RAG_ADMIN_API_SECRET`**（管理 API 独立密钥）、CORS、可信 Host、安全头；**Admin 角色**（`X-Admin-Role`：viewer/operator/admin）；**前端 RequireAuth**（未登录跳转 `/login`）；注入检测；**部门 + 可见范围 ACL** |
-| **租户预留（Sprint E）** | `X-Tenant-ID` 中间件（默认 `internal`）；`/api/v1/*` 路由别名；`FeedbackStore` / `TraceStore` 抽象 |
+| **安全** | 可选 `RAG_API_SECRET`、**`RAG_ADMIN_API_SECRET`**；CORS、可信 Host；**登录身份绑定**（Chat/题库不信任客户端 `user_id`）；**租户由 `auth.tenant_id` 决定**（不信任 `X-Tenant-ID` / body `tenant_id`）；Admin 角色；前端 RequireAuth；注入检测；部门 + ACL |
 | **前端** | **Jnao Chat** React SPA（8502）：流式对话；**助手模式切换**（知识/任务/自动，默认知识）；**执行步骤时间线**；**语音输入**；**Chat 内交互关系图**（ECharts）；**聊天公式 KaTeX**（定界符门闸，无公式不渲染）；**Chat 标准卷面卡片**（`ExamPaperCard`：预览 / 开始答题 / 客观题交卷 / 交卷后 **AI 讲解本题**；多选 checkbox；多命中 `ExamCandidateList` 点选）；**SQLite 登录**与**用户资料**；**新话题**；**部门功能门控**；**React 管理后台**（`/admin`）：侧边栏分组（日常运营 / 质量闭环 / 系统配置）、各页「怎么用」指南、**结构化链路详情**（反馈 Trace）；**数据入库双通道**（知识文档 / 试卷题库）；**题库组卷**（`/admin/exam-bank`：学科/年级/地区题库、录题、按配比组卷并导出 Markdown/Word/PDF；场景 `exam_assemble`）；**Token 用量**（本项目 SQLite：全局总量 + 按用户提问聚合 + 今日一览）；入库、工具、提示词、模型、对话设置、评测报告、IM 渠道等 |
 | **题库子系统** | 独立 SQLite + `/api/exam/*`；**地区·学科·年级** 独立建库；入库（DOCX 公式 `[[EQ]]` 占位 + 清洗 + **默认大模型拆题**；**PDF/扫描件** 可选 PP-StructureV3 + **PP-FormulaNet** → `$LaTeX$`）；智能组卷（**默认仅完整题**；**未选难度则随机、不足按库内存量出卷**）；管理页「待补全 / LLM 补全」；**默认导出 Word 国标排版**；**Chat 感知题库**（做题/盘点意图门闸 + **ACL** + **精确查卷** UUID/关键词优先；客观题规则判分；**LLM 分步讲解** `POST /api/exam/chat/questions/{id}/explain`）；工具 `list_exam_bank` + `search_exam_papers` + `present_exam_paper` + **`explain_exam_question`** + Skill `exam-in-chat`；见 [`docs/exam-chat-paper.md`](docs/exam-chat-paper.md) |
 | **用户反馈（Sprint A–D）** | 👍👎 反馈 → Triage → 采纳 → **Actuator**（golden / 重入库工单 / 配置补丁 / **query alias**）→ **alias 候选排序**（`GET /admin/feedback/alias-proposals`）→ **golden 评测**（RAGAS 或 naive 回退，对比上一份 Δ）；`config_revisions` 可回滚；Admin **评测报告**页；Feedback 故障时 **Chat 热路径不受影响** |
-| **Harness / IM** | DeerFlow 对齐的 harness：`config.yaml`、`run-dev-harness.ps1`（8010+8011+8502）；IM Worker 在 **8011**；规范见 [`docs/deerflow-integration.md`](docs/deerflow-integration.md) |
+| **Harness / IM** | DeerFlow 对齐的 harness：`config.yaml`、`run-dev-harness.ps1`（8010+8011+8502）；IM Worker 在 **8011**；**Chat 流式路由**（`CHAT_LEAD_AGENT_ENABLED`：task/auto→DeerFlow lead，knowledge→KB 快路径）；规范见 [`docs/deerflow-integration.md`](docs/deerflow-integration.md) |
 | **评测与追踪** | 可选 LangSmith / 本地 JSONL trace；`scripts/eval_ingest_dedup.py` 检索去重 A/B；`scripts/eval_query_robustness.py`（分 scenario 汇总）/ `scripts/query_verify.ps1`；`docs/query-understanding.md` |
 | **容器与脚本** | `Dockerfile`、`docker-compose.yml`（profiles：`cache`/`db`/`app`/`legacy`）；外部依赖见 [`docs/external-dependencies.md`](docs/external-dependencies.md)；Windows `.ps1` 与 **macOS/Linux `.sh`** 一键启停；**生产启动** `run-api-prod.ps1` / `run-api-prod.sh`；**缓存清理** `clean-cache.ps1` |
 
@@ -58,18 +57,24 @@ xiaoxin_RAG/
 ├── requirements-gpu.txt
 ├── docs/
 │   ├── 项目说明.md              # 当前能力与结构总览（As-Is）
+│   ├── optimization-checklist.md # P0–P2 安全/工程优化状态
+│   ├── retrieval-mode-routing-plan.md
 │   ├── external-dependencies.md # 外部依赖（LLM/Redis/PG/Tavily…）与 Compose profiles
 │   ├── data-platform.md         # 全平台数据层：共享/私有、PG 目标架构
 │   ├── data-platform-issues.md  # 数据平台实施问题记录
 │   ├── exam-bank-api.md         # 题库/组卷 API 实施与闭环
 │   ├── exam-bank-issues.md      # 题库实施问题记录
+│   ├── exam-chat-paper.md       # Chat 卷面 / 做题 / ACL
 │   ├── exam-bank-routing.md     # 试卷 LLM 路由与组卷
 │   ├── exam-bank-assemble-v2.md # 组卷配比 v2
 │   ├── exam-bank-ingest.md      # 试卷入库：CRUD / PDF·Word / 答案关联
+│   ├── exam-bank-wizard.md      # Admin 向导
+│   ├── exam-bank-basket.md      # 试题篮
 │   ├── conversation-context.md  # 多轮上下文 L1–L4
 │   ├── query-understanding.md   # Query Understanding
 │   ├── deerflow-integration.md  # DeerFlow / harness 规范
 │   ├── rag_architecture_router.md
+│   ├── lan_api_chat.md          # 局域网 API
 │   ├── deploy_security.md
 │   └── production_deploy.md
 ├── deploy/

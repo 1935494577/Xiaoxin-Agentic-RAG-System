@@ -30,7 +30,6 @@ export function SidebarUserProfile() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const userFileRef = useRef<HTMLInputElement>(null);
-  const aiFileRef = useRef<HTMLInputElement>(null);
 
   const openDialog = () => {
     setDraftName(displayName || username);

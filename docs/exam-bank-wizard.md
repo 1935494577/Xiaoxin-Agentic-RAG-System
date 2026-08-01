@@ -78,4 +78,4 @@ API：
 
 - 入库 API：[`exam-bank-ingest.md`](./exam-bank-ingest.md)  
 - 组卷 v2：[`exam-bank-assemble-v2.md`](./exam-bank-assemble-v2.md)  
-- 产品路线 P0–P4：[`exam-bank-roadmap.md`](./exam-bank-roadmap.md)  
+- Chat 卷面：[`exam-chat-paper.md`](./exam-chat-paper.md)  

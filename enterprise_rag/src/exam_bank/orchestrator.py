@@ -2,7 +2,7 @@
 
 Not a parallel Agent runtime — call existing services only.
 Complex multi-step LLM flows should register as DeerFlow tools later
-(see docs/deerflow-integration.md + docs/exam-bank-architecture-11.md).
+(see docs/deerflow-integration.md; deferred items in docs/exam-bank-issues.md).
 """
 
 from __future__ import annotations

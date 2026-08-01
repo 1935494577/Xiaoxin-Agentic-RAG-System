@@ -155,8 +155,6 @@ export default function ExamBankIngestPage() {
     return [...counts.entries()].filter(([, n]) => n > 1).map(([n]) => n);
   }, [collections]);
 
-  const hasNameDuplicates = duplicateNames.length > 0;
-
   const resolvedCollectionName = (
     draft.region && draft.subject && draft.grade
       ? `${draft.region}·${draft.subject}·${draft.grade}`

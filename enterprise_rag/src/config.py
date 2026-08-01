@@ -143,6 +143,8 @@ class Settings(BaseSettings):
     exact_skip_rerank_enabled: bool = True
     exact_skip_rerank_min_score: float = 8.0
     stream_fast_downgrade_hybrid: bool = True
+    # task/auto 走 DeerFlow lead agent；knowledge 走 stream_rag_chat 快路径
+    chat_lead_agent_enabled: bool = True
     # 多轮：L1 condense + 换题检测（见 docs/conversation-context.md）
     conversation_condense_enabled: bool = True
     history_prune_enabled: bool = True

@@ -26,7 +26,8 @@
 
 | ID | 项 |
 |----|-----|
-| DEF-DP-001 | 全量迁 PG / 双写 |
+| DEF-DP-001 | 全量迁 PG / 双写（`persistence/database.py` 骨架已就绪） |
+| DEF-DP-004 | Prometheus / 生产观测 |
 | DEF-DP-002 | kb_spaces 元数据表与检索可见集打通 |
 | DEF-DP-003 | 协作人（多人编辑 private 资产） |
 
@@ -37,4 +38,4 @@
 | 日期 | 说明 |
 |------|------|
 | 2026-07-23 | 创建文档；启动 S1/S2 |
-| 2026-07-23 | S1–S3：`platform_acl`、题库 visibility/owner、Admin 可见性选择、`DATABASE_URL` 配置位 |
+| 2026-07-31 | P0 身份绑定完成；PG 实际迁移与观测延至上线前（见 `optimization-checklist.md`） |

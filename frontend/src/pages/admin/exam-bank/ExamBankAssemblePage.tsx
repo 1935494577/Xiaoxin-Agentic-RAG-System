@@ -202,7 +202,7 @@ export default function ExamBankAssemblePage() {
   const [open02, setOpen02] = useState(true);
   const [open03, setOpen03] = useState(true);
   const [rows, setRows] = useState<Record<string, RowSpec>>({});
-  const [markdown, setMarkdown] = useState("");
+  const [, setMarkdown] = useState("");
   const [lessonMd, setLessonMd] = useState("");
   const [paperId, setPaperId] = useState("");
   const [poolQuestions, setPoolQuestions] = useState<ExamQuestion[]>([]);
