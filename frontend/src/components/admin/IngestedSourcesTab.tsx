@@ -4,8 +4,6 @@ import {
   deleteIngestedSource,
   listIngestedSources,
 } from "../../api/client";
-import { PageHeader } from "../../components/admin/PageHeader";
-import { Button } from "../../components/ui/Button";
 import { Dialog } from "../../components/ui/Dialog";
 import { toast } from "sonner";
 

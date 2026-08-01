@@ -14,18 +14,18 @@ export function useSessions(userId: string) {
 
   const { data: sessions = [], isLoading, error, refetch } = useQuery({
     queryKey: sessionsKey,
-    queryFn: () => listSessions(userId),
+    queryFn: () => listSessions(),
   });
 
   const create = useCallback(async () => {
-    const s = await createSession(userId);
+    const s = await createSession();
     await refetch();
     return s;
   }, [userId, refetch]);
 
   const remove = useCallback(
     async (sessionId: string) => {
-      await deleteSession(userId, sessionId);
+      await deleteSession(sessionId);
       await refetch();
       queryClient.removeQueries({ queryKey: ["messages", userId, sessionId] });
     },
@@ -39,7 +39,7 @@ export function useMessages(userId: string, sessionId: string | null) {
   return useQuery({
     queryKey: ["messages", userId, sessionId],
     queryFn: () =>
-      sessionId ? loadMessages(userId, sessionId) : Promise.resolve([] as ChatMessage[]),
+      sessionId ? loadMessages(sessionId) : Promise.resolve([] as ChatMessage[]),
     enabled: !!sessionId,
   });
 }

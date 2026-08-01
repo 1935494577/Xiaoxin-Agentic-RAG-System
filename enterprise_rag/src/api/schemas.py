@@ -10,7 +10,7 @@ class ChatHistoryTurn(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=8000)
-    user_id: str = Field(..., min_length=1, max_length=128)
+    user_id: str = Field(default="", max_length=128)
     user_department: str = Field(default="general", max_length=64)
     allowed_sources: list[str] | None = None
     session_id: str | None = Field(default=None, max_length=64, description="用于加载长期会话记忆")
@@ -634,12 +634,10 @@ class ChatSessionPublic(BaseModel):
 
 
 class ChatSessionCreate(BaseModel):
-    user_id: str = Field(..., min_length=1, max_length=128)
     title: str = Field(default="新对话", max_length=128)
 
 
 class ChatSessionUpdate(BaseModel):
-    user_id: str = Field(..., min_length=1, max_length=128)
     title: str = Field(..., min_length=1, max_length=128)
 
 
@@ -650,7 +648,6 @@ class ChatMessagePublic(BaseModel):
 
 
 class ChatMessagesAppend(BaseModel):
-    user_id: str = Field(..., min_length=1, max_length=128)
     messages: list[ChatMessagePublic] = Field(..., min_length=1, max_length=50)
     auto_title_from: str | None = Field(default=None, max_length=80)
 

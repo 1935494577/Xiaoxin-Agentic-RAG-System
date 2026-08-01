@@ -131,6 +131,7 @@ def prepare_turn(
             "retrieval_query_normalized": normalize_query(qu.retrieval_query),
             "search_variants": qu.search_variants,
             "query_intent": qu.intent,
+            "retrieval_mode": qu.retrieval_mode,
             "rule_confidence": qu.rule_confidence,
             "needs_llm_rewrite": qu.needs_llm_rewrite,
             "query_understanding_signals": qu.signals,

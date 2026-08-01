@@ -273,33 +273,30 @@ export function mergeLegacyUserProfile(legacyUserId: string): Promise<UserProfil
 }
 
 // ===== Sessions =====
-export function listSessions(userId: string): Promise<ChatSession[]> {
-  return request<ChatSession[]>(`/chat/sessions?user_id=${encodeURIComponent(userId)}`);
+export function listSessions(): Promise<ChatSession[]> {
+  return request<ChatSession[]>("/chat/sessions");
 }
 
-export function createSession(userId: string, title = "新对话"): Promise<ChatSession> {
+export function createSession(title = "新对话"): Promise<ChatSession> {
   return request<ChatSession>("/chat/sessions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_id: userId, title }),
+    body: JSON.stringify({ title }),
   });
 }
 
-export function deleteSession(userId: string, sessionId: string): Promise<void> {
-  return request(`/chat/sessions/${sessionId}?user_id=${encodeURIComponent(userId)}`, {
+export function deleteSession(sessionId: string): Promise<void> {
+  return request(`/chat/sessions/${sessionId}`, {
     method: "DELETE",
   });
 }
 
 // ===== Messages =====
-export function loadMessages(userId: string, sessionId: string): Promise<ChatMessage[]> {
-  return request<ChatMessage[]>(
-    `/chat/sessions/${sessionId}/messages?user_id=${encodeURIComponent(userId)}`
-  );
+export function loadMessages(sessionId: string): Promise<ChatMessage[]> {
+  return request<ChatMessage[]>(`/chat/sessions/${sessionId}/messages`);
 }
 
 export function appendMessages(
-  userId: string,
   sessionId: string,
   messages: ChatMessage[],
   autoTitleFrom?: string
@@ -307,7 +304,7 @@ export function appendMessages(
   return request<ChatMessage[]>(`/chat/sessions/${sessionId}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_id: userId, messages, auto_title_from: autoTitleFrom }),
+    body: JSON.stringify({ messages, auto_title_from: autoTitleFrom }),
   });
 }
 
@@ -322,16 +319,10 @@ export function deleteIngestedSource(source: string): Promise<void> {
 export async function uploadChatDocument(
   file: File,
   sessionId: string,
-  userId: string,
-  department?: string
 ): Promise<EphemeralDoc> {
   const form = new FormData();
   form.append("file", file);
-  const q = new URLSearchParams({
-    session_id: sessionId,
-    user_id: userId,
-  });
-  if (department?.trim()) q.set("department", department.trim());
+  const q = new URLSearchParams({ session_id: sessionId });
   const authHeaders = readAuthHeaders();
   const headers = new Headers(authHeaders);
   const r = await fetch(`/chat/documents/upload?${q}`, { method: "POST", body: form, headers });

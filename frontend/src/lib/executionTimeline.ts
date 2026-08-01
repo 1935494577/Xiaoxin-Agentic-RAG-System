@@ -21,6 +21,7 @@ const PHASE_LABELS: Record<string, string> = {
   routing: "路由决策",
   query_understanding: "理解问题",
   retrieving: "检索知识库",
+  retrieval_routing: "检索模式",
   generating: "生成回答",
 };
 

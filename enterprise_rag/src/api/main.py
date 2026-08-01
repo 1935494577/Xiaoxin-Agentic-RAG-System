@@ -24,14 +24,6 @@ from api.chat_memory import chat_memory_settings
 from account_config.store import init_platform_config_db
 
 
-def _memory_for_user(request: Request | None, user_id: str | None) -> dict[str, Any]:
-    from account_config.request_auth import resolve_config_actor
-
-    auth_uid, _ = resolve_config_actor(request) if request else (None, False)
-    actor = auth_uid or ((user_id or "").strip() or None)
-    return chat_memory_settings(actor)
-
-
 from api.department_chat_profile import apply_department_chat_profile
 from api.prompt_config_store import public_prompt_config, save_prompt_config
 from api.chat_routing import apply_routing_tier
@@ -40,11 +32,12 @@ from api.stream_retrieval import build_stream_retrieval_state, resolve_stream_fa
 from api.admin_roles import AdminRoleMiddleware
 from api.auth_middleware import APIAuthMiddleware, SecurityHeadersMiddleware
 from api.department_auth import DepartmentFeatureMiddleware
-from auth.middleware import SessionAuthMiddleware
+from auth.middleware import SessionAuthMiddleware, get_auth_user
 from auth.router import router as auth_router
 from auth.service import seed_default_users_if_empty
 from auth.store import init_auth_db
 from api.feedback_router import router as feedback_router
+from api.chat_router import router as chat_router
 from tenant.context import TenantContextMiddleware, get_tenant_id
 from api.chat_session_store import (
     append_messages,
@@ -243,6 +236,7 @@ if _hosts:
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=_hosts)
 
 app.include_router(auth_router)
+app.include_router(chat_router)
 app.include_router(agent_tools_router)
 app.include_router(feedback_router)
 app.include_router(feedback_router, prefix="/api/v1")
@@ -318,7 +312,9 @@ def _safe_raw_file(relative_path: str) -> Path:
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    from persistence.database import persistence_status
+
+    return {"status": "ok", "persistence": persistence_status()}
 
 
 @app.get("/health/llm")
@@ -897,392 +893,6 @@ def sources_delete(source: str):
     return {"ok": True}
 
 
-@app.post("/chat/documents/upload", response_model=EphemeralDocPublic)
-async def chat_document_upload(
-    file: UploadFile = File(...),
-    session_id: str = Query(..., min_length=1, max_length=64),
-    user_id: str = Query(..., min_length=1, max_length=128),
-    department: str | None = Query(default=None, max_length=64),
-):
-    """Upload a temporary document for session-scoped Q&A (Classic RAG)."""
-    from chat_ephemeral.store import save_ephemeral_document
-    from document_loader.cleaner import clean_file
-
-    safe_name = _safe_upload_filename(file.filename)
-    raw = await file.read()
-    tmp = settings.data_processed_dir / f"ephemeral_{session_id}_{safe_name}"
-    tmp.parent.mkdir(parents=True, exist_ok=True)
-    tmp.write_bytes(raw)
-    try:
-        text = clean_file(tmp, use_presidio=settings.use_presidio)
-    finally:
-        tmp.unlink(missing_ok=True)
-    if not text.strip():
-        raise HTTPException(status_code=400, detail="文件内容为空")
-    doc = save_ephemeral_document(
-        session_id=session_id,
-        user_id=user_id,
-        filename=safe_name,
-        text=text,
-        department=department,
-    )
-    return EphemeralDocPublic(doc_id=doc.doc_id, filename=doc.filename, session_id=doc.session_id)
-
-
-@app.post("/chat/transcribe", response_model=TranscribeResponse)
-async def chat_transcribe(
-    file: UploadFile = File(...),
-    language: str = Query(default="zh", max_length=16),
-):
-    """Upload short audio and transcribe via Whisper (fallback when browser speech API unavailable)."""
-    content_type = (file.content_type or "").split(";")[0].strip().lower()
-    if content_type and content_type not in ALLOWED_CONTENT_TYPES:
-        raise HTTPException(status_code=400, detail="不支持的音频格式")
-    raw = await file.read()
-    safe_name = _safe_upload_filename(file.filename) or "speech.webm"
-    text = transcribe_audio_bytes(raw, safe_name, language=language)
-    return TranscribeResponse(text=text)
-
-
-def _resolve_request_history(req: ChatRequest, mem: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-    mem = mem or chat_memory_settings()
-    req_hist = [h.model_dump() for h in req.history] if req.history else None
-    return resolve_chat_history(
-        request_history=req_hist,
-        user_id=req.user_id,
-        session_id=req.session_id,
-        max_turns=int(mem.get("max_history_turns", 6)),
-        max_chars=int(mem.get("max_history_chars", 6000)),
-        long_term_enabled=bool(mem.get("long_term_memory_enabled", True)),
-    )
-
-
-def _prepare_chat_turn(
-    req: ChatRequest,
-    mem: dict[str, Any],
-    runtime: dict[str, Any],
-):
-    raw_history: list[dict[str, Any]] = []
-    rolling_summary = ""
-    if req.reset_context:
-        if req.session_id:
-            clear_rolling_summary(req.session_id, req.user_id)
-    else:
-        raw_history = _resolve_request_history(req, mem)
-        if req.session_id and bool(mem.get("rolling_summary_enabled", True)):
-            rolling_summary = get_rolling_summary(req.session_id, req.user_id)
-
-    return prepare_turn(
-        message=req.message,
-        history=raw_history,
-        memory_config=mem,
-        llm_runtime=runtime,
-        max_tokens_condense=req.max_tokens_rewrite,
-        rolling_summary=rolling_summary,
-        reset_context=bool(req.reset_context),
-    )
-
-
-def _resolve_chat_architecture(
-    req: ChatRequest,
-    mem: dict[str, Any],
-    runtime: dict[str, Any],
-    *,
-    rag_override: str | None = None,
-) -> tuple[str, str, str | None]:
-    from agent.architecture_router import resolve_rag_architecture
-    from agent.input_modes import resolve_input_mode
-    from agent.llm_routing import routing_llm_runtime
-
-    input_mode, doc_task_type = resolve_input_mode(
-        input_mode=req.input_mode,
-        doc_task_type=req.doc_task_type,
-        temp_document_id=req.temp_document_id,
-        message=req.message,
-    )
-    llm_rt = routing_llm_runtime(runtime)
-    arch, _ = resolve_rag_architecture(
-        req.message,
-        department=req.user_department,
-        input_mode=input_mode,
-        doc_task_type=doc_task_type,
-        scenario_tags=req.scenario_tags,
-        request_override=rag_override or req.rag_architecture or mem.get("default_rag_architecture") or "auto",
-        router_enabled=bool(mem.get("rag_arch_router_enabled", True)),
-        llm_fallback=bool(mem.get("rag_arch_llm_fallback", False)),
-        llm_runtime=llm_rt,
-    )
-    return arch, input_mode, doc_task_type
-
-
-def _prepare_assistant_runtime(
-    req: ChatRequest,
-    base_mem: dict[str, Any],
-) -> tuple[Any, bool, bool, dict[str, Any], str | None]:
-    from agent.runtime.router import (
-        apply_mode_to_memory,
-        pick_hybrid_expert_mode,
-        pick_rag_architecture_override,
-        pick_stream_fast_mode,
-        resolve_mode_profile,
-    )
-
-    ui = load_ui_config()
-    profile = resolve_mode_profile(req.assistant_mode, ui)
-    hybrid = pick_hybrid_expert_mode(profile, bool(ui.get("hybrid_expert_mode", False)))
-    fast = pick_stream_fast_mode(
-        profile,
-        req.stream_fast_mode,
-        bool(ui.get("stream_fast_mode", True)),
-    )
-    mem = apply_mode_to_memory(dict(base_mem), profile)
-    mem = apply_routing_tier(apply_hybrid_expert_memory(mem, hybrid))
-    rag_override = pick_rag_architecture_override(profile, req.rag_architecture)
-    return profile, hybrid, fast, mem, rag_override
-
-
-@app.post("/chat", response_model=ChatResponse)
-def chat(req: ChatRequest, background_tasks: BackgroundTasks, request: Request):
-    """步骤7：对话入口。"""
-    runtime = resolve_llm_runtime(req)
-    if not (runtime.get("llm_api_key") or "").strip():
-        raise HTTPException(
-            status_code=400,
-            detail="未配置 API Key：请在「模型配置」中保存密钥，或在 .env 中设置 OPENAI_API_KEY。",
-        )
-    base_mem = apply_department_chat_profile(
-        _memory_for_user(request, req.user_id),
-        req.user_department,
-    )
-    profile, _, _, mem, rag_override = _prepare_assistant_runtime(req, base_mem)
-    turn = _prepare_chat_turn(req, mem, runtime)
-    rag_arch, _, _ = _resolve_chat_architecture(req, mem, runtime, rag_override=rag_override)
-    out = run_agent(
-        question=turn.message,
-        user_id=req.user_id,
-        user_department=req.user_department,
-        allowed_sources=req.allowed_sources,
-        llm_runtime=runtime,
-        history=turn.history_for_llm,
-        memory_config=mem,
-        retrieval_query=turn.retrieval_query,
-        topic_shift=turn.topic_shift,
-        skip_retrieval_rewrite=turn.skip_retrieval_rewrite,
-        rolling_summary=turn.rolling_summary,
-        rag_architecture=rag_arch,
-    )
-    if req.session_id and bool(mem.get("rolling_summary_enabled", True)):
-        background_tasks.add_task(
-            refresh_rolling_summary_for_session,
-            req.session_id,
-            req.user_id,
-            mem,
-            runtime,
-        )
-    return ChatResponse(
-        answer=out.get("answer") or "",
-        sources=out.get("sources") or [],
-        source_refs=[SourceRef(**r) for r in (out.get("source_refs") or [])],
-        rewritten_query=out.get("rewritten_query"),
-        answer_mode=out.get("answer_mode"),
-        verified=out.get("verified"),
-    )
-
-
-@app.post("/chat/stream")
-def chat_stream(req: ChatRequest, request: Request):
-    """SSE 流式对话：检索完成后逐 token 返回答案，末尾返回引用。"""
-    import json
-    import logging
-
-    logger = logging.getLogger(__name__)
-
-    def _sse_error_response(message: str) -> StreamingResponse:
-        def _err_gen():
-            payload = {"type": "error", "message": message[:400]}
-            yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
-
-        return StreamingResponse(
-            _err_gen(),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",
-            },
-        )
-
-    try:
-        runtime = resolve_llm_runtime(req)
-        if not (runtime.get("llm_api_key") or "").strip():
-            raise HTTPException(
-                status_code=400,
-                detail="未配置 API Key：请在「模型配置」中保存密钥，或在 .env 中设置 OPENAI_API_KEY。",
-            )
-
-        base_mem = apply_department_chat_profile(
-            _memory_for_user(request, req.user_id),
-            req.user_department,
-        )
-        profile, hybrid, fast, mem, rag_override = _prepare_assistant_runtime(req, base_mem)
-        turn = _prepare_chat_turn(req, mem, runtime)
-        history = turn.history_for_llm
-        scenario_tags = list(req.scenario_tags or [])
-        if req.channel and req.channel not in scenario_tags:
-            scenario_tags.append(req.channel)
-        state: dict[str, Any] = {
-            "question": turn.message,
-            "user_id": req.user_id,
-            "user_department": req.user_department,
-            "allowed_sources": req.allowed_sources,
-            "history": history,
-            "memory_config": mem,
-            "retrieval_query": turn.retrieval_query,
-            "topic_shift": turn.topic_shift,
-            "skip_retrieval_rewrite": turn.skip_retrieval_rewrite,
-            "rolling_summary": turn.rolling_summary,
-            "turn_meta": turn.meta,
-            "routing_model": runtime.get("routing_model"),
-            "session_id": req.session_id,
-            "quiet_routing": True,
-            "hybrid_expert_mode": hybrid,
-            "assistant_mode": profile.mode,
-            "_assistant_force_tools": profile.force_tools,
-            "llm_temperature_answer": req.temperature if req.temperature is not None else 0.2,
-            "llm_max_tokens_rewrite": req.max_tokens_rewrite if req.max_tokens_rewrite is not None else 128,
-            "llm_max_tokens_answer": req.max_tokens_answer,
-            "llm_temperature_verifier": req.verifier_temperature,
-            "llm_max_tokens_verifier": req.max_tokens_verifier,
-            "rag_architecture": rag_override or req.rag_architecture,
-            "input_mode": req.input_mode,
-            "doc_task_type": req.doc_task_type,
-            "temp_document_id": req.temp_document_id,
-            "scenario_tags": scenario_tags or None,
-            "channel": req.channel,
-            "output_schema_id": req.output_schema_id,
-            "skip_clarify": req.skip_clarify,
-            "clarify_choice_id": req.clarify_choice_id,
-        }
-        state.update(
-            build_stream_retrieval_state(
-                fast,
-                skip_query_rewrite=req.skip_query_rewrite,
-            )
-        )
-        state.update(runtime)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.exception("chat/stream failed before SSE generator")
-        from api.stream_errors import format_stream_error
-
-        return _sse_error_response(format_stream_error(exc))
-
-    def _gen():
-        from jnao_harness.availability import should_use_agent_lead
-        from jnao_harness.lead_stream import stream_agent_lead
-
-        try:
-            if should_use_agent_lead(state):
-                try:
-                    yield from stream_agent_lead(state)
-                    return
-                except Exception as exc:
-                    logger.warning(
-                        "Jnao lead stream failed, falling back to KB path: %s",
-                        exc,
-                        exc_info=True,
-                    )
-            yield from stream_rag_chat(state)
-        except Exception as exc:
-            logger.exception("chat/stream generator failed")
-            from api.stream_errors import format_stream_error
-
-            payload = {"type": "error", "message": format_stream_error(exc)}
-            yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
-
-    return StreamingResponse(
-        _gen(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
-
-
-@app.get("/chat/sessions", response_model=list[ChatSessionPublic])
-def chat_sessions_list(request: Request, user_id: str = Query(..., min_length=1, max_length=128)):
-    """按用户 ID 列出对话会话（SQLite 持久化）。"""
-    tid = get_tenant_id(request)
-    return [ChatSessionPublic.model_validate(s) for s in list_sessions(user_id, tenant_id=tid)]
-
-
-@app.post("/chat/sessions", response_model=ChatSessionPublic)
-def chat_sessions_create(req: ChatSessionCreate, request: Request):
-    row = create_session(req.user_id, title=req.title, tenant_id=get_tenant_id(request))
-    return ChatSessionPublic.model_validate(row)
-
-
-@app.get("/chat/sessions/{session_id}/messages", response_model=list[ChatMessagePublic])
-def chat_session_messages(
-    request: Request,
-    session_id: str,
-    user_id: str = Query(..., min_length=1, max_length=128),
-):
-    tid = get_tenant_id(request)
-    if not get_session(session_id, user_id, tenant_id=tid):
-        raise HTTPException(status_code=404, detail="会话不存在")
-    return [ChatMessagePublic.model_validate(m) for m in list_messages(session_id, user_id, tenant_id=tid)]
-
-
-@app.post("/chat/sessions/{session_id}/messages", response_model=list[ChatMessagePublic])
-def chat_session_append(session_id: str, req: ChatMessagesAppend, background_tasks: BackgroundTasks, request: Request):
-    tid = get_tenant_id(request)
-    if req.user_id.strip() != req.user_id:
-        raise HTTPException(status_code=400, detail="invalid user_id")
-    try:
-        rows = append_messages(
-            session_id,
-            req.user_id,
-            [m.model_dump(exclude_none=True) for m in req.messages],
-            auto_title_from=req.auto_title_from,
-            tenant_id=tid,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-    mem = _memory_for_user(request, req.user_id)
-    if bool(mem.get("rolling_summary_enabled", True)):
-        background_tasks.add_task(
-            refresh_rolling_summary_for_session,
-            session_id,
-            req.user_id,
-            mem,
-            None,
-        )
-    return [ChatMessagePublic.model_validate(m) for m in rows]
-
-
-@app.put("/chat/sessions/{session_id}", response_model=ChatSessionPublic)
-def chat_session_update(session_id: str, req: ChatSessionUpdate, request: Request):
-    row = update_session_title(session_id, req.user_id, req.title, tenant_id=get_tenant_id(request))
-    if not row:
-        raise HTTPException(status_code=404, detail="会话不存在")
-    return ChatSessionPublic.model_validate(row)
-
-
-@app.delete("/chat/sessions/{session_id}")
-def chat_session_delete(
-    request: Request,
-    session_id: str,
-    user_id: str = Query(..., min_length=1, max_length=128),
-):
-    if not delete_session(session_id, user_id, tenant_id=get_tenant_id(request)):
-        raise HTTPException(status_code=404, detail="会话不存在")
-    return {"ok": True}
-
-
 @app.get("/users/profile", response_model=UserProfilePublic)
 def users_profile_get(request: Request, user_id: str = Query(..., min_length=1, max_length=128)):
     """读取用户资料（头像、昵称、部门）；不存在则创建默认记录。"""
@@ -1450,16 +1060,7 @@ def ingest_path(
     )
 
 
-def _safe_upload_filename(filename: str | None) -> str:
-    """Basename only; reject path traversal (.., separators)."""
-    raw = (filename or "upload.bin").strip()
-    name = Path(raw).name
-    if not name or name in {".", ".."} or ".." in raw.replace("\\", "/"):
-        raise HTTPException(status_code=400, detail="Invalid upload filename")
-    return name
-
-
-@app.post("/ingest/upload", response_model=IngestResponse)
+from api.upload_utils import safe_upload_filename
 async def ingest_upload(
     file: UploadFile = File(...),
     department: str | None = Query(default=None, max_length=64),
@@ -1473,7 +1074,7 @@ async def ingest_upload(
     tags: str | None = Query(default=None, max_length=512, description="逗号分隔的入库标签"),
     use_llm_router: bool | None = Query(default=None),
 ):
-    safe_name = _safe_upload_filename(file.filename)
+    safe_name = safe_upload_filename(file.filename)
     ext = Path(safe_name).suffix.lower().lstrip(".")
     allowed = set(public_ui_config().get("supported_upload_extensions") or [])
     if allowed and ext and ext not in allowed:

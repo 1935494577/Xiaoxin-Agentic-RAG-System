@@ -11,6 +11,7 @@ from exam_bank.exam_intent import (
     is_exam_inventory_intent,
     is_exam_take_intent,
 )
+from retrieval.retrieval_mode_router import resolve_exam_paper_hits
 from exam_bank.subject_catalog import qtype_label
 
 
@@ -212,18 +213,18 @@ def resolve_exam_chat_gate(
     keywords = extract_exam_search_query(q_raw)
     reader = reader_user_id
     hits: list[dict[str, Any]] = []
+    exam_search_mode = "exact"
     if keywords:
-        hits = store.search_source_papers(keywords, limit=limit, reader_user_id=reader)
-        if not hits:
-            for tok in keywords.split():
-                hits = store.search_source_papers(tok, limit=limit, reader_user_id=reader)
-                if hits:
-                    break
+        hits, exam_search_mode = resolve_exam_paper_hits(
+            keywords,
+            limit=limit,
+            reader_user_id=reader,
+        )
 
     tool_trace = [
         {
             "tool": "search_exam_papers",
-            "arguments": {"query": keywords or q_raw},
+            "arguments": {"query": keywords or q_raw, "search_mode": exam_search_mode},
             "output": json.dumps({"ok": True, "total": 0, "items": []}, ensure_ascii=False),
             "ok": True,
         }

@@ -36,9 +36,12 @@ def get_tenant_id(request: Request) -> str:
 
 
 class TenantContextMiddleware(BaseHTTPMiddleware):
-    """Attach tenant_id from X-Tenant-ID header; default internal (single-tenant unchanged)."""
+    """Attach the tenant assigned to the authenticated actor."""
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        tenant_id = normalize_tenant_id(request.headers.get(TENANT_HEADER))
+        from auth.middleware import get_auth_user
+
+        auth = get_auth_user(request) or {}
+        tenant_id = normalize_tenant_id(str(auth.get("tenant_id") or ""))
         setattr(request.state, STATE_KEY, TenantContext(tenant_id=tenant_id))
         return await call_next(request)

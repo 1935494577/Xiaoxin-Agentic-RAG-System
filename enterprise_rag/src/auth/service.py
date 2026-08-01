@@ -91,6 +91,7 @@ def login(username: str, password: str, *, remember: bool = True) -> dict[str, A
         "user": {
             "id": user["id"],
             "username": user["username"],
+            "tenant_id": user.get("tenant_id") or "internal",
             "department": user["department"],
             "display_name": user.get("display_name") or user["username"],
         },
@@ -170,6 +171,7 @@ def admin_list_users_public() -> list[dict[str, Any]]:
         {
             "id": u["id"],
             "username": u["username"],
+            "tenant_id": u.get("tenant_id") or "internal",
             "department": u["department"],
             "display_name": u.get("display_name") or u["username"],
             "is_active": bool(int(u.get("is_active") or 0)),

@@ -1,15 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  appendMessages,
   createSession,
   deleteSession,
   fetchUiConfig,
   listSessions,
   loadMessages,
-  streamChat,
 } from "../api/client";
-import { resolveStreamFastMode } from "../lib/chatDefaults";
 import {
   loadStoredAssistantMode,
   normalizeAssistantMode,
@@ -18,17 +15,9 @@ import {
   type AssistantMode,
 } from "../lib/assistantMode";
 import { useAuth } from "../hooks/useAuth";
+import { useChatTurn } from "../hooks/useChatTurn";
 import { useUserProfile } from "../context/UserProfileContext";
-import type {
-  ChatMessage,
-  ChatSession,
-  ClarifyOption,
-  GraphViz,
-  StreamEvent,
-  ToolTraceItem,
-} from "../api/types";
-import { type ExecutionStep } from "../lib/executionTimeline";
-import { reduceStreamTurnEvent } from "../lib/chatStreamTurn";
+import type { ChatMessage, ChatSession } from "../api/types";
 import { downloadMarkdown, messagesToMarkdown } from "../lib/exportChatMarkdown";
 import { toast } from "sonner";
 import { PanelLeftClose, PanelLeftOpen, Sparkles } from "lucide-react";
@@ -55,24 +44,11 @@ export default function ChatPage() {
 
   // ---- message state (local, like old App.tsx) ----
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [streaming, setStreaming] = useState(false);
-  const [streamText, setStreamText] = useState("");
-  const [streamExecutionSteps, setStreamExecutionSteps] = useState<ExecutionStep[]>([]);
-  const [streamGraphViz, setStreamGraphViz] = useState<GraphViz | null>(null);
-  const [error, setError] = useState("");
-
-  const abortRef = useRef<AbortController | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
-
   const [input, setInput] = useState("");
   const [newTopicPending, setNewTopicPending] = useState(false);
-  const [clarifyPending, setClarifyPending] = useState<{
-    message: string;
-    prompt: string;
-    options: ClarifyOption[];
-    sessionId: string;
-  } | null>(null);
   const [assistantMode, setAssistantMode] = useState<AssistantMode>("knowledge");
+
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const { data: uiConfig } = useQuery({
     queryKey: ["uiConfig", userId],
@@ -85,7 +61,7 @@ export default function ChatPage() {
   // ---- refresh sessions imperatively (like old App.tsx) ----
   const refreshSessions = useCallback(async () => {
     try {
-      const rows = await listSessions(userId);
+      const rows = await listSessions();
       setSessions(rows);
       return rows;
     } catch (err) {
@@ -118,6 +94,27 @@ export default function ChatPage() {
     setAssistantMode(normalizeAssistantMode(uiConfig.default_assistant_mode ?? "knowledge"));
   }, [uiConfig?.default_assistant_mode, uiConfig]);
 
+  const {
+    streaming,
+    streamText,
+    streamGraphViz,
+    error,
+    clarifyPending,
+    runChatTurn,
+    handleClarifyPick,
+    abort,
+  } = useChatTurn({
+    sessionId,
+    setSessionId,
+    messages,
+    setMessages,
+    assistantMode,
+    uiConfig,
+    newTopicPending,
+    setNewTopicPending,
+    refreshSessions,
+  });
+
   const handleAssistantModeChange = useCallback((mode: AssistantMode) => {
     setAssistantMode(mode);
     saveStoredAssistantMode(mode);
@@ -129,7 +126,7 @@ export default function ChatPage() {
       setMessages([]);
       return;
     }
-    loadMessages(userId, sessionId)
+    loadMessages(sessionId)
       .then(setMessages)
       .catch(() => setMessages([]));
   }, [sessionId, userId]);
@@ -153,167 +150,16 @@ export default function ChatPage() {
 
   // ---- session CRUD ----
   const handleNew = async () => {
-    const s = await createSession(userId);
+    const s = await createSession();
     await refreshSessions();
     setSessionId(s.id);
   };
 
   const handleDelete = async () => {
     if (!sessionId || !confirm("确认删除此对话？")) return;
-    await deleteSession(userId, sessionId);
+    await deleteSession(sessionId);
     const rows = await refreshSessions();
     setSessionId(rows[0]?.id || null);
-  };
-
-  // ---- send message (follows old App.tsx pattern exactly) ----
-  const runChatTurn = async (
-    text: string,
-    opts?: { clarifyChoiceId?: string; appendUser?: boolean; sessionId?: string }
-  ) => {
-    if (streaming) return;
-
-    setError("");
-    setClarifyPending(null);
-
-    const ctrl = new AbortController();
-    abortRef.current = ctrl;
-
-    let sid = opts?.sessionId || sessionId;
-    if (!sid) {
-      const s = await createSession(userId);
-      sid = s.id;
-      setSessionId(sid);
-      await refreshSessions();
-    }
-
-    const userMsg: ChatMessage = { role: "user", content: text };
-    if (opts?.appendUser !== false) {
-      setMessages((m) => [...m, userMsg]);
-    }
-
-    setStreaming(true);
-    setStreamText("");
-    setStreamExecutionSteps([]);
-    setStreamGraphViz(null);
-
-    let assistant = "";
-    let streamError = "";
-    let meta: ChatMessage["meta"] = {};
-    let toolTrace: ToolTraceItem[] = [];
-    let executionSteps: ExecutionStep[] = [];
-    let graphViz: GraphViz | undefined;
-    let clarifyEvt: Extract<StreamEvent, { type: "clarify" }> | null = null;
-    let needsClarify = false;
-    const priorHistory = newTopicPending
-      ? []
-      : messages.map((m) => ({ role: m.role, content: m.content }));
-    const resetContext = newTopicPending;
-
-    try {
-      await streamChat(
-        {
-          message: text,
-          user_id: userId,
-          user_department: department,
-          stream_fast_mode: resolveStreamFastMode(uiConfig),
-          skip_query_rewrite: true,
-          session_id: sid,
-          history: priorHistory,
-          reset_context: resetContext,
-          rag_architecture: "auto",
-          assistant_mode: assistantMode,
-          clarify_choice_id: opts?.clarifyChoiceId,
-        },
-        (evt: StreamEvent) => {
-          const acc = reduceStreamTurnEvent(
-            {
-              assistant,
-              streamError,
-              meta,
-              toolTrace,
-              executionSteps,
-              graphViz,
-              needsClarify,
-              clarifyEvt,
-            },
-            evt,
-            assistantMode
-          );
-          assistant = acc.assistant;
-          streamError = acc.streamError;
-          meta = acc.meta;
-          toolTrace = acc.toolTrace;
-          executionSteps = acc.executionSteps;
-          graphViz = acc.graphViz;
-          needsClarify = acc.needsClarify;
-          clarifyEvt = acc.clarifyEvt;
-
-          if (evt.type === "token") {
-            setStreamText(assistant);
-          } else if (evt.type === "graph_viz") {
-            setStreamGraphViz(evt.graph);
-          } else if (evt.type === "error") {
-            setError(evt.message);
-          } else if (
-            evt.type === "tool_call" ||
-            evt.type === "tool_result" ||
-            evt.type === "status" ||
-            evt.type === "done"
-          ) {
-            setStreamExecutionSteps([...executionSteps]);
-          }
-        },
-        ctrl.signal
-      );
-    } catch (err) {
-      if (!ctrl.signal.aborted) {
-        streamError = err instanceof Error ? err.message : "请求失败";
-        setError(streamError);
-      }
-    } finally {
-      setStreaming(false);
-      setStreamText("");
-      setStreamExecutionSteps([]);
-      setStreamGraphViz(null);
-      abortRef.current = null;
-      setNewTopicPending(false);
-    }
-
-    const wasAborted = ctrl.signal.aborted;
-
-    if (wasAborted) {
-      const stopped = assistant.trim() ? `${assistant.trim()}\n\n（已停止生成）` : "（已停止生成）";
-      setMessages((prev) => [...prev, { role: "assistant", content: stopped, meta }]);
-      return;
-    }
-
-    if (needsClarify && clarifyEvt) {
-      setClarifyPending({
-        message: text,
-        prompt: clarifyEvt.prompt,
-        options: clarifyEvt.options,
-        sessionId: sid,
-      });
-      return;
-    }
-
-    const finalContent = assistant || streamError || "（无回复）";
-    const assistantMsg: ChatMessage = {
-      role: "assistant",
-      content: finalContent,
-      meta,
-    };
-
-    setMessages((prev) => [...prev, assistantMsg]);
-
-    try {
-      const toPersist =
-        opts?.appendUser === false ? [assistantMsg] : [userMsg, assistantMsg];
-      await appendMessages(userId, sid!, toPersist, text);
-      await refreshSessions();
-    } catch (err) {
-      console.error("消息持久化失败", err);
-    }
   };
 
   const handleSend = async () => {
@@ -322,21 +168,6 @@ export default function ChatPage() {
     setInput("");
     await runChatTurn(text);
   };
-
-  const handleClarifyPick = async (choiceId: string) => {
-    if (!clarifyPending || streaming) return;
-    const { message, sessionId: sid } = clarifyPending;
-    setClarifyPending(null);
-    await runChatTurn(message, {
-      clarifyChoiceId: choiceId,
-      appendUser: false,
-      sessionId: sid,
-    });
-  };
-
-  const abort = useCallback(() => {
-    abortRef.current?.abort();
-  }, []);
 
   // ---- derived display (computed during render, NOT via useEffect - matches old App.tsx) ----
   // Always append a streaming placeholder bubble so the AI avatar and "…"

@@ -107,6 +107,7 @@ export type GraphViz = {
 export type AuthUserPublic = {
   id: string;
   username: string;
+  tenant_id?: string;
   department: string;
   display_name: string;
 };
@@ -235,7 +236,7 @@ export type StreamEvent =
 
 export type StreamPayload = {
   message: string;
-  user_id: string;
+  user_id?: string;
   user_department?: string;
   hybrid_expert_mode?: boolean;
   stream_fast_mode?: boolean;

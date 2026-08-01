@@ -123,7 +123,6 @@ export default function ExamBankIngestPage() {
       fetchExamCollections({
         subject: draft.subject,
         grade: draft.grade,
-        readerUserId: userId || undefined,
       }),
     enabled: step >= 1 && metaReady,
     refetchOnMount: "always",
@@ -155,8 +154,6 @@ export default function ExamBankIngestPage() {
     }
     return [...counts.entries()].filter(([, n]) => n > 1).map(([n]) => n);
   }, [collections]);
-
-  const hasNameDuplicates = duplicateNames.length > 0;
 
   const resolvedCollectionName = (
     draft.region && draft.subject && draft.grade
@@ -247,7 +244,6 @@ export default function ExamBankIngestPage() {
         grade: draft.grade,
         region: draft.region,
         visibility: draft.visibility,
-        owner_user_id: userId,
       });
     },
     onSuccess: (row) => {
