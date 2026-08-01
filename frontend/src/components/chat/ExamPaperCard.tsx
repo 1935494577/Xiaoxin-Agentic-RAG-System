@@ -10,7 +10,6 @@ import {
   type ChatExplainResult,
   type ChatPaperItem,
 } from "../../lib/examBank";
-import { useAuth } from "../../hooks/useAuth";
 
 type Props = {
   sourcePaperId: string;
@@ -196,7 +195,6 @@ function QuestionBlock({
 }
 
 export function ExamPaperCard({ sourcePaperId, titleHint }: Props) {
-  const { userId } = useAuth();
   const [phase, setPhase] = useState<Phase>("loading");
   const [error, setError] = useState("");
   const [paper, setPaper] = useState<ChatExamPaper | null>(null);
@@ -249,7 +247,7 @@ export function ExamPaperCard({ sourcePaperId, titleHint }: Props) {
     setBusy(true);
     setError("");
     try {
-      const res = await startChatExamAttempt(sourcePaperId, userId || "");
+      const res = await startChatExamAttempt(sourcePaperId);
       setAttemptId(res.attempt_id);
       if (res.paper) setPaper(res.paper);
       setAnswers({});
@@ -261,14 +259,14 @@ export function ExamPaperCard({ sourcePaperId, titleHint }: Props) {
     } finally {
       setBusy(false);
     }
-  }, [busy, sourcePaperId, userId]);
+  }, [busy, sourcePaperId]);
 
   const onSubmit = useCallback(async () => {
     if (!attemptId || busy) return;
     setBusy(true);
     setError("");
     try {
-      const res = await submitChatExamAttempt(attemptId, answers, userId || "");
+      const res = await submitChatExamAttempt(attemptId, answers);
       setSubmitResult(res);
       setExplainMap({});
       setPhase("submitted");
@@ -277,7 +275,7 @@ export function ExamPaperCard({ sourcePaperId, titleHint }: Props) {
     } finally {
       setBusy(false);
     }
-  }, [attemptId, answers, busy, userId]);
+  }, [attemptId, answers, busy]);
 
   const onExplainQuestion = useCallback(
     async (questionId: string) => {
@@ -285,11 +283,7 @@ export function ExamPaperCard({ sourcePaperId, titleHint }: Props) {
       setExplainLoadingId(questionId);
       setError("");
       try {
-        const res = await explainChatExamQuestion(
-          questionId,
-          answers[questionId] || "",
-          userId || "",
-        );
+        const res = await explainChatExamQuestion(questionId, answers[questionId] || "");
         if (res.ok) {
           setExplainMap((prev) => ({ ...prev, [questionId]: res }));
         } else {
@@ -301,7 +295,7 @@ export function ExamPaperCard({ sourcePaperId, titleHint }: Props) {
         setExplainLoadingId("");
       }
     },
-    [answers, explainLoadingId, userId],
+    [answers, explainLoadingId],
   );
 
   if (phase === "loading") {

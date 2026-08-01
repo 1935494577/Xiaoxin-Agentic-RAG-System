@@ -22,6 +22,11 @@ def run_graph_retrieval(state: dict[str, Any]) -> dict[str, Any]:
     rk = state.get("rerank_top_k")
     rerank_k = int(rk) if rk is not None else None
 
+    turn_meta = state.get("turn_meta") or {}
+    retrieval_mode = (
+        str(state.get("retrieval_mode") or turn_meta.get("retrieval_mode") or "").strip() or None
+    )
+    retrieval_meta: dict[str, Any] = {}
     rw, hybrid_parents = hybrid_search(
         search_q,
         dept,
@@ -36,6 +41,9 @@ def run_graph_retrieval(state: dict[str, Any]) -> dict[str, Any]:
         skip_rerank=bool(state.get("skip_rerank")),
         rerank_top_k=rerank_k,
         pre_rerank_k=state.get("pre_rerank_k"),
+        retrieval_mode=retrieval_mode,  # type: ignore[arg-type]
+        fast_mode=bool(state.get("stream_fast_mode")),
+        retrieval_meta_out=retrieval_meta,
     )
 
     graph_parents = graph_expand_retrieval(search_q, dept)
@@ -55,4 +63,5 @@ def run_graph_retrieval(state: dict[str, Any]) -> dict[str, Any]:
         "rewritten_query": rw,
         "contexts": [format_context_with_meta(p) for p in parents],
         "contexts_meta": parents,
+        "retrieval_meta": retrieval_meta,
     }

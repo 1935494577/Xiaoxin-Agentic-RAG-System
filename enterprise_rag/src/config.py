@@ -112,8 +112,8 @@ class Settings(BaseSettings):
     child_chunk_size: int = 200
     child_chunk_overlap: int = 50
 
-    hybrid_vector_weight: float = 0.6
-    hybrid_bm25_weight: float = 0.4
+    hybrid_vector_weight: float = 0.6  # legacy; fusion uses RRF since retrieval-mode routing
+    hybrid_bm25_weight: float = 0.4  # legacy; kept for old retrieval_tuning.json only
     retrieve_top_k: int = 20
     rerank_top_k: int = 5
     # 流式对话 — 快速模式参数（stream_fast_mode=true 时启用）
@@ -137,6 +137,12 @@ class Settings(BaseSettings):
     domain_embedding_max_terms: int = 2000
     kb_weak_zone_llm_judge: bool = True
     query_normalize_max_variants: int = 3
+    # Retrieval mode router: exact / semantic / hybrid (see docs/retrieval-mode-routing-plan.md)
+    retrieval_mode_router_enabled: bool = True
+    rrf_k: int = 60
+    exact_skip_rerank_enabled: bool = True
+    exact_skip_rerank_min_score: float = 8.0
+    stream_fast_downgrade_hybrid: bool = True
     # 多轮：L1 condense + 换题检测（见 docs/conversation-context.md）
     conversation_condense_enabled: bool = True
     history_prune_enabled: bool = True

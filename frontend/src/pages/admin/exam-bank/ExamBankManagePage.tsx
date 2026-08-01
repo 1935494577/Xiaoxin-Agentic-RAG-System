@@ -35,7 +35,7 @@ export default function ExamBankManagePage() {
 
   const colsQ = useQuery({
     queryKey: ["exam-collections-manage", userId],
-    queryFn: () => fetchExamCollections({ readerUserId: userId || undefined }),
+    queryFn: () => fetchExamCollections(),
   });
 
   const questionsQ = useQuery({

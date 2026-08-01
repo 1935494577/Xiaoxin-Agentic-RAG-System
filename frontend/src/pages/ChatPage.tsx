@@ -85,7 +85,7 @@ export default function ChatPage() {
   // ---- refresh sessions imperatively (like old App.tsx) ----
   const refreshSessions = useCallback(async () => {
     try {
-      const rows = await listSessions(userId);
+      const rows = await listSessions();
       setSessions(rows);
       return rows;
     } catch (err) {
@@ -129,7 +129,7 @@ export default function ChatPage() {
       setMessages([]);
       return;
     }
-    loadMessages(userId, sessionId)
+    loadMessages(sessionId)
       .then(setMessages)
       .catch(() => setMessages([]));
   }, [sessionId, userId]);
@@ -153,14 +153,14 @@ export default function ChatPage() {
 
   // ---- session CRUD ----
   const handleNew = async () => {
-    const s = await createSession(userId);
+    const s = await createSession();
     await refreshSessions();
     setSessionId(s.id);
   };
 
   const handleDelete = async () => {
     if (!sessionId || !confirm("确认删除此对话？")) return;
-    await deleteSession(userId, sessionId);
+    await deleteSession(sessionId);
     const rows = await refreshSessions();
     setSessionId(rows[0]?.id || null);
   };
@@ -180,7 +180,7 @@ export default function ChatPage() {
 
     let sid = opts?.sessionId || sessionId;
     if (!sid) {
-      const s = await createSession(userId);
+      const s = await createSession();
       sid = s.id;
       setSessionId(sid);
       await refreshSessions();
@@ -213,8 +213,6 @@ export default function ChatPage() {
       await streamChat(
         {
           message: text,
-          user_id: userId,
-          user_department: department,
           stream_fast_mode: resolveStreamFastMode(uiConfig),
           skip_query_rewrite: true,
           session_id: sid,
@@ -309,7 +307,7 @@ export default function ChatPage() {
     try {
       const toPersist =
         opts?.appendUser === false ? [assistantMsg] : [userMsg, assistantMsg];
-      await appendMessages(userId, sid!, toPersist, text);
+      await appendMessages(sid!, toPersist, text);
       await refreshSessions();
     } catch (err) {
       console.error("消息持久化失败", err);

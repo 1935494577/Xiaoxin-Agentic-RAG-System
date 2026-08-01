@@ -19,16 +19,30 @@ from exam_bank.subject_catalog import (
     subject_catalog_public,
 )
 from exam_bank.types import (
-    DEFAULT_TENANT,
     DIFFICULTY_MAX,
     DIFFICULTY_MIN,
     EXAM_SCENE_PRESETS,
 )
+from tenant.context import get_tenant_id
 
 router = APIRouter(prefix="/api/exam", tags=["exam-bank"])
 
 
-def _chat_reader_user_id(request: Request, fallback: str = "") -> str:
+def _exam_tenant_id(request: Request) -> str:
+    """Tenant scope for exam bank — always from authenticated actor, never client input."""
+    return get_tenant_id(request)
+
+
+def _assert_collection_tenant(col: dict[str, Any] | None, request: Request) -> dict[str, Any]:
+    if not col:
+        raise HTTPException(status_code=404, detail="collection_not_found")
+    if str(col.get("tenant_id") or "").strip() != _exam_tenant_id(request):
+        raise HTTPException(status_code=404, detail="collection_not_found")
+    return col
+
+
+def _exam_actor_user_id(request: Request) -> str:
+    """Exam ACL / ownership — always from authenticated actor, never client input."""
     try:
         from auth.middleware import get_auth_user
 
@@ -37,7 +51,7 @@ def _chat_reader_user_id(request: Request, fallback: str = "") -> str:
             return str(user.get("id") or user.get("username") or "").strip()
     except Exception:
         pass
-    return (fallback or "").strip()
+    return ""
 
 
 def _assert_attempt_owner(row: dict[str, Any], reader_user_id: str) -> None:
@@ -55,9 +69,7 @@ class CollectionCreate(BaseModel):
     grade: str = ""
     region: str = ""
     description: str = ""
-    tenant_id: str = DEFAULT_TENANT
     visibility: str = "private"
-    owner_user_id: str = ""
 
 
 class QuestionCreate(BaseModel):
@@ -79,7 +91,6 @@ class QuestionCreate(BaseModel):
     subject: str = ""
     grade: str = ""
     quality_status: str = "published"
-    tenant_id: str = DEFAULT_TENANT
     source_paper_id: str = ""
     question_no: str = ""
 
@@ -129,7 +140,6 @@ class AssembleRequest(BaseModel):
     title: str = "未命名试卷"
     include_answers: bool = True
     spec: AssembleSpec = Field(default_factory=AssembleSpec)
-    tenant_id: str = DEFAULT_TENANT
 
 
 class SwapQuestionRequest(BaseModel):
@@ -145,7 +155,6 @@ class AssembleNlRequest(BaseModel):
     text: str
     title: str = ""
     include_answers: bool = True
-    tenant_id: str = DEFAULT_TENANT
 
 
 class DetectSectionsRequest(BaseModel):
@@ -242,7 +251,7 @@ def exam_detect_sections(body: DetectSectionsRequest) -> dict[str, Any]:
 
 
 @router.post("/collections")
-def create_collection(body: CollectionCreate) -> dict[str, Any]:
+def create_collection(request: Request, body: CollectionCreate) -> dict[str, Any]:
     try:
         return store.create_collection(
             name=body.name,
@@ -250,9 +259,9 @@ def create_collection(body: CollectionCreate) -> dict[str, Any]:
             grade=body.grade,
             region=body.region,
             description=body.description,
-            tenant_id=body.tenant_id,
+            tenant_id=_exam_tenant_id(request),
             visibility=body.visibility,
-            owner_user_id=body.owner_user_id,
+            owner_user_id=_exam_actor_user_id(request),
         )
     except ValueError as e:
         err = str(e)
@@ -285,13 +294,16 @@ def create_collection(body: CollectionCreate) -> dict[str, Any]:
 
 @router.get("/collections")
 def list_collections(
-    tenant_id: str = Query(default=DEFAULT_TENANT),
+    request: Request,
     subject: str | None = None,
     grade: str | None = None,
     region: str | None = None,
-    reader_user_id: str | None = Query(default=None),
 ) -> dict[str, Any]:
-    rows = store.list_collections(tenant_id=tenant_id, reader_user_id=reader_user_id)
+    reader = _exam_actor_user_id(request) or None
+    rows = store.list_collections(
+        tenant_id=_exam_tenant_id(request),
+        reader_user_id=reader,
+    )
     if subject:
         s = subject.strip()
         rows = [r for r in rows if (r.get("subject") or "") == s]
@@ -311,22 +323,21 @@ def exam_admin_purge() -> dict[str, Any]:
 
 
 @router.get("/collections/{collection_id}")
-def get_collection(collection_id: str) -> dict[str, Any]:
-    row = store.get_collection(collection_id)
-    if not row:
-        raise HTTPException(status_code=404, detail="collection_not_found")
-    return row
+def get_collection(request: Request, collection_id: str) -> dict[str, Any]:
+    return _assert_collection_tenant(store.get_collection(collection_id), request)
 
 
 @router.delete("/collections/{collection_id}")
-def delete_collection(collection_id: str) -> dict[str, Any]:
+def delete_collection(request: Request, collection_id: str) -> dict[str, Any]:
+    _assert_collection_tenant(store.get_collection(collection_id), request)
     if not store.delete_collection(collection_id):
         raise HTTPException(status_code=404, detail="collection_not_found")
     return {"ok": True, "id": collection_id}
 
 
 @router.post("/questions")
-def create_question(body: QuestionCreate) -> dict[str, Any]:
+def create_question(request: Request, body: QuestionCreate) -> dict[str, Any]:
+    _assert_collection_tenant(store.get_collection(body.collection_id), request)
     try:
         return store.create_question(
             collection_id=body.collection_id,
@@ -347,7 +358,6 @@ def create_question(body: QuestionCreate) -> dict[str, Any]:
             subject=body.subject,
             grade=body.grade,
             quality_status=body.quality_status,
-            tenant_id=body.tenant_id,
             source_paper_id=body.source_paper_id,
             question_no=body.question_no,
         )
@@ -379,6 +389,7 @@ def delete_question(question_id: str) -> dict[str, Any]:
 
 @router.get("/questions")
 def list_questions(
+    request: Request,
     collection_id: str = Query(...),
     qtype: str | None = None,
     difficulty: int | None = None,
@@ -398,6 +409,7 @@ def list_questions(
         normalize_question_display,
     )
 
+    _assert_collection_tenant(store.get_collection(collection_id), request)
     items, total = store.list_questions(
         collection_id=collection_id,
         qtype=normalize_qtype(qtype) if qtype else None,
@@ -456,6 +468,7 @@ def llm_complete_question(question_id: str) -> dict[str, Any]:
 
 @router.post("/collections/{collection_id}/llm-complete-incomplete")
 def llm_complete_incomplete_batch(
+    request: Request,
     collection_id: str,
     limit: int = Query(default=10, ge=1, le=50),
 ) -> dict[str, Any]:
@@ -463,8 +476,7 @@ def llm_complete_incomplete_batch(
     from exam_bank.llm_ingest import complete_question_fields_with_llm
     from exam_bank.question_quality import is_question_incomplete
 
-    if not store.get_collection(collection_id):
-        raise HTTPException(status_code=404, detail="collection_not_found")
+    _assert_collection_tenant(store.get_collection(collection_id), request)
     items, _ = store.list_questions(
         collection_id=collection_id,
         status=None,
@@ -513,10 +525,8 @@ def get_question(question_id: str) -> dict[str, Any]:
 
 
 @router.post("/papers/assemble")
-def assemble_paper(body: AssembleRequest) -> dict[str, Any]:
-    col = store.get_collection(body.collection_id)
-    if not col:
-        raise HTTPException(status_code=404, detail="collection_not_found")
+def assemble_paper(request: Request, body: AssembleRequest) -> dict[str, Any]:
+    col = _assert_collection_tenant(store.get_collection(body.collection_id), request)
     spec = body.spec.model_dump()
     # 题库即地区作用域：强制按库地区约束出题
     col_region = str(col.get("region") or "").strip()
@@ -527,7 +537,7 @@ def assemble_paper(body: AssembleRequest) -> dict[str, Any]:
         title=body.title,
         spec=spec,
         include_answers=body.include_answers,
-        tenant_id=body.tenant_id,
+        tenant_id=_exam_tenant_id(request),
     )
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result)
@@ -535,11 +545,12 @@ def assemble_paper(body: AssembleRequest) -> dict[str, Any]:
 
 
 @router.post("/papers/auto-generate")
-def auto_generate_paper(body: AssembleRequest) -> dict[str, Any]:
+def auto_generate_paper(request: Request, body: AssembleRequest) -> dict[str, Any]:
     """11.txt 对齐：智能组卷入口（未显式传 soft_fallback 时默认开启兜底）。"""
     from exam_bank.orchestrator import auto_generate_paper as orch_auto
     from exam_bank.store import difficulty_to_coef
 
+    _assert_collection_tenant(store.get_collection(body.collection_id), request)
     spec = body.spec.model_dump()
     fields_set = getattr(body.spec, "model_fields_set", set()) or set()
     if "soft_fallback" not in fields_set:
@@ -571,7 +582,7 @@ def auto_generate_paper(body: AssembleRequest) -> dict[str, Any]:
         title=body.title,
         spec=spec,
         include_answers=body.include_answers,
-        tenant_id=body.tenant_id,
+        tenant_id=_exam_tenant_id(request),
     )
     if result.get("error") == "collection_not_found":
         raise HTTPException(status_code=404, detail="collection_not_found")
@@ -581,9 +592,10 @@ def auto_generate_paper(body: AssembleRequest) -> dict[str, Any]:
 
 
 @router.post("/questions/swap")
-def swap_question(body: SwapQuestionRequest) -> dict[str, Any]:
+def swap_question(request: Request, body: SwapQuestionRequest) -> dict[str, Any]:
     from exam_bank.orchestrator import swap_question as orch_swap
 
+    _assert_collection_tenant(store.get_collection(body.collection_id), request)
     result = orch_swap(
         collection_id=body.collection_id,
         question_id=body.question_id,
@@ -599,10 +611,9 @@ def swap_question(body: SwapQuestionRequest) -> dict[str, Any]:
 
 
 @router.post("/papers/assemble-nl")
-def assemble_paper_nl(body: AssembleNlRequest) -> dict[str, Any]:
+def assemble_paper_nl(request: Request, body: AssembleNlRequest) -> dict[str, Any]:
     """P1: one-sentence assemble — NL → spec → paper."""
-    if not store.get_collection(body.collection_id):
-        raise HTTPException(status_code=404, detail="collection_not_found")
+    _assert_collection_tenant(store.get_collection(body.collection_id), request)
     from exam_bank.nl_assemble import assemble_from_nl
 
     result = assemble_from_nl(
@@ -610,7 +621,7 @@ def assemble_paper_nl(body: AssembleNlRequest) -> dict[str, Any]:
         text=body.text,
         title=body.title,
         include_answers=body.include_answers,
-        tenant_id=body.tenant_id,
+        tenant_id=_exam_tenant_id(request),
         soft_fallback=True,
     )
     if not result.get("ok"):
@@ -712,7 +723,6 @@ class IngestCommitRequest(BaseModel):
     year: str = ""
     quality_status: str = "published"
     items: list[IngestItem] = Field(default_factory=list)
-    tenant_id: str = DEFAULT_TENANT
     media_ingest_id: str = ""
 
 
@@ -733,6 +743,7 @@ def _guess_paper_year(*parts: str) -> str:
 
 @router.get("/inventory")
 def exam_inventory(
+    request: Request,
     collection_id: str = Query(...),
     tag: list[str] | None = Query(default=None),
     chapter: list[str] | None = Query(default=None),
@@ -741,6 +752,7 @@ def exam_inventory(
 ) -> dict[str, Any]:
     from exam_bank.subject_catalog import qtype_label
 
+    _assert_collection_tenant(store.get_collection(collection_id), request)
     inv = store.collection_inventory(
         collection_id,
         tags_any=list(tag or []),
@@ -981,10 +993,8 @@ def ingest_media(ingest_id: str, filename: str):
 
 
 @router.post("/ingest/commit")
-def ingest_commit(body: IngestCommitRequest) -> dict[str, Any]:
-    col = store.get_collection(body.collection_id)
-    if not col:
-        raise HTTPException(status_code=404, detail="collection_not_found")
+def ingest_commit(request: Request, body: IngestCommitRequest) -> dict[str, Any]:
+    col = _assert_collection_tenant(store.get_collection(body.collection_id), request)
     selected = [it for it in body.items if it.selected and (it.stem or "").strip()]
     if not selected:
         raise HTTPException(status_code=400, detail="no_items_selected")
@@ -1019,7 +1029,6 @@ def ingest_commit(body: IngestCommitRequest) -> dict[str, Any]:
             grade=str(col.get("grade") or "").strip(),
             difficulty=int(it.difficulty or 3),
             quality_status=status,
-            tenant_id=body.tenant_id,
             question_no=it.question_no,
             media_ingest_id=media_id,
         )
@@ -1030,7 +1039,7 @@ def ingest_commit(body: IngestCommitRequest) -> dict[str, Any]:
         source_filename=body.source_filename,
         raw_text=body.raw_text,
         question_ids=[q["id"] for q in created],
-        tenant_id=body.tenant_id,
+        tenant_id=_exam_tenant_id(request),
         media_ingest_id=media_id,
     )
     for q in created:
@@ -1069,7 +1078,8 @@ def ingest_apply_answers(body: ApplyAnswersRequest) -> dict[str, Any]:
 
 
 @router.get("/source-papers")
-def list_source_papers(collection_id: str = Query(...)) -> dict[str, Any]:
+def list_source_papers(request: Request, collection_id: str = Query(...)) -> dict[str, Any]:
+    _assert_collection_tenant(store.get_collection(collection_id), request)
     rows = store.list_source_papers(collection_id=collection_id)
     return {"items": rows, "total": len(rows)}
 
@@ -1084,17 +1094,14 @@ def get_source_paper(source_paper_id: str) -> dict[str, Any]:
 
 class ChatAttemptStartRequest(BaseModel):
     source_paper_id: str
-    user_id: str = ""
 
 
 class ChatAttemptSubmitRequest(BaseModel):
     answers: dict[str, str] = Field(default_factory=dict)
-    user_id: str = ""
 
 
 class ChatExplainRequest(BaseModel):
     user_answer: str = ""
-    user_id: str = ""
 
 
 @router.get("/chat/papers/search")
@@ -1105,7 +1112,7 @@ def chat_search_papers(
     limit: int = Query(default=10, ge=1, le=50),
 ) -> dict[str, Any]:
     """按标题/文件名模糊检索已入库试卷（供 Chat / Agent Tool）。"""
-    reader = _chat_reader_user_id(request)
+    reader = _exam_actor_user_id(request)
     items = store.search_source_papers(
         q,
         collection_id=collection_id,
@@ -1144,7 +1151,7 @@ def chat_get_paper(
                 "message": "Chat 卷面接口不允许提前获取答案，请交卷后查看",
             },
         )
-    reader = _chat_reader_user_id(request)
+    reader = _exam_actor_user_id(request)
     result = build_chat_paper(
         source_paper_id,
         include_answers=False,
@@ -1159,16 +1166,12 @@ def chat_get_paper(
 
 @router.post("/chat/attempts")
 def chat_start_attempt(request: Request, body: ChatAttemptStartRequest) -> dict[str, Any]:
-    from exam_bank.chat_paper import build_chat_paper, start_attempt
+    from exam_bank.chat_paper import start_attempt
 
-    reader = _chat_reader_user_id(request, body.user_id)
-    pre = build_chat_paper(body.source_paper_id, reader_user_id=reader or None)
-    if not pre.get("ok"):
-        code = 403 if pre.get("error") == "forbidden" else 404
-        raise HTTPException(status_code=code, detail=pre)
+    reader = _exam_actor_user_id(request)
     result = start_attempt(body.source_paper_id, user_id=reader)
     if not result.get("ok"):
-        code = 404 if result.get("error") == "source_paper_not_found" else 400
+        code = 403 if result.get("error") == "forbidden" else 404 if result.get("error") == "source_paper_not_found" else 400
         raise HTTPException(status_code=code, detail=result)
     return result
 
@@ -1178,7 +1181,7 @@ def chat_get_attempt(request: Request, attempt_id: str) -> dict[str, Any]:
     row = store.get_exam_attempt(attempt_id)
     if not row:
         raise HTTPException(status_code=404, detail="attempt_not_found")
-    _assert_attempt_owner(row, _chat_reader_user_id(request))
+    _assert_attempt_owner(row, _exam_actor_user_id(request))
     return {"ok": True, **row}
 
 
@@ -1190,7 +1193,7 @@ def chat_submit_attempt(
 ) -> dict[str, Any]:
     from exam_bank.chat_paper import submit_attempt
 
-    reader = _chat_reader_user_id(request, body.user_id)
+    reader = _exam_actor_user_id(request)
     result = submit_attempt(attempt_id, answers=body.answers or {}, user_id=reader)
     if not result.get("ok"):
         if result.get("error") == "forbidden":
@@ -1209,7 +1212,7 @@ def chat_explain_question(
     """LLM step-by-step explanation (and subjective feedback when applicable)."""
     from exam_bank.exam_tutor import explain_question_by_id
 
-    reader = _chat_reader_user_id(request, body.user_id)
+    reader = _exam_actor_user_id(request)
     result = explain_question_by_id(
         question_id,
         user_answer=body.user_answer or "",
@@ -1229,14 +1232,12 @@ class PaperFromQuestionsRequest(BaseModel):
     title: str = "自选试卷"
     question_ids: list[str] = Field(default_factory=list)
     include_answers: bool = True
-    tenant_id: str = DEFAULT_TENANT
 
 
 @router.post("/papers/from-questions")
-def paper_from_questions(body: PaperFromQuestionsRequest) -> dict[str, Any]:
+def paper_from_questions(request: Request, body: PaperFromQuestionsRequest) -> dict[str, Any]:
     """试题篮定稿：按已选题序生成试卷快照。"""
-    if not store.get_collection(body.collection_id):
-        raise HTTPException(status_code=404, detail="collection_not_found")
+    _assert_collection_tenant(store.get_collection(body.collection_id), request)
     ids = [str(x).strip() for x in (body.question_ids or []) if str(x).strip()]
     if not ids:
         raise HTTPException(status_code=400, detail="no_questions")
@@ -1257,7 +1258,7 @@ def paper_from_questions(body: PaperFromQuestionsRequest) -> dict[str, Any]:
         spec={"from_basket": True, "question_ids": ids},
         question_ids=ids,
         markdown=md,
-        tenant_id=body.tenant_id,
+        tenant_id=_exam_tenant_id(request),
     )
     return {
         "ok": True,

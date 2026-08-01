@@ -141,19 +141,18 @@ export function fetchExamLlmStatus() {
 }
 
 export function fetchExamCollections(opts?: {
-  tenantId?: string;
   subject?: string;
   grade?: string;
   region?: string;
-  readerUserId?: string;
 }) {
   const q = new URLSearchParams();
-  q.set("tenant_id", opts?.tenantId || "internal");
   if (opts?.subject) q.set("subject", opts.subject);
   if (opts?.grade) q.set("grade", opts.grade);
   if (opts?.region) q.set("region", opts.region);
-  if (opts?.readerUserId) q.set("reader_user_id", opts.readerUserId);
-  return apiGet<{ items: ExamCollection[]; total: number }>(`/api/exam/collections?${q}`);
+  const qs = q.toString();
+  return apiGet<{ items: ExamCollection[]; total: number }>(
+    `/api/exam/collections${qs ? `?${qs}` : ""}`,
+  );
 }
 
 export function fetchExamInventory(
@@ -208,7 +207,6 @@ export function createExamCollection(body: {
   region: string;
   description?: string;
   visibility?: string;
-  owner_user_id?: string;
 }) {
   return apiRequest<ExamCollection>("/api/exam/collections", {
     method: "POST",
@@ -793,40 +791,32 @@ export function searchChatExamPapers(query: string, limit = 10) {
   }>(`/api/exam/chat/papers/search?${q}`);
 }
 
-export function startChatExamAttempt(sourcePaperId: string, userId = "") {
+export function startChatExamAttempt(sourcePaperId: string) {
   return apiRequest<ChatAttemptStart>("/api/exam/chat/attempts", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ source_paper_id: sourcePaperId, user_id: userId }),
+    body: JSON.stringify({ source_paper_id: sourcePaperId }),
   });
 }
 
-export function submitChatExamAttempt(
-  attemptId: string,
-  answers: Record<string, string>,
-  userId = "",
-) {
+export function submitChatExamAttempt(attemptId: string, answers: Record<string, string>) {
   return apiRequest<ChatAttemptSubmit>(
     `/api/exam/chat/attempts/${encodeURIComponent(attemptId)}/submit`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ answers, user_id: userId }),
+      body: JSON.stringify({ answers }),
     },
   );
 }
 
-export function explainChatExamQuestion(
-  questionId: string,
-  userAnswer = "",
-  userId = "",
-) {
+export function explainChatExamQuestion(questionId: string, userAnswer = "") {
   return apiRequest<ChatExplainResult>(
     `/api/exam/chat/questions/${encodeURIComponent(questionId)}/explain`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_answer: userAnswer, user_id: userId }),
+      body: JSON.stringify({ user_answer: userAnswer }),
     },
   );
 }

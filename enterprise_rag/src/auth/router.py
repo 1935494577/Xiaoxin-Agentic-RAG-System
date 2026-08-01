@@ -30,6 +30,7 @@ class LoginRequest(BaseModel):
 class AuthUserPublic(BaseModel):
     id: str
     username: str
+    tenant_id: str = "internal"
     department: str
     display_name: str
 
@@ -104,6 +105,7 @@ def auth_me(user: dict = Depends(_require_auth)):
     return AuthUserPublic(
         id=user["id"],
         username=user["username"],
+        tenant_id=str(user.get("tenant_id") or "internal"),
         department=user["department"],
         display_name=user.get("display_name") or user["username"],
     )
@@ -152,6 +154,7 @@ def auth_admin_create_user(body: AdminCreateUserRequest, _: dict = Depends(_requ
     return AuthUserPublic(
         id=row["id"],
         username=row["username"],
+        tenant_id=str(row.get("tenant_id") or "internal"),
         department=row["department"],
         display_name=row.get("display_name") or row["username"],
     )

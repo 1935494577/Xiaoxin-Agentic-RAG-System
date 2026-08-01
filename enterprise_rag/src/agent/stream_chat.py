@@ -286,6 +286,11 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
     ctx: list[str] = []
     meta: list[dict[str, Any]] = []
     rewritten = state.get("retrieval_query") or state["question"]
+    retrieval_meta: dict[str, Any] = dict(state.get("turn_meta") or {})
+    retrieval_meta.setdefault(
+        "retrieval_mode",
+        str((state.get("turn_meta") or {}).get("retrieval_mode") or "hybrid"),
+    )
 
     if use_agentic_pipeline:
         with trace.span(
@@ -323,12 +328,26 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
                 ctx = retrieved.get("contexts") or []
                 meta = retrieved.get("contexts_meta") or []
                 rewritten = retrieved.get("rewritten_query") or state["question"]
+                if isinstance(retrieved.get("retrieval_meta"), dict):
+                    retrieval_meta.update(retrieved["retrieval_meta"])
                 span_out.update(
                     {
                         "rewritten_query": rewritten,
                         "context_count": len(ctx),
                         "contexts_meta": meta[:5],
                         "rag_architecture": rag_arch,
+                        "retrieval_meta": retrieval_meta,
+                    }
+                )
+            if not quiet and retrieval_meta:
+                yield _evt(
+                    {
+                        "type": "status",
+                        "phase": "retrieval_routing",
+                        "retrieval_mode": retrieval_meta.get("retrieval_mode"),
+                        "paths_used": retrieval_meta.get("paths_used"),
+                        "elapsed_ms": retrieval_meta.get("elapsed_ms"),
+                        "trace_id": trace.trace_id,
                     }
                 )
         except Exception as e:

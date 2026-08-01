@@ -32,6 +32,30 @@ def _memory_for_user(request: Request | None, user_id: str | None) -> dict[str, 
     return chat_memory_settings(actor)
 
 
+def _current_user_id(request: Request) -> str:
+    """Return the authenticated actor for self-service chat endpoints."""
+    auth = get_auth_user(request)
+    user_id = str(auth.get("id") or "").strip() if auth else ""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="authentication required")
+    return user_id
+
+
+def _authenticated_chat_request(req: ChatRequest, request: Request) -> ChatRequest:
+    """Bind chat execution and session state to the authenticated actor."""
+    auth = get_auth_user(request) or {}
+    user_id = _current_user_id(request)
+    department = str(auth.get("department") or req.user_department or "general")
+    bound = req.model_copy(update={"user_id": user_id, "user_department": department})
+    if bound.session_id and not get_session(
+        bound.session_id,
+        user_id,
+        tenant_id=get_tenant_id(request),
+    ):
+        raise HTTPException(status_code=404, detail="session not found")
+    return bound
+
+
 from api.department_chat_profile import apply_department_chat_profile
 from api.prompt_config_store import public_prompt_config, save_prompt_config
 from api.chat_routing import apply_routing_tier
@@ -40,7 +64,7 @@ from api.stream_retrieval import build_stream_retrieval_state, resolve_stream_fa
 from api.admin_roles import AdminRoleMiddleware
 from api.auth_middleware import APIAuthMiddleware, SecurityHeadersMiddleware
 from api.department_auth import DepartmentFeatureMiddleware
-from auth.middleware import SessionAuthMiddleware
+from auth.middleware import SessionAuthMiddleware, get_auth_user
 from auth.router import router as auth_router
 from auth.service import seed_default_users_if_empty
 from auth.store import init_auth_db
@@ -899,14 +923,18 @@ def sources_delete(source: str):
 
 @app.post("/chat/documents/upload", response_model=EphemeralDocPublic)
 async def chat_document_upload(
+    request: Request,
     file: UploadFile = File(...),
     session_id: str = Query(..., min_length=1, max_length=64),
-    user_id: str = Query(..., min_length=1, max_length=128),
-    department: str | None = Query(default=None, max_length=64),
 ):
     """Upload a temporary document for session-scoped Q&A (Classic RAG)."""
     from chat_ephemeral.store import save_ephemeral_document
     from document_loader.cleaner import clean_file
+
+    user_id = _current_user_id(request)
+    tenant_id = get_tenant_id(request)
+    if not get_session(session_id, user_id, tenant_id=tenant_id):
+        raise HTTPException(status_code=404, detail="session not found")
 
     safe_name = _safe_upload_filename(file.filename)
     raw = await file.read()
@@ -924,7 +952,7 @@ async def chat_document_upload(
         user_id=user_id,
         filename=safe_name,
         text=text,
-        department=department,
+        department=str((get_auth_user(request) or {}).get("department") or ""),
     )
     return EphemeralDocPublic(doc_id=doc.doc_id, filename=doc.filename, session_id=doc.session_id)
 
@@ -1044,6 +1072,7 @@ def _prepare_assistant_runtime(
 @app.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest, background_tasks: BackgroundTasks, request: Request):
     """步骤7：对话入口。"""
+    req = _authenticated_chat_request(req, request)
     runtime = resolve_llm_runtime(req)
     if not (runtime.get("llm_api_key") or "").strip():
         raise HTTPException(
@@ -1096,6 +1125,8 @@ def chat_stream(req: ChatRequest, request: Request):
     import logging
 
     logger = logging.getLogger(__name__)
+
+    req = _authenticated_chat_request(req, request)
 
     def _sse_error_response(message: str) -> StreamingResponse:
         def _err_gen():
@@ -1213,15 +1244,16 @@ def chat_stream(req: ChatRequest, request: Request):
 
 
 @app.get("/chat/sessions", response_model=list[ChatSessionPublic])
-def chat_sessions_list(request: Request, user_id: str = Query(..., min_length=1, max_length=128)):
+def chat_sessions_list(request: Request):
     """按用户 ID 列出对话会话（SQLite 持久化）。"""
     tid = get_tenant_id(request)
+    user_id = _current_user_id(request)
     return [ChatSessionPublic.model_validate(s) for s in list_sessions(user_id, tenant_id=tid)]
 
 
 @app.post("/chat/sessions", response_model=ChatSessionPublic)
 def chat_sessions_create(req: ChatSessionCreate, request: Request):
-    row = create_session(req.user_id, title=req.title, tenant_id=get_tenant_id(request))
+    row = create_session(_current_user_id(request), title=req.title, tenant_id=get_tenant_id(request))
     return ChatSessionPublic.model_validate(row)
 
 
@@ -1229,9 +1261,9 @@ def chat_sessions_create(req: ChatSessionCreate, request: Request):
 def chat_session_messages(
     request: Request,
     session_id: str,
-    user_id: str = Query(..., min_length=1, max_length=128),
 ):
     tid = get_tenant_id(request)
+    user_id = _current_user_id(request)
     if not get_session(session_id, user_id, tenant_id=tid):
         raise HTTPException(status_code=404, detail="会话不存在")
     return [ChatMessagePublic.model_validate(m) for m in list_messages(session_id, user_id, tenant_id=tid)]
@@ -1240,24 +1272,23 @@ def chat_session_messages(
 @app.post("/chat/sessions/{session_id}/messages", response_model=list[ChatMessagePublic])
 def chat_session_append(session_id: str, req: ChatMessagesAppend, background_tasks: BackgroundTasks, request: Request):
     tid = get_tenant_id(request)
-    if req.user_id.strip() != req.user_id:
-        raise HTTPException(status_code=400, detail="invalid user_id")
+    user_id = _current_user_id(request)
     try:
         rows = append_messages(
             session_id,
-            req.user_id,
+            user_id,
             [m.model_dump(exclude_none=True) for m in req.messages],
             auto_title_from=req.auto_title_from,
             tenant_id=tid,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    mem = _memory_for_user(request, req.user_id)
+    mem = _memory_for_user(request, user_id)
     if bool(mem.get("rolling_summary_enabled", True)):
         background_tasks.add_task(
             refresh_rolling_summary_for_session,
             session_id,
-            req.user_id,
+            user_id,
             mem,
             None,
         )
@@ -1266,7 +1297,12 @@ def chat_session_append(session_id: str, req: ChatMessagesAppend, background_tas
 
 @app.put("/chat/sessions/{session_id}", response_model=ChatSessionPublic)
 def chat_session_update(session_id: str, req: ChatSessionUpdate, request: Request):
-    row = update_session_title(session_id, req.user_id, req.title, tenant_id=get_tenant_id(request))
+    row = update_session_title(
+        session_id,
+        _current_user_id(request),
+        req.title,
+        tenant_id=get_tenant_id(request),
+    )
     if not row:
         raise HTTPException(status_code=404, detail="会话不存在")
     return ChatSessionPublic.model_validate(row)
@@ -1276,9 +1312,8 @@ def chat_session_update(session_id: str, req: ChatSessionUpdate, request: Reques
 def chat_session_delete(
     request: Request,
     session_id: str,
-    user_id: str = Query(..., min_length=1, max_length=128),
 ):
-    if not delete_session(session_id, user_id, tenant_id=get_tenant_id(request)):
+    if not delete_session(session_id, _current_user_id(request), tenant_id=get_tenant_id(request)):
         raise HTTPException(status_code=404, detail="会话不存在")
     return {"ok": True}
 

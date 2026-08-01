@@ -26,11 +26,11 @@ def test_default_tenant_is_internal(tenant_app):
         assert r.json()["tenant_id"] == "internal"
 
 
-def test_tenant_from_header(tenant_app):
+def test_tenant_header_is_not_trusted(tenant_app):
     with TestClient(tenant_app) as client:
         r = client.get("/echo-tenant", headers={"X-Tenant-ID": "acme-corp"})
         assert r.status_code == 200
-        assert r.json()["tenant_id"] == "acme-corp"
+        assert r.json()["tenant_id"] == "internal"
 
 
 def test_empty_tenant_header_falls_back_internal(tenant_app):

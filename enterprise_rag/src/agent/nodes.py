@@ -52,6 +52,8 @@ class AgentState(TypedDict, total=False):
     skip_retrieval_rewrite: bool
     rolling_summary: str
     rag_architecture: str
+    retrieval_mode: str
+    stream_fast_mode: bool
 
 
 def router_node(state: AgentState) -> dict[str, Any]:
@@ -79,6 +81,11 @@ def retrieve_node(state: AgentState) -> dict[str, Any]:
     search_q = (state.get("retrieval_query") or state["question"]).strip()
     rk = state.get("retrieve_top_k")
     rerank_k = state.get("rerank_top_k")
+    turn_meta = state.get("turn_meta") or {}
+    retrieval_mode = (
+        str(state.get("retrieval_mode") or turn_meta.get("retrieval_mode") or "").strip() or None
+    )
+    retrieval_meta: dict[str, Any] = {}
     rw, parents = hybrid_search(
         search_q,
         dept,
@@ -93,6 +100,9 @@ def retrieve_node(state: AgentState) -> dict[str, Any]:
         skip_rerank=bool(state.get("skip_rerank")),
         rerank_top_k=int(rerank_k) if rerank_k is not None else None,
         pre_rerank_k=state.get("pre_rerank_k"),
+        retrieval_mode=retrieval_mode,  # type: ignore[arg-type]
+        fast_mode=bool(state.get("stream_fast_mode")),
+        retrieval_meta_out=retrieval_meta,
     )
     parents = filter_by_sources(parents, state.get("allowed_sources"))
     max_chars = state.get("context_max_chars")
@@ -106,6 +116,7 @@ def retrieve_node(state: AgentState) -> dict[str, Any]:
         "rewritten_query": rw,
         "contexts": [format_context_with_meta(p) for p in parents],
         "contexts_meta": parents,
+        "retrieval_meta": retrieval_meta,
     }
 
 

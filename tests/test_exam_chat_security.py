@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi import FastAPI
@@ -15,13 +16,18 @@ if str(SRC) not in sys.path:
 
 
 @pytest.fixture()
-def client(tmp_path, monkeypatch):
+def exam_db(tmp_path, monkeypatch):
+    """Single exam_bank DB for the test — path patched before any app/client setup."""
     from exam_bank import store
 
     db = tmp_path / "exam_bank.db"
     monkeypatch.setattr(store.settings, "exam_bank_db_path", db)
     store.init_exam_bank_db()
+    return store
 
+
+@pytest.fixture()
+def client(exam_db):
     from api.exam_router import router as exam_router
 
     app = FastAPI()
@@ -30,7 +36,7 @@ def client(tmp_path, monkeypatch):
         yield c
 
 
-def _seed_private_paper(store):
+def _seed_private_paper(store: Any):
     col = store.create_collection(
         name="私有·数学·高三",
         subject="数学",
@@ -56,14 +62,10 @@ def _seed_private_paper(store):
     return col, sp, q
 
 
-def test_gate_inventory_hides_private_collection_from_other_user(tmp_path, monkeypatch):
-    from exam_bank import store
+def test_gate_inventory_hides_private_collection_from_other_user(exam_db):
     from exam_bank.chat_exam_gate import resolve_exam_chat_gate
 
-    db = tmp_path / "exam_bank.db"
-    monkeypatch.setattr(store.settings, "exam_bank_db_path", db)
-    store.init_exam_bank_db()
-    _seed_private_paper(store)
+    _seed_private_paper(exam_db)
 
     gate = resolve_exam_chat_gate("现在题库里有什么内容", reader_user_id="bob")
     assert gate is not None
@@ -73,13 +75,8 @@ def test_gate_inventory_hides_private_collection_from_other_user(tmp_path, monke
     assert overview.get("collection_count") == 0
 
 
-def test_chat_get_paper_rejects_include_answers(client, tmp_path, monkeypatch):
-    from exam_bank import store
-
-    db = tmp_path / "exam_bank.db"
-    monkeypatch.setattr(store.settings, "exam_bank_db_path", db)
-    store.init_exam_bank_db()
-    _, sp, _ = _seed_private_paper(store)
+def test_chat_get_paper_rejects_include_answers(client, exam_db):
+    _, sp, _ = _seed_private_paper(exam_db)
 
     r = client.get(f"/api/exam/chat/papers/{sp['id']}?include_answers=true")
     assert r.status_code == 400
@@ -87,14 +84,25 @@ def test_chat_get_paper_rejects_include_answers(client, tmp_path, monkeypatch):
     assert detail.get("error") == "include_answers_forbidden"
 
 
-def test_submit_attempt_rejects_other_user(tmp_path, monkeypatch):
-    from exam_bank import store
+def test_client_reads_seeded_exam_db(client, exam_db):
+    """Regression: HTTP client must use exam_db fixture path, not a second tmp_path."""
+    col = exam_db.create_collection(name="公开库", subject="数学", grade="高三", region="浙江")
+    sp = exam_db.create_source_paper(
+        collection_id=col["id"],
+        title="连通性卷",
+        source_filename="ok.docx",
+        question_ids=[],
+    )
+
+    r = client.get(f"/api/exam/chat/papers/{sp['id']}")
+    assert r.status_code == 200
+    assert r.json().get("title") == "连通性卷"
+
+
+def test_submit_attempt_rejects_other_user(exam_db):
     from exam_bank.chat_paper import start_attempt, submit_attempt
 
-    db = tmp_path / "exam_bank.db"
-    monkeypatch.setattr(store.settings, "exam_bank_db_path", db)
-    store.init_exam_bank_db()
-    _, sp, q = _seed_private_paper(store)
+    _, sp, q = _seed_private_paper(exam_db)
 
     started = start_attempt(sp["id"], user_id="alice")
     aid = started["attempt_id"]
@@ -103,15 +111,11 @@ def test_submit_attempt_rejects_other_user(tmp_path, monkeypatch):
     assert bad.get("error") == "forbidden"
 
 
-def test_gate_no_keywords_does_not_fallback_to_recent_papers(tmp_path, monkeypatch):
-    from exam_bank import store
+def test_gate_no_keywords_does_not_fallback_to_recent_papers(exam_db):
     from exam_bank.chat_exam_gate import resolve_exam_chat_gate
 
-    db = tmp_path / "exam_bank.db"
-    monkeypatch.setattr(store.settings, "exam_bank_db_path", db)
-    store.init_exam_bank_db()
-    col = store.create_collection(name="公开库", subject="数学", grade="高三", region="浙江")
-    store.create_source_paper(
+    col = exam_db.create_collection(name="公开库", subject="数学", grade="高三", region="浙江")
+    exam_db.create_source_paper(
         collection_id=col["id"],
         title="某卷",
         source_filename="x.docx",
@@ -124,7 +128,7 @@ def test_gate_no_keywords_does_not_fallback_to_recent_papers(tmp_path, monkeypat
     assert "请" in gate["answer"] or "说明" in gate["answer"] or "哪" in gate["answer"]
 
 
-def test_normalize_multi_answer_set(tmp_path, monkeypatch):
+def test_normalize_multi_answer_set():
     from exam_bank.chat_paper import normalize_objective_answer
 
     assert normalize_objective_answer("AB", "multi") == "AB"

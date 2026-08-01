@@ -40,6 +40,7 @@ def init_auth_db() -> None:
                     username TEXT NOT NULL UNIQUE COLLATE NOCASE,
                     password_hash TEXT NOT NULL,
                     password_salt TEXT NOT NULL,
+                    tenant_id TEXT NOT NULL DEFAULT 'internal',
                     department TEXT NOT NULL,
                     display_name TEXT NOT NULL DEFAULT '',
                     is_active INTEGER NOT NULL DEFAULT 1,
@@ -58,6 +59,13 @@ def init_auth_db() -> None:
                 """
             )
             conn.commit()
+            try:
+                conn.execute(
+                    "ALTER TABLE auth_users ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'internal'"
+                )
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass
         finally:
             conn.close()
 
@@ -86,7 +94,7 @@ def get_user_by_username(username: str) -> dict[str, Any] | None:
         conn = _connect()
         try:
             row = conn.execute(
-                "SELECT id, username, password_hash, password_salt, department, display_name, "
+                "SELECT id, username, password_hash, password_salt, tenant_id, department, display_name, "
                 "is_active, created_at, updated_at FROM auth_users WHERE username = ? COLLATE NOCASE",
                 (name,),
             ).fetchone()
@@ -103,7 +111,7 @@ def get_user_by_id(user_id: str) -> dict[str, Any] | None:
         conn = _connect()
         try:
             row = conn.execute(
-                "SELECT id, username, department, display_name, is_active, created_at, updated_at "
+                "SELECT id, username, tenant_id, department, display_name, is_active, created_at, updated_at "
                 "FROM auth_users WHERE id = ?",
                 (uid,),
             ).fetchone()
@@ -119,13 +127,13 @@ def list_users(*, department: str | None = None) -> list[dict[str, Any]]:
             if department:
                 dept = normalize_department(department)
                 rows = conn.execute(
-                    "SELECT id, username, department, display_name, is_active, created_at, updated_at "
+                    "SELECT id, username, tenant_id, department, display_name, is_active, created_at, updated_at "
                     "FROM auth_users WHERE department = ? ORDER BY username",
                     (dept,),
                 ).fetchall()
             else:
                 rows = conn.execute(
-                    "SELECT id, username, department, display_name, is_active, created_at, updated_at "
+                    "SELECT id, username, tenant_id, department, display_name, is_active, created_at, updated_at "
                     "FROM auth_users ORDER BY department, username"
                 ).fetchall()
             return [dict(r) for r in rows]
@@ -139,6 +147,7 @@ def create_user(
     password: str,
     department: str,
     display_name: str = "",
+    tenant_id: str = "internal",
 ) -> dict[str, Any]:
     name = (username or "").strip()
     if not name:
@@ -146,6 +155,7 @@ def create_user(
     dept = normalize_department(department)
     if dept not in DEPARTMENTS:
         raise ValueError(f"invalid department: {department}")
+    tenant = (tenant_id or "").strip()[:64] or "internal"
     pwd_hash, pwd_salt = hash_password(password)
     now = _iso(_utc_now())
     row = {
@@ -153,6 +163,7 @@ def create_user(
         "username": name,
         "password_hash": pwd_hash,
         "password_salt": pwd_salt,
+        "tenant_id": tenant,
         "department": dept,
         "display_name": (display_name or name).strip(),
         "is_active": 1,
@@ -163,13 +174,14 @@ def create_user(
         conn = _connect()
         try:
             conn.execute(
-                "INSERT INTO auth_users (id, username, password_hash, password_salt, department, "
-                "display_name, is_active, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO auth_users (id, username, password_hash, password_salt, tenant_id, department, "
+                "display_name, is_active, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (
                     row["id"],
                     row["username"],
                     row["password_hash"],
                     row["password_salt"],
+                    row["tenant_id"],
                     row["department"],
                     row["display_name"],
                     row["is_active"],
@@ -269,7 +281,7 @@ def get_session_user(token: str) -> dict[str, Any] | None:
         try:
             row = conn.execute(
                 """
-                SELECT u.id, u.username, u.department, u.display_name, u.is_active, s.expires_at
+                SELECT u.id, u.username, u.tenant_id, u.department, u.display_name, u.is_active, s.expires_at
                 FROM auth_sessions s
                 JOIN auth_users u ON u.id = s.user_id
                 WHERE s.token_hash = ?
@@ -290,6 +302,7 @@ def get_session_user(token: str) -> dict[str, Any] | None:
             return {
                 "id": row["id"],
                 "username": row["username"],
+                "tenant_id": row["tenant_id"],
                 "department": row["department"],
                 "display_name": row["display_name"],
             }

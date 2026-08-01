@@ -15,7 +15,10 @@ from retrieval.query_normalize import (
     normalize_query,
 )
 
+from retrieval.retrieval_mode_router import resolve_retrieval_mode
+
 QueryIntent = Literal["kb", "realtime", "graph", "chitchat", "unknown"]
+RetrievalMode = Literal["exact", "semantic", "hybrid"]
 
 _DEFAULT_REWRITE_THRESHOLD = 0.65
 
@@ -27,6 +30,7 @@ class QueryUnderstanding:
     retrieval_query: str
     search_variants: list[str]
     intent: QueryIntent
+    retrieval_mode: RetrievalMode
     rule_confidence: float
     needs_llm_rewrite: bool
     signals: dict[str, Any] = field(default_factory=dict)
@@ -54,6 +58,7 @@ class QueryUnderstanding:
             "canonical_query": self.canonical_query,
             "search_variants": list(self.search_variants),
             "intent": self.intent_label(),
+            "retrieval_mode": self.retrieval_mode,
             "noise_stripped": self.noise_stripped,
             "confidence": round(self.rule_confidence, 4),
             "needs_llm_rewrite": self.needs_llm_rewrite,
@@ -152,6 +157,7 @@ def understand_query(raw: str, *, retrieval_query: str | None = None) -> QueryUn
         domain_corrections=len(corrections),
     )
     intent = detect_query_intent(rq)
+    retrieval_mode = resolve_retrieval_mode(rq)
     needs_rewrite = needs_llm_retrieval_rewrite(confidence)
     signals: dict[str, Any] = {
         "voice_transcript": looks_like_voice_transcript(original),
@@ -165,6 +171,7 @@ def understand_query(raw: str, *, retrieval_query: str | None = None) -> QueryUn
         retrieval_query=rq,
         search_variants=variants,
         intent=intent,
+        retrieval_mode=retrieval_mode,
         rule_confidence=confidence,
         needs_llm_rewrite=needs_rewrite,
         signals=signals,

@@ -26,7 +26,7 @@ UI_CONFIG_PATCH_FIELDS = frozenset(
     }
 )
 
-RETRIEVAL_TUNING_FIELDS = frozenset({"hybrid_vector_weight", "hybrid_bm25_weight"})
+RETRIEVAL_TUNING_FIELDS = frozenset({"rrf_k"})
 
 
 def _utc_now() -> str:

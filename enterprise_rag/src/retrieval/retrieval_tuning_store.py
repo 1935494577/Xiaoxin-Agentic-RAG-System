@@ -1,4 +1,4 @@
-"""Persist retrieval tuning overrides (hybrid weights) for actuator patches."""
+"""Persist retrieval tuning overrides (RRF k, legacy hybrid weights) for actuator patches."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Any
 
 from config import settings
 
-_ALLOWED = frozenset({"hybrid_vector_weight", "hybrid_bm25_weight"})
+_ALLOWED = frozenset({"rrf_k", "hybrid_vector_weight", "hybrid_bm25_weight"})
 
 
 def _path() -> Path:
@@ -31,6 +31,12 @@ def save_retrieval_tuning(patch: dict[str, Any]) -> dict[str, Any]:
     for k, v in patch.items():
         if k not in _ALLOWED or v is None:
             continue
+        if k == "rrf_k":
+            try:
+                current[k] = max(1, int(v))
+            except (TypeError, ValueError):
+                continue
+            continue
         try:
             current[k] = float(v)
         except (TypeError, ValueError):
@@ -41,16 +47,10 @@ def save_retrieval_tuning(patch: dict[str, Any]) -> dict[str, Any]:
     return current
 
 
-def get_hybrid_weights() -> tuple[float, float]:
+def get_rrf_k() -> int:
     tuning = load_retrieval_tuning()
-    wv = tuning.get("hybrid_vector_weight", settings.hybrid_vector_weight)
-    wb = tuning.get("hybrid_bm25_weight", settings.hybrid_bm25_weight)
+    raw = tuning.get("rrf_k", settings.rrf_k)
     try:
-        wv_f = float(wv)
-        wb_f = float(wb)
+        return max(1, int(raw))
     except (TypeError, ValueError):
-        return settings.hybrid_vector_weight, settings.hybrid_bm25_weight
-    total = wv_f + wb_f
-    if total <= 0:
-        return settings.hybrid_vector_weight, settings.hybrid_bm25_weight
-    return wv_f / total, wb_f / total
+        return max(1, int(settings.rrf_k or 60))
