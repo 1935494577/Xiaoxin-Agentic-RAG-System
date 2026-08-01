@@ -79,6 +79,25 @@ function Set-HarnessEnv {
 
     Import-DotEnvFile -Path (Join-Path $Root ".env")
 
+    # Dev: .env LLM keys win over stale user/system OPENAI_* (matches config.py)
+    $dotEnvPath = Join-Path $Root ".env"
+    if (Test-Path $dotEnvPath) {
+        $forceKeys = @("OPENAI_API_KEY", "OPENAI_API_BASE", "OPENAI_CHAT_MODEL")
+        Get-Content $dotEnvPath | ForEach-Object {
+            $line = $_.Trim()
+            if (-not $line -or $line.StartsWith("#")) { return }
+            $idx = $line.IndexOf("=")
+            if ($idx -lt 1) { return }
+            $key = $line.Substring(0, $idx).Trim()
+            if ($key -notin $forceKeys) { return }
+            $val = $line.Substring($idx + 1).Trim()
+            if (($val.StartsWith('"') -and $val.EndsWith('"')) -or ($val.StartsWith("'") -and $val.EndsWith("'"))) {
+                $val = $val.Substring(1, $val.Length - 2)
+            }
+            if ($val) { Set-Item -Path "env:$key" -Value $val }
+        }
+    }
+
     if (-not $env:OPENAI_CHAT_MODEL) { $env:OPENAI_CHAT_MODEL = "deepseek-v4-flash" }
 }
 

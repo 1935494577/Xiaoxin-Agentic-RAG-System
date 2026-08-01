@@ -1,7 +1,7 @@
 """Agent trace event model — foundation for full-chain observability.
 
 Future: graph nodes, tool calls, LLM reasoning, performance spans.
-Sinks: local JSONL (chat_trace.jsonl), LangSmith (optional).
+Sink: local JSONL (chat_trace.jsonl) + optional Langfuse v4.
 """
 
 from __future__ import annotations

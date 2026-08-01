@@ -137,7 +137,7 @@ export default function TutorialPage() {
 
         <section>
           <h3 className="text-base font-semibold mb-2">9. 链路 Trace（管理员）</h3>
-          <p className="text-sm text-text-muted">查看 LangSmith 云端 / 本地 JSONL 链路追踪状态与文件位置。反馈页「查看链路」依赖此功能。</p>
+          <p className="text-sm text-text-muted">查看本地 JSONL 链路追踪状态与文件位置。反馈页「查看链路」依赖此功能。</p>
         </section>
 
         <hr className="border-border-light" />

@@ -44,7 +44,7 @@ from agent.chitchat import canned_chitchat_reply, is_chitchat_message
 from agent.output_schemas import output_schema_instruction
 from graph.prompts import graph_kb_system_extra
 from config import settings
-from evaluation.stream_langsmith import new_stream_tracer
+from evaluation.stream_tracer import new_stream_tracer
 from api.stream_errors import format_stream_error
 from openai import OpenAI
 

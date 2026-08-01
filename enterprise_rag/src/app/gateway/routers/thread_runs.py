@@ -75,7 +75,7 @@ class RunCreateRequest(BaseModel):
     multitask_strategy: Literal["reject", "rollback", "interrupt", "enqueue"] = Field(default="reject", description="Concurrency strategy")
     after_seconds: float | None = Field(default=None, description="Delayed execution")
     if_not_exists: Literal["reject", "create"] = Field(default="create", description="Thread creation policy")
-    feedback_keys: list[str] | None = Field(default=None, description="LangSmith feedback keys")
+    feedback_keys: list[str] | None = Field(default=None, description="Optional trace feedback keys")
 
 
 class RegeneratePrepareRequest(BaseModel):

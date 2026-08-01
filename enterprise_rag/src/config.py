@@ -195,17 +195,27 @@ class Settings(BaseSettings):
     trusted_hosts: str = ""
     enable_hsts: bool = False
 
-    # LangSmith / LangChain：写入进程环境，供 `configure_tracing` 与 LangChain 库读取（与 .env 中 LANGCHAIN_* 对应）
-    langchain_tracing_v2: bool = Field(default=False, validation_alias="LANGCHAIN_TRACING_V2")
-    langchain_api_key: str = Field(default="", validation_alias="LANGCHAIN_API_KEY")
-    langchain_project: str = Field(default="", validation_alias="LANGCHAIN_PROJECT")
-    # 本地 JSONL 链路 trace（第三步写入；此处仅控制状态展示与后续开关）
-    local_trace_enabled: bool = Field(default=False, validation_alias="LOCAL_TRACE_ENABLED")
+    # 本地 JSONL 全链路 trace（/chat/stream → chat_trace.jsonl；Admin 反馈「查看链路」）
+    local_trace_enabled: bool = Field(default=True, validation_alias="LOCAL_TRACE_ENABLED")
+    # Langfuse v4（与 DeerFlow harness 共用 LANGFUSE_*；见 docs/langfuse-tracing.md）
+    langfuse_tracing: bool = Field(default=False, validation_alias="LANGFUSE_TRACING")
+    langfuse_public_key: str = Field(default="", validation_alias="LANGFUSE_PUBLIC_KEY")
+    langfuse_secret_key: str = Field(default="", validation_alias="LANGFUSE_SECRET_KEY")
+    langfuse_base_url: str = Field(
+        default="https://cloud.langfuse.com",
+        validation_alias="LANGFUSE_BASE_URL",
+    )
 
 
-# `.env` 优先：避免 shell 中残留的 LANGCHAIN_* 覆盖项目配置
-for _lang_key in ("LANGCHAIN_TRACING_V2", "LANGCHAIN_API_KEY", "LANGCHAIN_PROJECT", "LOCAL_TRACE_ENABLED"):
-    os.environ.pop(_lang_key, None)
+# `.env` 优先：避免 shell / 系统环境变量中残留的 OPENAI_*、LANGFUSE_* 覆盖项目配置
+for _dotenv_priority_key in (
+    "LOCAL_TRACE_ENABLED",
+    "LANGFUSE_TRACING",
+    "OPENAI_API_KEY",
+    "OPENAI_API_BASE",
+    "OPENAI_CHAT_MODEL",
+):
+    os.environ.pop(_dotenv_priority_key, None)
 
 
 @lru_cache
@@ -291,18 +301,50 @@ def _sync_hf_hub_constants_endpoint() -> None:
 _sync_hf_hub_constants_endpoint()
 
 
-def _apply_langchain_env_from_settings() -> None:
-    os.environ["LANGCHAIN_TRACING_V2"] = "true" if settings.langchain_tracing_v2 else "false"
-    key = (settings.langchain_api_key or "").strip()
+def _ensure_local_trace_dir() -> None:
+    if settings.local_trace_enabled:
+        settings.chat_trace_path.parent.mkdir(parents=True, exist_ok=True)
+
+
+def _apply_langfuse_env_from_settings() -> None:
+    """Sync .env → os.environ so Main API (8010) and DeerFlow harness (8011) share keys."""
+    os.environ["LANGFUSE_TRACING"] = "true" if settings.langfuse_tracing else "false"
+    pub = (settings.langfuse_public_key or "").strip()
+    sec = (settings.langfuse_secret_key or "").strip()
+    host = (settings.langfuse_base_url or "").strip()
+    if pub:
+        os.environ["LANGFUSE_PUBLIC_KEY"] = pub
+    else:
+        os.environ.pop("LANGFUSE_PUBLIC_KEY", None)
+    if sec:
+        os.environ["LANGFUSE_SECRET_KEY"] = sec
+    else:
+        os.environ.pop("LANGFUSE_SECRET_KEY", None)
+    if host:
+        os.environ["LANGFUSE_BASE_URL"] = host.rstrip("/")
+    else:
+        os.environ.pop("LANGFUSE_BASE_URL", None)
+
+
+def _apply_openai_env_from_settings() -> None:
+    """Sync .env LLM settings → os.environ for harness config.yaml ($OPENAI_*)."""
+    key = (settings.openai_api_key or "").strip()
+    base = (settings.openai_api_base or "").strip()
+    model = (settings.openai_chat_model or "").strip()
     if key:
-        os.environ["LANGCHAIN_API_KEY"] = key
+        os.environ["OPENAI_API_KEY"] = key
     else:
-        os.environ.pop("LANGCHAIN_API_KEY", None)
-    proj = (settings.langchain_project or "").strip()
-    if proj:
-        os.environ["LANGCHAIN_PROJECT"] = proj
+        os.environ.pop("OPENAI_API_KEY", None)
+    if base:
+        os.environ["OPENAI_API_BASE"] = base.rstrip("/")
     else:
-        os.environ.pop("LANGCHAIN_PROJECT", None)
+        os.environ.pop("OPENAI_API_BASE", None)
+    if model:
+        os.environ["OPENAI_CHAT_MODEL"] = model
+    else:
+        os.environ.pop("OPENAI_CHAT_MODEL", None)
 
 
-_apply_langchain_env_from_settings()
+_ensure_local_trace_dir()
+_apply_openai_env_from_settings()
+_apply_langfuse_env_from_settings()
