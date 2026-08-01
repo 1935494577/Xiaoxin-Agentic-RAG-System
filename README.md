@@ -22,7 +22,7 @@
 | **题库子系统** | 独立 SQLite + `/api/exam/*`；**地区·学科·年级** 独立建库；入库（DOCX 公式 `[[EQ]]` 占位 + 清洗 + **默认大模型拆题**；**PDF/扫描件** 可选 PP-StructureV3 + **PP-FormulaNet** → `$LaTeX$`）；智能组卷（**默认仅完整题**；**未选难度则随机、不足按库内存量出卷**）；管理页「待补全 / LLM 补全」；**默认导出 Word 国标排版**；**Chat 感知题库**（做题/盘点意图门闸 + **ACL** + **精确查卷** UUID/关键词优先；客观题规则判分；**LLM 分步讲解** `POST /api/exam/chat/questions/{id}/explain`）；工具 `list_exam_bank` + `search_exam_papers` + `present_exam_paper` + **`explain_exam_question`** + Skill `exam-in-chat`；见 [`docs/exam-chat-paper.md`](docs/exam-chat-paper.md) |
 | **用户反馈（Sprint A–D）** | 👍👎 反馈 → Triage → 采纳 → **Actuator**（golden / 重入库工单 / 配置补丁 / **query alias**）→ **alias 候选排序**（`GET /admin/feedback/alias-proposals`）→ **golden 评测**（RAGAS 或 naive 回退，对比上一份 Δ）；`config_revisions` 可回滚；Admin **评测报告**页；Feedback 故障时 **Chat 热路径不受影响** |
 | **Harness / IM** | DeerFlow 对齐的 harness：`config.yaml`、`run-dev-harness.ps1`（8010+8011+8502）；IM Worker 在 **8011**；**Chat 流式路由**（`CHAT_LEAD_AGENT_ENABLED`：task/auto→DeerFlow lead，knowledge→KB 快路径）；规范见 [`docs/deerflow-integration.md`](docs/deerflow-integration.md) |
-| **评测与追踪** | 可选 LangSmith / 本地 JSONL trace；`scripts/eval_ingest_dedup.py` 检索去重 A/B；`scripts/eval_query_robustness.py`（分 scenario 汇总）/ `scripts/query_verify.ps1`；`docs/query-understanding.md` |
+| **评测与追踪** | **Langfuse v4**（可选，`LANGFUSE_*`，见 [`docs/langfuse-tracing.md`](docs/langfuse-tracing.md)）+ 本地 JSONL（`LOCAL_TRACE_ENABLED`，Admin 反馈可回放）；DeerFlow 8011 共用 Langfuse；`scripts/eval_ingest_dedup.py` 等 |
 | **容器与脚本** | `Dockerfile`、`docker-compose.yml`（profiles：`cache`/`db`/`app`/`legacy`）；外部依赖见 [`docs/external-dependencies.md`](docs/external-dependencies.md)；Windows `.ps1` 与 **macOS/Linux `.sh`** 一键启停；**生产启动** `run-api-prod.ps1` / `run-api-prod.sh`；**缓存清理** `clean-cache.ps1` |
 
 ---

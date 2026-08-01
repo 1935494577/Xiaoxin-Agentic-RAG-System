@@ -371,11 +371,18 @@ export type PromptData = {
 
 // ===== Trace =====
 export type TraceStatus = {
-  langsmith_enabled: boolean;
-  langsmith_vars: Record<string, string>;
-  local_trace_enabled: boolean;
-  local_trace_file: string;
-  local_trace_lines: number;
+  backend: string;
+  local_enabled: boolean;
+  local_path: string;
+  local_file_exists: boolean;
+  local_record_count: number;
+  active: boolean;
+  hints: string[];
+  langfuse_enabled?: boolean;
+  langfuse_tracing?: boolean;
+  langfuse_configured?: boolean;
+  langfuse_package_installed?: boolean;
+  langfuse_host?: string;
 };
 
 // ===== Feedback =====

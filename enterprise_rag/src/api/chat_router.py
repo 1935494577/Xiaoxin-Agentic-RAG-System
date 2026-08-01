@@ -246,6 +246,8 @@ def chat_stream(req: ChatRequest, request: Request):
             payload = {"type": "error", "message": format_stream_error(exc)}
             yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
+    from jnao_harness.availability import resolve_chat_pipeline
+
     pipeline = resolve_chat_pipeline(state)
     logger.debug("chat/stream pipeline=%s assistant_mode=%s", pipeline, state.get("assistant_mode"))
 

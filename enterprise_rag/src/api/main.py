@@ -136,7 +136,7 @@ from document_loader.processing.registry import public_config as public_processi
 from document_loader.processing.registry import save_config as save_processing_config
 from agent.tools.api.router import router as agent_tools_router
 from api.nav_config import build_nav_config
-from evaluation.langsmith_trace import configure_tracing, get_trace_status
+from evaluation.local_trace import configure_tracing, get_trace_status
 from feedback_loop.store import init_feedback_db
 from indexing.dedup_text import content_hash
 from indexing.embeddings import embed_texts
@@ -346,7 +346,7 @@ def get_nav_config():
 
 @app.get("/debug/trace-status")
 def trace_status():
-    """Return LangSmith trace configuration (no secrets)."""
+    """Return local JSONL + Langfuse trace configuration (no secrets)."""
     return get_trace_status()
 
 

@@ -14,7 +14,8 @@
 | **推荐中间件** | Redis（检索缓存） | 可不配（进程内 TTL） | 多 worker 必配 | `profile: cache` |
 | **规划中** | PostgreSQL（元数据 / ACL） | `DATABASE_URL` 空=SQLite | 线上填 PG | `profile: db` |
 | **可选 SaaS** | Tavily（联网搜索） | `TAVILY_API_KEY` | 按需 | 否 |
-| **可选 SaaS** | LangSmith | `LANGCHAIN_TRACING_V2` | 按需 | 否 |
+| **进程内** | 本地 JSONL trace | `LOCAL_TRACE_ENABLED`（默认 true） | 按需关闭 | 否 |
+| **可选观测** | Langfuse v4 | `LANGFUSE_*` | 自托管或 Cloud | 可选 Docker |
 | **可选下载** | 嵌入/重排模型（ModelScope / HF） | `data/models/` | 预下载 | 卷挂载 |
 | **遗留栈** | 远程 Milvus + etcd + MinIO + ES | 一般不用 | 大规模向量时 | `profile: legacy` |
 | **本机进程** | Frontend / Harness Gateway | `run-dev*.ps1` | 可另容器化 | 当前未进 compose |
@@ -65,12 +66,13 @@ DATABASE_URL=postgresql+psycopg://jnao:jnao@127.0.0.1:5432/jnao
 
 ---
 
-## 5. 可选：Tavily / LangSmith / 模型源
+## 5. 可选：Tavily / 模型源
 
 | 依赖 | 变量 | 说明 |
 |------|------|------|
 | Tavily | `TAVILY_API_KEY` | 对话工具 `web_search` |
-| LangSmith | `LANGCHAIN_*` | 链路追踪 |
+| 本地 trace | `LOCAL_TRACE_ENABLED` | `/chat/stream` → `chat_trace.jsonl` |
+| Langfuse | `LANGFUSE_TRACING` + keys | 全链路 UI；与 DeerFlow 8011 共用 |
 | ModelScope | `USE_MODELSCOPE_DOWNLOAD` | 国内拉嵌入/重排权重 |
 | HuggingFace | `HF_LOCAL_FILES_ONLY` 等 | 本地只读已下载权重 |
 

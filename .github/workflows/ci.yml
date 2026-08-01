@@ -32,6 +32,9 @@ jobs:
             tests/test_hybrid_search_modes.py \
             tests/test_chat_pipeline_routing.py \
             tests/test_persistence_database.py \
+            tests/test_local_trace.py \
+            tests/test_langfuse_trace.py \
+            tests/test_stream_tracer.py \
             tests/e2e/test_api_smoke.py \
             -q
 

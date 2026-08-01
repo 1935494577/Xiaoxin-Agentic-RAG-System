@@ -1,4 +1,4 @@
-from evaluation.langsmith_trace import configure_tracing
+from evaluation.local_trace import configure_tracing
 
 __all__ = ["configure_tracing", "score_rag_batch"]
 

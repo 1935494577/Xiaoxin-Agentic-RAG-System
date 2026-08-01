@@ -4,9 +4,8 @@
 Usage:
   python scripts/eval_ingest_dedup.py              # direct hybrid_search (no API)
   python scripts/eval_ingest_dedup.py --api         # via POST /retrieve
-  python scripts/eval_ingest_dedup.py --langsmith   # wrap runs in LangSmith trace
 
-Requires indexed corpus (e.g. 1-3.txt). Set LANGCHAIN_TRACING_V2=true for LangSmith.
+Requires indexed corpus (e.g. 1-3.txt).
 """
 from __future__ import annotations
 
@@ -142,23 +141,10 @@ def _summarize(label: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _maybe_trace(fn, use_langsmith: bool):
-    if not use_langsmith:
-        return fn()
-    try:
-        from langsmith import traceable
-    except ImportError:
-        print("langsmith 未安装，跳过 trace 包装")
-        return fn()
-    wrapped = traceable(name="eval_ingest_dedup")(fn)
-    return wrapped()
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="L3 retrieval dedup A/B eval")
     parser.add_argument("--api", action="store_true", help="Use POST /retrieve instead of direct import")
     parser.add_argument("--api-base", default=DEFAULT_API)
-    parser.add_argument("--langsmith", action="store_true", help="Wrap eval in LangSmith traceable")
     parser.add_argument(
         "--out",
         default=str(ROOT / "scripts" / "ingest_dedup_eval.json"),
@@ -185,7 +171,7 @@ def main() -> int:
             on = _run_direct(dedup=True)
         return off, on
 
-    off, on = _maybe_trace(run_eval, args.langsmith)
+    off, on = run_eval()
 
     report = {
         "summary": {
