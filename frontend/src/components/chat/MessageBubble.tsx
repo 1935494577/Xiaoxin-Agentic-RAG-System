@@ -1,4 +1,5 @@
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback, useRef, useState } from "react";
+import { Check, Copy, FileText, ThumbsDown, ThumbsUp } from "lucide-react";
 import LottiePlayer from "./LottiePlayer";
 import thinkingAnim from "../../assets/dots-typing.json";
 import { submitFeedback } from "../../api/client";
@@ -86,6 +87,8 @@ function MessageBubble({
   const [showCorrection, setShowCorrection] = useState(false);
   const [correctionText, setCorrectionText] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isUser = message.role === "user";
   const rawBody = isUser ? message.content : stripFootnotes(message.content);
@@ -157,10 +160,20 @@ function MessageBubble({
     sendFeedback(0);
   }, [sendFeedback]);
 
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(body).then(() => {
+      setCopied(true);
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+      copiedTimer.current = setTimeout(() => setCopied(false), 1500);
+    }).catch(() => {
+      /* clipboard 不可用时静默 */
+    });
+  }, [body]);
+
   return (
     <div
       className={
-        "flex gap-4 py-4 w-full max-w-[768px] mx-auto " +
+        "group flex gap-4 py-4 w-full max-w-[768px] mx-auto " +
         (isUser ? "justify-end" : "justify-start")
       }
     >
@@ -230,31 +243,45 @@ function MessageBubble({
         {!isUser && graphViz && <RelationshipGraphView graph={graphViz} />}
 
         {!isUser && sources.length > 0 && (
-          <div className="flex flex-wrap gap-x-2.5 gap-y-1.5 mt-4 pt-3 border-t border-border-light text-xs text-text-muted">
-            <span className="text-text-muted shrink-0">引用</span>
-            {message.meta?.source_refs?.length ? (
-              message.meta.source_refs.map((ref, idx) => {
-                const label =
-                  (ref.source || "").split(/[/\\]/).pop() || ref.source || ref.parent_id || `来源${idx + 1}`;
-                if (ref.parent_id) {
+          <div className="mt-4 pt-3 border-t border-border-light">
+            <p className="mb-2 text-xs font-medium text-text-muted">引用来源</p>
+            <div className="flex flex-wrap gap-1.5 text-xs">
+              {message.meta?.source_refs?.length ? (
+                message.meta.source_refs.map((ref, idx) => {
+                  const label =
+                    (ref.source || "").split(/[/\\]/).pop() || ref.source || ref.parent_id || `来源${idx + 1}`;
+                  if (ref.parent_id) {
+                    return (
+                      <SourcePreviewButton
+                        key={`${ref.parent_id}-${idx}`}
+                        parentId={ref.parent_id}
+                        label={label}
+                        department={userDepartment}
+                      />
+                    );
+                  }
                   return (
-                    <SourcePreviewButton
-                      key={`${ref.parent_id}-${idx}`}
-                      parentId={ref.parent_id}
-                      label={label}
-                      department={userDepartment}
-                    />
+                    <span
+                      key={`${label}-${idx}`}
+                      className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-border bg-surface-muted px-2.5 py-1 text-text-muted"
+                    >
+                      <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      <span className="truncate">{label}</span>
+                    </span>
                   );
-                }
-                return (
-                  <span key={`${label}-${idx}`} className="break-all">
-                    {label}
+                })
+              ) : (
+                sources.map((label, idx) => (
+                  <span
+                    key={`${label}-${idx}`}
+                    className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-border bg-surface-muted px-2.5 py-1 text-text-muted"
+                  >
+                    <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    <span className="truncate">{label}</span>
                   </span>
-                );
-              })
-            ) : (
-              <span className="break-all">{sources.join(" · ")}</span>
-            )}
+                ))
+              )}
+            </div>
           </div>
         )}
 
@@ -298,41 +325,47 @@ function MessageBubble({
         )}
 
         {!isUser && !streaming && (
-          <div className="flex gap-1 mt-2.5 opacity-0 hover:opacity-100 focus-within:opacity-100 transition-opacity">
+          <div className="flex items-center gap-1 mt-2.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
             <button
               type="button"
               onClick={handleThumbsUp}
               disabled={feedback !== null || submitting}
+              aria-label="有帮助"
               className={
-                "text-xs px-2.5 py-1 rounded-md cursor-pointer " +
+                "inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md cursor-pointer transition-colors disabled:opacity-60 " +
                 (feedback === 1
                   ? "bg-success-bg text-success"
-                  : "bg-surface-muted text-text-muted hover:bg-border hover:text-text")
+                  : "text-text-muted hover:bg-surface-muted hover:text-text")
               }
-              title="有帮助"
             >
-              👍
+              <ThumbsUp className="h-3.5 w-3.5" aria-hidden />
             </button>
             <button
               type="button"
               onClick={handleThumbsDown}
               disabled={feedback !== null || submitting || showCorrection}
+              aria-label="没帮助"
               className={
-                "text-xs px-2.5 py-1 rounded-md cursor-pointer " +
+                "inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md cursor-pointer transition-colors disabled:opacity-60 " +
                 (feedback === 0
                   ? "bg-warning-bg text-warning"
-                  : "bg-surface-muted text-text-muted hover:bg-border hover:text-text")
+                  : "text-text-muted hover:bg-surface-muted hover:text-text")
               }
-              title="没帮助"
             >
-              👎
+              <ThumbsDown className="h-3.5 w-3.5" aria-hidden />
             </button>
             <button
               type="button"
-              onClick={() => navigator.clipboard.writeText(body)}
-              className="text-xs px-2.5 py-1 rounded-md bg-surface-muted text-text-muted hover:bg-border hover:text-text cursor-pointer"
+              onClick={handleCopy}
+              aria-label="复制回答"
+              className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md cursor-pointer transition-colors text-text-muted hover:bg-surface-muted hover:text-text"
             >
-              复制
+              {copied ? (
+                <Check className="h-3.5 w-3.5 text-success" aria-hidden />
+              ) : (
+                <Copy className="h-3.5 w-3.5" aria-hidden />
+              )}
+              {copied ? "已复制" : "复制"}
             </button>
           </div>
         )}

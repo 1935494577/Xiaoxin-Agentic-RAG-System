@@ -98,9 +98,24 @@ describe("MessageBubble", () => {
       meta: { sources: ["doc1.pdf", "doc2.md"] },
     };
     render(React.createElement(MessageBubble, { message: msg }));
-    expect(screen.getByText("引用")).toBeTruthy();
+    expect(screen.getByText("引用来源")).toBeTruthy();
     expect(screen.getByText(/doc1.pdf/)).toBeTruthy();
     expect(screen.getByText(/doc2.md/)).toBeTruthy();
+  });
+
+  it("renders citations as chips with file icon", () => {
+    const msg = {
+      role: "assistant" as const,
+      content: "带引用的回答",
+      meta: {
+        source_refs: [{ parent_id: "p1", source: "docs/制度手册.pdf" }],
+      },
+    };
+    render(React.createElement(MessageBubble, { message: msg }));
+    const chip = screen.getByRole("button", { name: /制度手册\.pdf/ });
+    expect(chip.className).toContain("border");
+    expect(chip.className).toContain("rounded-lg");
+    expect(chip.querySelector("svg")).toBeTruthy();
   });
 
   it("strips footnote citations from displayed content", () => {
@@ -138,17 +153,38 @@ describe("MessageBubble", () => {
   it("shows feedback buttons for assistant messages (not streaming)", () => {
     const msg = { role: "assistant" as const, content: "回答" };
     render(React.createElement(MessageBubble, { message: msg }));
-    expect(screen.getByText("👍")).toBeTruthy();
-    expect(screen.getByText("👎")).toBeTruthy();
-    expect(screen.getByText("复制")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "有帮助" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "没帮助" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "复制回答" })).toBeTruthy();
+  });
+
+  it("reveals action row on message hover (group-hover)", () => {
+    const msg = { role: "assistant" as const, content: "回答" };
+    const { container } = render(React.createElement(MessageBubble, { message: msg }));
+    const group = container.querySelector(".group");
+    expect(group).toBeTruthy();
+    const actionRow = screen.getByRole("button", { name: "复制回答" }).parentElement;
+    expect(actionRow?.className).toContain("group-hover:opacity-100");
+  });
+
+  it("copies answer and shows copied state", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    const msg = { role: "assistant" as const, content: "要复制的回答" };
+    render(React.createElement(MessageBubble, { message: msg }));
+    fireEvent.click(screen.getByRole("button", { name: "复制回答" }));
+    expect(writeText).toHaveBeenCalledWith("要复制的回答");
+    await waitFor(() => {
+      expect(screen.getByText("已复制")).toBeTruthy();
+    });
   });
 
   it("hides feedback buttons when streaming", () => {
     const msg = { role: "assistant" as const, content: "部分" };
     render(React.createElement(MessageBubble, { message: msg, streaming: true }));
-    expect(screen.queryByText("👍")).toBeNull();
-    expect(screen.queryByText("👎")).toBeNull();
-    expect(screen.queryByText("复制")).toBeNull();
+    expect(screen.queryByRole("button", { name: "有帮助" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "没帮助" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "复制回答" })).toBeNull();
   });
 
   it("calls submitFeedback on thumbs up", async () => {
@@ -159,7 +195,7 @@ describe("MessageBubble", () => {
       meta: { trace_id: "trace_123" },
     };
     render(React.createElement(MessageBubble, { message: msg }));
-    fireEvent.click(screen.getByText("👍"));
+    fireEvent.click(screen.getByRole("button", { name: "有帮助" }));
     expect(mockSubmitFeedback).toHaveBeenCalledWith(
       expect.objectContaining({
         user_id: "test_user_id",
@@ -174,7 +210,7 @@ describe("MessageBubble", () => {
     mockSubmitFeedback.mockResolvedValue(undefined);
     const msg = { role: "assistant" as const, content: "回答" };
     render(React.createElement(MessageBubble, { message: msg }));
-    fireEvent.click(screen.getByText("👎"));
+    fireEvent.click(screen.getByRole("button", { name: "没帮助" }));
     expect(screen.getByPlaceholderText(/例如/)).toBeTruthy();
     fireEvent.click(screen.getByText("跳过"));
     await waitFor(() => {
@@ -191,7 +227,7 @@ describe("MessageBubble", () => {
     mockSubmitFeedback.mockResolvedValue(undefined);
     const msg = { role: "assistant" as const, content: "回答" };
     render(React.createElement(MessageBubble, { message: msg }));
-    fireEvent.click(screen.getByText("👎"));
+    fireEvent.click(screen.getByRole("button", { name: "没帮助" }));
     fireEvent.change(screen.getByPlaceholderText(/例如/), {
       target: { value: "制度已过期" },
     });
@@ -210,12 +246,12 @@ describe("MessageBubble", () => {
     mockSubmitFeedback.mockResolvedValue(undefined);
     const msg = { role: "assistant" as const, content: "回答" };
     render(React.createElement(MessageBubble, { message: msg }));
-    fireEvent.click(screen.getByText("👍"));
+    fireEvent.click(screen.getByRole("button", { name: "有帮助" }));
     await waitFor(() => {
-      expect((screen.getByText("👍") as HTMLButtonElement).disabled).toBe(true);
+      expect((screen.getByRole("button", { name: "有帮助" }) as HTMLButtonElement).disabled).toBe(true);
     });
-    expect((screen.getByText("👎") as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(screen.getByText("👍"));
+    expect((screen.getByRole("button", { name: "没帮助" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "有帮助" }));
     expect(mockSubmitFeedback).toHaveBeenCalledTimes(1);
   });
 
@@ -223,9 +259,9 @@ describe("MessageBubble", () => {
     mockSubmitFeedback.mockRejectedValue(new Error("Network error"));
     const msg = { role: "assistant" as const, content: "回答" };
     render(React.createElement(MessageBubble, { message: msg }));
-    fireEvent.click(screen.getByText("👍"));
+    fireEvent.click(screen.getByRole("button", { name: "有帮助" }));
     await waitFor(() => {
-      expect((screen.getByText("👍") as HTMLButtonElement).disabled).toBe(false);
+      expect((screen.getByRole("button", { name: "有帮助" }) as HTMLButtonElement).disabled).toBe(false);
     });
   });
 

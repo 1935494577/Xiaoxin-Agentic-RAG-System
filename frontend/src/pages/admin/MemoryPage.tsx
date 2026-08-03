@@ -11,6 +11,7 @@ import { Switch } from "../../components/ui/Switch";
 import { Slider } from "../../components/ui/Slider";
 import { Textarea } from "../../components/ui/Textarea";
 import { Tabs } from "../../components/ui/Tabs";
+import { SkeletonCard } from "../../components/ui/Skeleton";
 import { toast } from "sonner";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
@@ -137,7 +138,11 @@ export default function MemoryPage() {
   };
 
   if (isLoading) {
-    return <div className="p-6 text-text-muted text-sm">加载中...</div>;
+    return (
+      <div className="p-6 max-w-[900px] space-y-4">
+        <SkeletonCard rows={4} />
+      </div>
+    );
   }
 
   if (error) {

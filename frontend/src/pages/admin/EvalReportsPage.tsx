@@ -10,6 +10,7 @@ import { PageHeader } from "../../components/admin/PageHeader";
 import { SectionGuide, ToolbarSection } from "../../components/admin/SectionGuide";
 import { EVAL_REPORTS_HELP, METRIC_LABELS_ZH } from "../../lib/adminHelp";
 import { Badge } from "../../components/ui/Badge";
+import { SkeletonCard } from "../../components/ui/Skeleton";
 import { Button } from "../../components/ui/Button";
 import { toast } from "sonner";
 
@@ -107,7 +108,7 @@ export default function EvalReportsPage() {
         </span>
       </ToolbarSection>
 
-      {isLoading && <p className="text-sm text-text-muted">加载中...</p>}
+      {isLoading && <SkeletonCard rows={4} />}
       {error && <p className="text-sm text-warning">无法加载评测报告。</p>}
       {!isLoading && !error && items.length === 0 && (
         <p className="text-sm text-text-muted py-8 text-center max-w-lg mx-auto leading-relaxed">

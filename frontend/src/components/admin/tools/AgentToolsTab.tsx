@@ -5,6 +5,7 @@ import type { AgentToolsSave } from "../../../api/types";
 import { formatAdminLoadError } from "../../../lib/adminLoadError";
 import { Button } from "../../ui/Button";
 import { Switch } from "../../ui/Switch";
+import { SkeletonCard } from "../../ui/Skeleton";
 import { toast } from "sonner";
 
 export function AgentToolsTab() {
@@ -52,7 +53,7 @@ export function AgentToolsTab() {
   };
 
   if (isLoading) {
-    return <p className="text-text-muted text-sm">加载中...</p>;
+    return <SkeletonCard rows={3} />;
   }
 
   if (error) {

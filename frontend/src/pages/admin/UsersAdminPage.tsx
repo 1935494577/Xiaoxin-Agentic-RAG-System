@@ -8,6 +8,7 @@ import {
   type AdminUserRow,
 } from "../../api/client";
 import { PageHeader } from "../../components/admin/PageHeader";
+import { Skeleton } from "../../components/ui/Skeleton";
 import { Button } from "../../components/ui/Button";
 import { Dialog } from "../../components/ui/Dialog";
 import { DEPT_OPTIONS } from "../../lib/constants";
@@ -66,7 +67,12 @@ export default function UsersAdminPage() {
       />
 
       {isLoading ? (
-        <p className="text-sm text-text-muted">加载中…</p>
+        <div className="admin-panel p-4 space-y-3 mb-6" role="status" aria-label="加载中">
+          <Skeleton className="h-4 w-1/3" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-2/3" />
+        </div>
       ) : error ? (
         <p className="text-sm text-error">加载失败</p>
       ) : (

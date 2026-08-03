@@ -56,7 +56,7 @@ describe("MemoryPage", () => {
   it("renders loading state initially", () => {
     vi.mocked(client.fetchUiConfig).mockReturnValue(new Promise(() => {}));
     render(wrapper(React.createElement(MemoryPage)));
-    expect(screen.getByText("加载中...")).toBeTruthy();
+    expect(screen.getByRole("status")).toBeTruthy();
   });
 
   it("shows error when API fails", async () => {

@@ -11,6 +11,7 @@ import {
 } from "../../api/client";
 import { PageHeader } from "../../components/admin/PageHeader";
 import { Badge } from "../../components/ui/Badge";
+import { SkeletonCard } from "../../components/ui/Skeleton";
 import { Button } from "../../components/ui/Button";
 import { Dialog } from "../../components/ui/Dialog";
 import { toast } from "sonner";
@@ -166,7 +167,7 @@ export default function ChannelsPage() {
         </Button>
       </PageHeader>
 
-      {loading ? <p className="text-sm text-text-muted">加载中…</p> : null}
+      {loading ? <SkeletonCard rows={3} /> : null}
       {error ? (
         <p className="text-sm text-red-600">
           {error instanceof Error ? error.message : "无法加载渠道配置"}

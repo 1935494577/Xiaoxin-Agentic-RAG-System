@@ -500,6 +500,3 @@ export function TalentEditorialMascots({
     </div>
   );
 }
-
-export type { AnimatedCharacterMascotsProps } from "./animated-characters-login-page";
-export { AnimatedCharacterMascots } from "./animated-characters-login-page";

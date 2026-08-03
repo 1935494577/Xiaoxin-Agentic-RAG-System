@@ -13,6 +13,7 @@ import {
 import { Button } from "../../components/ui/Button";
 import { Switch } from "../../components/ui/Switch";
 import { Textarea } from "../../components/ui/Textarea";
+import { SkeletonCard } from "../../components/ui/Skeleton";
 import { toast } from "sonner";
 
 const SCOPE_LABELS: Record<string, string> = {
@@ -137,7 +138,11 @@ export default function PromptPage() {
   const categories = (data as Record<string, unknown>)?.categories as Record<string, string> ?? {};
 
   if (isLoading) {
-    return <div className="p-6 text-text-muted text-sm">加载中...</div>;
+    return (
+      <div className="p-6 max-w-[1100px] space-y-4">
+        <SkeletonCard rows={4} />
+      </div>
+    );
   }
 
   if (error) {

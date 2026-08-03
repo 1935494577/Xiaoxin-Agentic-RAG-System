@@ -17,6 +17,7 @@ import { SectionGuide, ToolbarSection } from "../../components/admin/SectionGuid
 import { ACTION_LABELS_ZH, FEEDBACK_PAGE_HELP } from "../../lib/adminHelp";
 import { parseFeedbackTrace } from "../../lib/traceView";
 import { Badge } from "../../components/ui/Badge";
+import { SkeletonCard } from "../../components/ui/Skeleton";
 import { Button } from "../../components/ui/Button";
 import { useAuth } from "../../hooks/useAuth";
 import { canPerformAdminAction } from "../../lib/adminRoles";
@@ -296,7 +297,7 @@ export default function FeedbackInboxPage() {
         </p>
       )}
 
-      {isLoading && <p className="text-sm text-text-muted">加载中...</p>}
+      {isLoading && <SkeletonCard rows={4} />}
       {error && (
         <p className="text-sm text-warning">无法加载反馈列表，请确认 API 已启动。</p>
       )}

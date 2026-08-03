@@ -5,6 +5,7 @@ import {
   listIngestedSources,
 } from "../../api/client";
 import { Dialog } from "../../components/ui/Dialog";
+import { SkeletonCard } from "../../components/ui/Skeleton";
 import { toast } from "sonner";
 
 export function IngestedSourcesTab() {
@@ -28,7 +29,7 @@ export function IngestedSourcesTab() {
   });
 
   if (isLoading) {
-    return <p className="text-sm text-text-muted">加载中…</p>;
+    return <SkeletonCard rows={3} />;
   }
   if (error) {
     return <p className="text-sm text-error">无法加载已入库文档列表</p>;

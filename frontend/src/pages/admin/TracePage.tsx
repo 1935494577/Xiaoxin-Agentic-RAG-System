@@ -1,9 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
+import { CheckCircle2, Circle } from "lucide-react";
 import { fetchTraceStatus } from "../../api/client";
 import type { TraceStatus } from "../../api/types";
 import { PageHeader } from "../../components/admin/PageHeader";
 import { MetricCard } from "../../components/admin/MetricCard";
 import { Badge } from "../../components/ui/Badge";
+import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/Card";
+import { SkeletonCard } from "../../components/ui/Skeleton";
 
 export default function TracePage() {
   const { data: trace, isLoading, error } = useQuery({
@@ -13,7 +16,12 @@ export default function TracePage() {
   });
 
   if (isLoading) {
-    return <div className="p-6 text-text-muted text-sm">加载中...</div>;
+    return (
+      <div className="p-6 max-w-[900px] space-y-4">
+        <SkeletonCard rows={2} />
+        <SkeletonCard rows={4} />
+      </div>
+    );
   }
 
   if (error || !trace) {
@@ -65,19 +73,27 @@ export default function TracePage() {
         ) : null}
 
         {!tr.langfuse_enabled && tr.langfuse_tracing ? (
-          <div className="text-sm text-text-muted space-y-1">
-            <p className="font-medium text-text">Langfuse 检查项</p>
-            {[
-              { label: "LANGFUSE_TRACING=true", ok: Boolean(tr.langfuse_tracing) },
-              { label: "LANGFUSE_PUBLIC_KEY + SECRET_KEY", ok: Boolean(tr.langfuse_configured) },
-              { label: "langfuse 包已安装", ok: Boolean(tr.langfuse_package_installed) },
-            ].map((item) => (
-              <div key={item.label} className="flex items-center gap-2">
-                <span>{item.ok ? "✅" : "⬜"}</span>
-                <span>{item.label}</span>
-              </div>
-            ))}
-          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Langfuse 检查项</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-text-muted">
+              {[
+                { label: "LANGFUSE_TRACING=true", ok: Boolean(tr.langfuse_tracing) },
+                { label: "LANGFUSE_PUBLIC_KEY + SECRET_KEY", ok: Boolean(tr.langfuse_configured) },
+                { label: "langfuse 包已安装", ok: Boolean(tr.langfuse_package_installed) },
+              ].map((item) => (
+                <div key={item.label} className="flex items-center gap-2">
+                  {item.ok ? (
+                    <CheckCircle2 className="h-4 w-4 text-success" aria-label="已完成" />
+                  ) : (
+                    <Circle className="h-4 w-4 text-text-muted/60" aria-label="未完成" />
+                  )}
+                  <span className={item.ok ? "text-text" : undefined}>{item.label}</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
         ) : null}
 
         <div>

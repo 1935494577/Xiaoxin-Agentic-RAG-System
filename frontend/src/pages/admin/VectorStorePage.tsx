@@ -10,6 +10,7 @@ import type { VectorStore } from "../../api/types";
 import { PageHeader } from "../../components/admin/PageHeader";
 import { Button } from "../../components/ui/Button";
 import { Badge } from "../../components/ui/Badge";
+import { SkeletonCard } from "../../components/ui/Skeleton";
 import { Dialog } from "../../components/ui/Dialog";
 import { Select } from "../../components/ui/Select";
 import { toast } from "sonner";
@@ -81,7 +82,11 @@ export default function VectorStorePage() {
   const defaultName = `${String(curModel).split("/").pop()}-${curDim}维`;
 
   if (isLoading) {
-    return <div className="p-6 text-text-muted text-sm">加载中...</div>;
+    return (
+      <div className="p-6 max-w-[860px]">
+        <SkeletonCard rows={4} />
+      </div>
+    );
   }
 
   if (error) {
@@ -108,7 +113,11 @@ export default function VectorStorePage() {
               <strong>当前使用：</strong>
               {active.name} · {active.backend_label} · {active.vector_count ?? 0} 条向量 · 索引{" "}
               {active.embedding_dim ?? "—"} 维 / 模型 {active.current_embedding_dim ?? "—"} 维
-              {active.compatible !== false ? " · ✅ 兼容" : " · ⚠️ 维度不匹配，请新建库并重新入库"}
+              {active.compatible !== false ? (
+                <span className="text-success"> · 兼容</span>
+              ) : (
+                <span className="text-warning"> · 维度不匹配，请新建库并重新入库</span>
+              )}
             </p>
           </div>
         )}

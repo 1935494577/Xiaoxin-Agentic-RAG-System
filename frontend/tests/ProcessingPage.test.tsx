@@ -38,7 +38,7 @@ describe("ProcessingPage", () => {
     render(wrapper(React.createElement(ProcessingPage)));
     expect(screen.getByText("入库工具")).toBeTruthy();
     expect(screen.getByText("对话工具")).toBeTruthy();
-    expect(screen.getByText("加载中...")).toBeTruthy();
+    expect(screen.getAllByRole("status").length).toBeGreaterThan(0);
   });
 
   it("shows ingest tools from API", async () => {

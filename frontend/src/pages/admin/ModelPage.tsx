@@ -13,6 +13,7 @@ import type { ModelProfile } from "../../api/types";
 import { PageHeader } from "../../components/admin/PageHeader";
 import { Button } from "../../components/ui/Button";
 import { Badge } from "../../components/ui/Badge";
+import { SkeletonCard } from "../../components/ui/Skeleton";
 import { Dialog } from "../../components/ui/Dialog";
 import { toast } from "sonner";
 
@@ -167,7 +168,11 @@ export default function ModelPage() {
   };
 
   if (isLoading) {
-    return <div className="p-6 text-text-muted text-sm">加载中...</div>;
+    return (
+      <div className="p-6 max-w-[900px] space-y-4">
+        <SkeletonCard rows={4} />
+      </div>
+    );
   }
 
   if (error) {
