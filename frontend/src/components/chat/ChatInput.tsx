@@ -1,5 +1,5 @@
 import { type KeyboardEvent, useRef, useEffect, useCallback } from "react";
-import { Mic, Square } from "lucide-react";
+import { Mic, SendHorizontal, Square } from "lucide-react";
 import { useSpeechInput } from "../../hooks/useSpeechInput";
 
 type Props = {
@@ -68,7 +68,7 @@ export function ChatInput({
         : "语音输入";
 
   return (
-    <div className="w-full max-w-[820px] mx-auto flex gap-2.5 items-center bg-surface-muted border border-border rounded-[20px] px-[18px] py-2.5 shadow-sm transition-all focus-within:border-brand focus-within:shadow-[0_2px_16px_rgba(21,101,192,0.12)]">
+    <div className="w-full max-w-[820px] mx-auto flex gap-2.5 items-center bg-surface-muted border border-border rounded-[20px] px-[18px] py-2.5 shadow-raised transition-all focus-within:border-brand focus-within:bg-surface focus-within:shadow-[0_2px_16px_rgba(21,101,192,0.12)]">
       <textarea
         ref={ref}
         rows={1}
@@ -101,8 +101,9 @@ export function ChatInput({
         <button
           type="button"
           onClick={onStop}
-          className="border-none bg-error text-white rounded-[10px] px-4 py-2 text-sm font-medium cursor-pointer shrink-0"
+          className="inline-flex items-center gap-1.5 border-none bg-error text-white rounded-[10px] px-4 py-2 text-sm font-medium cursor-pointer shrink-0 transition-opacity hover:opacity-90"
         >
+          <Square className="h-3.5 w-3.5" aria-hidden />
           停止
         </button>
       ) : (
@@ -110,8 +111,9 @@ export function ChatInput({
           type="button"
           onClick={onSend}
           disabled={!value.trim() || busy}
-          className="border-none bg-brand text-white rounded-xl px-[18px] py-2 text-sm font-medium cursor-pointer shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-1.5 border-none bg-brand text-white rounded-xl px-[18px] py-2 text-sm font-medium cursor-pointer shrink-0 transition-all hover:bg-brand-dark active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed"
         >
+          <SendHorizontal className="h-4 w-4" aria-hidden />
           发送
         </button>
       )}

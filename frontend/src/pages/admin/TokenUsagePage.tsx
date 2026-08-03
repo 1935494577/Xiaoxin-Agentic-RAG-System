@@ -1,10 +1,12 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
+import { ThumbsDown, ThumbsUp } from "lucide-react";
 import { PageHeader } from "../../components/admin/PageHeader";
 import { MetricCard } from "../../components/admin/MetricCard";
 import { Button } from "../../components/ui/Button";
 import { Badge } from "../../components/ui/Badge";
+import { SkeletonCard } from "../../components/ui/Skeleton";
 import {
   fetchOpsDigest,
   fetchTokenUsageSummary,
@@ -89,7 +91,7 @@ export default function TokenUsagePage() {
         </p>
       </div>
 
-      {isLoading ? <p className="text-sm text-text-muted">加载中…</p> : null}
+      {isLoading ? <SkeletonCard rows={3} /> : null}
 
       {error ? (
         <p className="text-sm text-warning mb-4">加载失败：{(error as Error).message || "未知错误"}</p>
@@ -109,8 +111,18 @@ export default function TokenUsagePage() {
             />
             <MetricCard label="今日 LLM 调用" value={String(digest.token_usage.total_calls || 0)} />
             <MetricCard label="反馈总数" value={String(digest.feedback.total || 0)} />
-            <MetricCard label="👍 好评" value={String(digest.feedback.positive || 0)} />
-            <MetricCard label="👎 差评" value={String(digest.feedback.negative || 0)} />
+            <MetricCard
+              label="好评"
+              value={String(digest.feedback.positive || 0)}
+              icon={ThumbsUp}
+              variant="success"
+            />
+            <MetricCard
+              label="差评"
+              value={String(digest.feedback.negative || 0)}
+              icon={ThumbsDown}
+              variant="warning"
+            />
             <MetricCard label="检索未命中" value={String(digest.feedback.retrieval_miss || 0)} />
           </div>
           <p className="text-xs text-text-muted">

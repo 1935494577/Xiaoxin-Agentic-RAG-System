@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { FileText } from "lucide-react";
 import { Dialog } from "../ui/Dialog";
+import { Skeleton } from "../ui/Skeleton";
 import { fetchSourcePreview } from "../../api/client";
 
 type Props = {
@@ -35,14 +37,20 @@ export function SourcePreviewButton({ parentId, label, department }: Props) {
       <button
         type="button"
         onClick={openPreview}
-        className="text-brand hover:underline cursor-pointer break-all text-left"
+        className="inline-flex max-w-full cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1 text-left text-xs text-text transition-all hover:border-brand/40 hover:bg-brand-light/60 hover:text-brand"
       >
-        {label}
+        <FileText className="h-3.5 w-3.5 shrink-0 text-text-muted" aria-hidden />
+        <span className="truncate">{label}</span>
       </button>
       <Dialog open={open} onClose={() => setOpen(false)} title="引用原文" confirmLabel="关闭">
         <div className="space-y-3 text-sm max-h-[60vh] overflow-y-auto">
           {loading ? (
-            <p className="text-text-muted">加载中…</p>
+            <div className="space-y-2 py-1" role="status" aria-label="加载中">
+              <Skeleton className="h-3 w-2/3" />
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-1/2" />
+            </div>
           ) : (
             <>
               {meta ? <p className="text-xs text-text-muted break-all">{meta}</p> : null}

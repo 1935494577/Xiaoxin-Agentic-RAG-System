@@ -92,6 +92,19 @@ describe("SessionList", () => {
     expect(inactiveBtn?.className).not.toContain("bg-brand-light");
   });
 
+  it("groups sessions by date with group labels", () => {
+    const today = new Date().toISOString();
+    const sessions = [
+      { id: "s1", title: "今天的对话", updated_at: today },
+      { id: "s2", title: "老对话", updated_at: "2020-01-01T00:00:00" },
+    ];
+    render(React.createElement(SessionList, { ...baseProps, sessions }));
+    expect(screen.getByText("今天")).toBeTruthy();
+    expect(screen.getByText("更早")).toBeTruthy();
+    expect(screen.getByText("今天的对话")).toBeTruthy();
+    expect(screen.getByText("老对话")).toBeTruthy();
+  });
+
   it("renders empty session list gracefully", () => {
     render(React.createElement(SessionList, baseProps));
     // No session items rendered — no crash

@@ -1,5 +1,6 @@
 import { MessageSquarePlus } from "lucide-react";
 import type { ChatSession } from "../../api/types";
+import { groupSessionsByDate } from "../../lib/sessionGroups";
 
 type Props = {
   sessions: ChatSession[];
@@ -50,21 +51,37 @@ export function SessionList({
             </p>
           </div>
         ) : (
-          sessions.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => onSelect(s.id)}
-              className={
-                "mb-1 w-full cursor-pointer truncate rounded-lg px-3 py-2.5 text-left text-sm transition-colors " +
-                (s.id === activeId
-                  ? "bg-brand-light font-medium text-brand"
-                  : "text-text hover:bg-white/70")
-              }
-              title={s.title}
-            >
-              {s.title || "新对话"}
-            </button>
+          groupSessionsByDate(sessions).map((group) => (
+            <div key={group.key} className="mb-2">
+              <p className="px-3 pb-1 pt-2 text-[11px] font-medium tracking-wide text-text-muted/70">
+                {group.label}
+              </p>
+              {group.items.map((s) => {
+                const active = s.id === activeId;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => onSelect(s.id)}
+                    className={
+                      "relative mb-0.5 w-full cursor-pointer truncate rounded-lg px-3 py-2.5 text-left text-sm transition-colors " +
+                      (active
+                        ? "bg-brand-light font-medium text-brand"
+                        : "text-text hover:bg-white/70")
+                    }
+                    title={s.title}
+                  >
+                    {active ? (
+                      <span
+                        aria-hidden
+                        className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-full bg-brand"
+                      />
+                    ) : null}
+                    {s.title || "新对话"}
+                  </button>
+                );
+              })}
+            </div>
           ))
         )}
       </div>
