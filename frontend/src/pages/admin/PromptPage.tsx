@@ -187,7 +187,7 @@ export default function PromptPage() {
                     "px-3 py-1.5 rounded-full text-sm border transition-colors cursor-pointer " +
                     (active
                       ? "bg-brand text-white border-brand"
-                      : "bg-white text-text border-border hover:border-brand/50")
+                      : "bg-surface text-text border-border hover:border-brand/50")
                   }
                 >
                   {preset.label}
@@ -198,7 +198,7 @@ export default function PromptPage() {
         </div>
 
         {/* Reasoning mode — de-emphasized for KB-only users */}
-        <details className="rounded-xl border border-border bg-white/60 px-4 py-3">
+        <details className="rounded-xl border border-border bg-surface/60 px-4 py-3">
           <summary className="text-sm font-semibold text-text cursor-pointer select-none">
             高级 · 思考方式（仅通用回答 / 工具路径）
           </summary>
@@ -218,7 +218,7 @@ export default function PromptPage() {
                     "text-left p-3 rounded-xl border transition-colors cursor-pointer " +
                     (active
                       ? "border-brand bg-brand-light/40 ring-1 ring-brand/30"
-                      : "border-border bg-white hover:border-brand/40")
+                      : "border-border bg-surface hover:border-brand/40")
                   }
                 >
                   <div className="text-sm font-medium text-text">{opt.label}</div>
@@ -238,7 +238,7 @@ export default function PromptPage() {
               <select
                 value={mode}
                 onChange={(e) => setMode(e.target.value)}
-                className="h-9 rounded-lg border border-border bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20"
+                className="h-9 rounded-lg border border-border bg-surface px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20"
               >
                 <option value="kb">{PREVIEW_MODE_LABELS.kb}</option>
                 <option value="general">{PREVIEW_MODE_LABELS.general}</option>
@@ -297,7 +297,7 @@ export default function PromptPage() {
                     <details
                       key={slot.id}
                       open={expandAll || cat === "persona"}
-                      className="border border-border rounded-xl bg-white"
+                      className="border border-border rounded-xl bg-surface"
                     >
                       <summary className="px-4 py-3 cursor-pointer select-none hover:bg-surface-muted rounded-xl flex items-center justify-between gap-2">
                         <span className="text-sm font-medium text-text">
@@ -349,7 +349,7 @@ export default function PromptPage() {
                               onChange={(e) =>
                                 updateSlot(slot.id, { order: Number(e.target.value) })
                               }
-                              className="w-20 h-8 rounded border border-border bg-white px-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-brand/20"
+                              className="w-20 h-8 rounded border border-border bg-surface px-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-brand/20"
                             />
                           </label>
 
@@ -391,7 +391,7 @@ export default function PromptPage() {
                             value={slot.label}
                             onChange={(e) => updateSlot(slot.id, { label: e.target.value })}
                             placeholder="显示名称"
-                            className="w-full h-9 rounded-lg border border-border bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20"
+                            className="w-full h-9 rounded-lg border border-border bg-surface px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20"
                           />
                         )}
 
@@ -447,7 +447,7 @@ export default function PromptPage() {
                   ((data as Record<string, unknown>)?.preview as Record<string, unknown>)
                     ?.layers as Array<{ label: string; category: string; content: string }>
                 ).map((layer, i) => (
-                  <details key={i} className="text-sm border border-border rounded-lg bg-white">
+                  <details key={i} className="text-sm border border-border rounded-lg bg-surface">
                     <summary className="px-3 py-2 cursor-pointer text-text">
                       {layer.label}
                       <span className="text-text-muted text-xs ml-2">
@@ -530,14 +530,14 @@ function AddCustomSlot({
           value={id}
           onChange={(e) => setId(e.target.value)}
           placeholder="ID（小写英文+下划线），例如：compliance_policy"
-          className="h-9 rounded-lg border border-border bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20"
+          className="h-9 rounded-lg border border-border bg-surface px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20"
         />
         <input
           type="text"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
           placeholder="显示名称，例如：合规约束"
-          className="h-9 rounded-lg border border-border bg-white px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20"
+          className="h-9 rounded-lg border border-border bg-surface px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20"
         />
       </div>
       <div className="flex items-center gap-3">

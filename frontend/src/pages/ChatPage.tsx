@@ -228,7 +228,7 @@ export default function ChatPage() {
           <div className="bg-error-bg text-error text-sm text-center py-2">{error}</div>
         )}
 
-        <div className="flex-1 overflow-y-auto bg-white chat-scroll-area px-4 sm:px-6 pt-16 pb-4">
+        <div className="flex-1 overflow-y-auto bg-surface chat-scroll-area px-4 sm:px-6 pt-16 pb-4">
           <div className="min-h-full flex flex-col pb-2">
             {!displayMessages.length && !streaming && (
               <div className="chat-empty-state mx-auto my-auto max-w-lg py-12 text-center">
@@ -269,7 +269,7 @@ export default function ChatPage() {
                       key={opt.id}
                       type="button"
                       onClick={() => handleClarifyPick(opt.id)}
-                      className="chat-suggestion-chip cursor-pointer rounded-full border border-border bg-white px-3.5 py-2 text-left text-[13px] text-text transition-colors hover:border-brand hover:bg-brand-light"
+                      className="chat-suggestion-chip cursor-pointer rounded-full border border-border bg-surface px-3.5 py-2 text-left text-[13px] text-text transition-colors hover:border-brand hover:bg-brand-light"
                     >
                       {opt.label}
                     </button>
@@ -313,7 +313,7 @@ export default function ChatPage() {
           </div>
         </div>
 
-        <div className="border-t border-border bg-white px-5 pt-3 pb-5">
+        <div className="border-t border-border bg-surface px-5 pt-3 pb-5">
           <div className="mb-2.5">
             <ChatToolbar
               assistantMode={assistantMode}

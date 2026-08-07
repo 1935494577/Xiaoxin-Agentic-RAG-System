@@ -1350,7 +1350,7 @@ export default function ExamBankAssemblePage() {
               </p>
               <button
                 type="button"
-                className="rounded-md bg-white border px-3 py-1 text-sm"
+                className="rounded-md bg-surface border px-3 py-1 text-sm"
                 onClick={() => setPaperFullscreen(false)}
               >
                 关闭

@@ -39,24 +39,24 @@ export function FeedbackStatsPanel({ sinceDays = 7 }: Props) {
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-      <div className="rounded-lg border border-border bg-white p-3">
+      <div className="rounded-lg border border-border bg-surface p-3">
         <p className="text-xs text-text-muted">近 {data.since_days} 天反馈</p>
         <p className="text-2xl font-semibold text-text mt-1">{data.total}</p>
       </div>
-      <div className="rounded-lg border border-border bg-white p-3">
+      <div className="rounded-lg border border-border bg-surface p-3">
         <p className="text-xs text-text-muted">👍 有帮助</p>
         <p className="text-2xl font-semibold text-success mt-1">{data.positive}</p>
       </div>
-      <div className="rounded-lg border border-border bg-white p-3">
+      <div className="rounded-lg border border-border bg-surface p-3">
         <p className="text-xs text-text-muted">👎 没帮助</p>
         <p className="text-2xl font-semibold text-warning mt-1">{data.negative}</p>
       </div>
-      <div className="rounded-lg border border-border bg-white p-3">
+      <div className="rounded-lg border border-border bg-surface p-3">
         <p className="text-xs text-text-muted">待研判</p>
         <p className="text-2xl font-semibold text-brand mt-1">{data.pending_triage}</p>
       </div>
       {data.by_issue_type.length > 0 && (
-        <div className="col-span-2 sm:col-span-4 rounded-lg border border-border bg-white p-3">
+        <div className="col-span-2 sm:col-span-4 rounded-lg border border-border bg-surface p-3">
           <p className="text-xs text-text-muted mb-2">负反馈问题类型</p>
           <div className="flex flex-wrap gap-2">
             {data.by_issue_type.map((row) => (
@@ -68,7 +68,7 @@ export function FeedbackStatsPanel({ sinceDays = 7 }: Props) {
         </div>
       )}
       {data.by_status.length > 0 && (
-        <div className="col-span-2 sm:col-span-4 rounded-lg border border-border bg-white p-3">
+        <div className="col-span-2 sm:col-span-4 rounded-lg border border-border bg-surface p-3">
           <p className="text-xs text-text-muted mb-2">处理状态</p>
           <div className="flex flex-wrap gap-2">
             {data.by_status.map((row) => (

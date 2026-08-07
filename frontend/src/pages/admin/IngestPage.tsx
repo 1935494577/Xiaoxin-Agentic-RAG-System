@@ -138,7 +138,7 @@ export default function IngestPage() {
             accept={acceptExts}
             title="选择上传文件（可多选）"
             onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-            className="text-sm text-text file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border file:border-border file:bg-white file:text-sm file:text-text cursor-pointer"
+            className="text-sm text-text file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border file:border-border file:bg-surface file:text-sm file:text-text cursor-pointer"
           />
           {files.length > 0 && (
             <ul className="text-sm text-text-muted space-y-0.5">
@@ -222,7 +222,7 @@ export default function IngestPage() {
                               className={`px-3 py-1 text-xs rounded-full border cursor-pointer transition-colors ${
                                 active
                                   ? "bg-brand text-white border-brand"
-                                  : "bg-white text-text-muted border-border hover:border-brand hover:text-text"
+                                  : "bg-surface text-text-muted border-border hover:border-brand hover:text-text"
                               }`}
                             >
                               {tag}
@@ -237,7 +237,7 @@ export default function IngestPage() {
                       value={customTags}
                       onChange={(e) => setCustomTags(e.target.value)}
                       placeholder="自定义标签（逗号分隔），例如：2024春季, 销售手册"
-                      className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
+                      className="flex h-10 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
                     />
 
                     {allTags.length > 0 && (
@@ -304,13 +304,13 @@ export default function IngestPage() {
         </Link>
         <Link
           to="/admin/exam-bank/manage"
-          className="inline-flex items-center justify-center rounded-lg border border-border bg-white px-4 py-2 text-sm text-text hover:border-brand"
+          className="inline-flex items-center justify-center rounded-lg border border-border bg-surface px-4 py-2 text-sm text-text hover:border-brand"
         >
           题库管理
         </Link>
         <Link
           to="/admin/exam-bank/assemble"
-          className="inline-flex items-center justify-center rounded-lg border border-border bg-white px-4 py-2 text-sm text-text hover:border-brand"
+          className="inline-flex items-center justify-center rounded-lg border border-border bg-surface px-4 py-2 text-sm text-text hover:border-brand"
         >
           智能组卷
         </Link>

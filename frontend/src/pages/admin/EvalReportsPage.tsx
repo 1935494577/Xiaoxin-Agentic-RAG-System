@@ -126,7 +126,7 @@ export default function EvalReportsPage() {
         {items.map((item) => {
           const deltaKeys = Object.keys(item.delta || {});
           return (
-            <div key={item.id} className="border border-border rounded-lg p-4 bg-white shadow-sm">
+            <div key={item.id} className="border border-border rounded-lg p-4 bg-surface shadow-sm">
               <div className="flex flex-wrap items-center gap-2 mb-2">
                 <Badge variant={item.mode === "ragas" ? "success" : "default"}>
                   {item.mode === "ragas" ? "RAGAS 完整评测" : "简易重叠率（回退）"}

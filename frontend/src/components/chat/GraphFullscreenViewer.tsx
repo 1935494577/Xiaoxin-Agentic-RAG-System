@@ -54,7 +54,7 @@ export default function GraphFullscreenViewer({
         onClick={onClose}
         aria-hidden
       />
-      <div className="relative m-3 sm:m-5 flex flex-col flex-1 min-h-0 rounded-2xl bg-white shadow-2xl border border-border overflow-hidden">
+      <div className="relative m-3 sm:m-5 flex flex-col flex-1 min-h-0 rounded-2xl bg-surface shadow-2xl border border-border overflow-hidden">
         <header className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3 border-b border-border shrink-0">
           <div className="min-w-0">
             <h3 className="text-base font-semibold text-text truncate">人物关系网络</h3>

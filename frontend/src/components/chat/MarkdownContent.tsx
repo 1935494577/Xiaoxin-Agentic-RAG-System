@@ -27,7 +27,7 @@ const mdComponents: Components = {
   ),
   hr: () => <hr className="my-6 border-0 border-t border-border" />,
   table: ({ children }) => (
-    <div className="my-4 overflow-x-auto rounded-lg border border-border bg-white">
+    <div className="my-4 overflow-x-auto rounded-lg border border-border bg-surface">
       <table className="w-full min-w-[280px] text-sm border-collapse">{children}</table>
     </div>
   ),
@@ -55,7 +55,7 @@ const mdComponents: Components = {
     const isBlock = Boolean(className?.includes("language-"));
     if (isBlock) {
       return (
-        <pre className="my-3 rounded-lg bg-[#f6f8fa] border border-border px-4 py-3 overflow-x-auto text-[13px] leading-relaxed">
+        <pre className="my-3 rounded-lg bg-surface-muted border border-border px-4 py-3 overflow-x-auto text-[13px] leading-relaxed">
           <code className={className} {...props}>
             {children}
           </code>

@@ -45,7 +45,7 @@ export default function GraphNodeDetailPanel({ graph, node, onClose, className =
 
   return (
     <div
-      className={`rounded-xl border border-border bg-white/95 backdrop-blur-sm shadow-lg p-3 sm:p-4 space-y-3 max-h-[min(320px,45vh)] overflow-y-auto ${className}`}
+      className={`rounded-xl border border-border bg-surface/95 backdrop-blur-sm shadow-lg p-3 sm:p-4 space-y-3 max-h-[min(320px,45vh)] overflow-y-auto ${className}`}
       role="dialog"
       aria-label={`${node.label} 详情`}
     >

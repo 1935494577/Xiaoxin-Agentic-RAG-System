@@ -59,7 +59,7 @@ function ToolTraceRow({
         onClick={() => canCollapse && setExpanded((v) => !v)}
         className={
           "w-full flex items-start gap-2 px-3 py-2 text-left " +
-          (canCollapse ? "cursor-pointer hover:bg-white/50" : "cursor-default")
+          (canCollapse ? "cursor-pointer hover:bg-surface/50" : "cursor-default")
         }
       >
         {canCollapse ? (

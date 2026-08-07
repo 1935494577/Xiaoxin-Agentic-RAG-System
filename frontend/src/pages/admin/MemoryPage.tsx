@@ -48,7 +48,7 @@ function FieldHint({ children }: { children: ReactNode }) {
 function AdvancedBlock({ title, children }: { title: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="rounded-lg border border-border bg-white/60">
+    <div className="rounded-lg border border-border bg-surface/60">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -162,7 +162,7 @@ export default function MemoryPage() {
     : [];
 
   const inputCls =
-    "mt-1 flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand";
+    "mt-1 flex h-10 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand";
 
   const basicTab = (
     <div className="space-y-5">
@@ -459,7 +459,7 @@ export default function MemoryPage() {
       />
 
       {presetOptions.length > 0 && (
-        <section className="mt-4 rounded-lg border border-border bg-white/70 p-4">
+        <section className="mt-4 rounded-lg border border-border bg-surface/70 p-4">
           <h2 className="text-sm font-semibold text-text">业务场景预设</h2>
           <p className="text-xs text-text-muted mt-1 mb-3">
             一键写入混合专家、推理模式、流式检索等组合。应用后可在下方 Tab 微调并保存。

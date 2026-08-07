@@ -1,31 +1,86 @@
 ﻿@import "tailwindcss";
 
-/* ===== Design Tokens ===== */
-@theme {
-  --color-brand: #1565c0;
-  --color-brand-light: #e8f2fc;
-  --color-brand-dark: #0d47a1;
-  --color-accent: #f5b800;
-  --color-surface: #ffffff;
-  --color-surface-muted: #f4f6f9;
-  --color-surface-warm: #faf8f5;
-  --color-surface-warm-deep: #f3f0ea;
-  --color-border: #e4e8ef;
-  --color-border-warm: #ebe6df;
-  --color-border-light: #eef1f5;
-  --color-text: #1a1d21;
-  --color-text-muted: #5f6b7a;
-  --color-error: #c62828;
-  --color-error-bg: #ffebee;
-  --color-success: #2e7d32;
-  --color-success-bg: #e8f5e9;
-  --color-warning: #e65100;
-  --color-warning-bg: #fff3e0;
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ===== Design Tokens（引用运行时变量，支持 .dark 切换） ===== */
+@theme inline {
+  --color-brand: var(--brand);
+  --color-brand-light: var(--brand-light);
+  --color-brand-dark: var(--brand-dark);
+  --color-accent: var(--accent);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-surface-warm: var(--surface-warm);
+  --color-surface-warm-deep: var(--surface-warm-deep);
+  --color-border: var(--border-c);
+  --color-border-warm: var(--border-warm);
+  --color-border-light: var(--border-light);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-error: var(--error);
+  --color-error-bg: var(--error-bg);
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
 
   /* 阴影层级：卡片静态 → 悬浮提升 → 浮层覆盖 */
-  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.04);
-  --shadow-raised: 0 2px 8px -2px rgb(16 24 40 / 0.08), 0 1px 2px rgb(16 24 40 / 0.04);
-  --shadow-overlay: 0 12px 32px -12px rgb(16 24 40 / 0.18), 0 2px 8px rgb(16 24 40 / 0.06);
+  --shadow-card: var(--shadow-card-v);
+  --shadow-raised: var(--shadow-raised-v);
+  --shadow-overlay: var(--shadow-overlay-v);
+}
+
+:root {
+  --brand: #1565c0;
+  --brand-light: #e8f2fc;
+  --brand-dark: #0d47a1;
+  --accent: #f5b800;
+  --surface: #ffffff;
+  --surface-muted: #f4f6f9;
+  --surface-warm: #faf8f5;
+  --surface-warm-deep: #f3f0ea;
+  --border-c: #e4e8ef;
+  --border-warm: #ebe6df;
+  --border-light: #eef1f5;
+  --text: #1a1d21;
+  --text-muted: #5f6b7a;
+  --error: #c62828;
+  --error-bg: #ffebee;
+  --success: #2e7d32;
+  --success-bg: #e8f5e9;
+  --warning: #e65100;
+  --warning-bg: #fff3e0;
+
+  --shadow-card-v: 0 1px 2px rgb(16 24 40 / 0.04);
+  --shadow-raised-v: 0 2px 8px -2px rgb(16 24 40 / 0.08), 0 1px 2px rgb(16 24 40 / 0.04);
+  --shadow-overlay-v: 0 12px 32px -12px rgb(16 24 40 / 0.18), 0 2px 8px rgb(16 24 40 / 0.06);
+}
+
+/* 深色：深蓝灰底色，品牌色提亮，状态色走半透明底 */
+.dark {
+  --brand: #5ea3f0;
+  --brand-light: rgb(94 163 240 / 0.16);
+  --brand-dark: #3b82d6;
+  --accent: #ffd54f;
+  --surface: #171b22;
+  --surface-muted: #1f2430;
+  --surface-warm: #1f2430;
+  --surface-warm-deep: #262c38;
+  --border-c: #2b3240;
+  --border-warm: #333a49;
+  --border-light: #262c38;
+  --text: #e8eaf0;
+  --text-muted: #98a2b3;
+  --error: #ef7a7a;
+  --error-bg: rgb(198 40 40 / 0.18);
+  --success: #6fbf73;
+  --success-bg: rgb(46 125 50 / 0.2);
+  --warning: #ff9e57;
+  --warning-bg: rgb(230 81 0 / 0.18);
+
+  --shadow-card-v: 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-raised-v: 0 2px 8px -2px rgb(0 0 0 / 0.4), 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-overlay-v: 0 12px 32px -12px rgb(0 0 0 / 0.55), 0 2px 8px rgb(0 0 0 / 0.35);
 }
 
 /* shadcn/ui CSS variables */
@@ -43,7 +98,7 @@
     --secondary-foreground: #1a1d21;
     --muted: #f4f6f9;
     --muted-foreground: #5f6b7a;
-    --accent: #f4f6f9;
+    --accent-sh: #f4f6f9;
     --accent-foreground: #1a1d21;
     --destructive: #c62828;
     --destructive-foreground: #ffffff;
@@ -53,6 +108,30 @@
     --radius: 0.75rem;
     --chart-1: #1565c0;
     --chart-2: #f5b800;
+  }
+
+  .dark {
+    --background: #14171d;
+    --foreground: #e8eaf0;
+    --card: #171b22;
+    --card-foreground: #e8eaf0;
+    --popover: #1f2430;
+    --popover-foreground: #e8eaf0;
+    --primary: #5ea3f0;
+    --primary-foreground: #10131a;
+    --secondary: #1f2430;
+    --secondary-foreground: #e8eaf0;
+    --muted: #1f2430;
+    --muted-foreground: #98a2b3;
+    --accent-sh: #262c38;
+    --accent-foreground: #e8eaf0;
+    --destructive: #ef7a7a;
+    --destructive-foreground: #10131a;
+    --border: #2b3240;
+    --input: #2b3240;
+    --ring: #5ea3f0;
+    --chart-1: #5ea3f0;
+    --chart-2: #ffd54f;
   }
 }
 

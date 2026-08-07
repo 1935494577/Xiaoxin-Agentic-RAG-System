@@ -38,7 +38,7 @@ export default function InteractiveRelationshipGraph({
         <button
           type="button"
           onClick={onExpandClick}
-          className="absolute top-2 left-2 z-10 inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-md bg-white/90 border border-border/80 text-text-muted hover:text-brand hover:border-brand/40 shadow-sm opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity cursor-pointer"
+          className="absolute top-2 left-2 z-10 inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-md bg-surface/90 border border-border/80 text-text-muted hover:text-brand hover:border-brand/40 shadow-sm opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity cursor-pointer"
           title="放大查看"
         >
           点击放大

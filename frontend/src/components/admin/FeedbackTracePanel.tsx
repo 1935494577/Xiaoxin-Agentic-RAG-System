@@ -28,7 +28,7 @@ export function FeedbackTracePanel({ view, raw, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-xl max-w-3xl w-full max-h-[85vh] overflow-hidden flex flex-col shadow-xl">
+      <div className="bg-surface rounded-xl max-w-3xl w-full max-h-[85vh] overflow-hidden flex flex-col shadow-xl">
         <div className="px-4 py-3 border-b border-border flex justify-between items-start gap-3">
           <div>
             <h3 className="font-semibold text-sm text-text">对话链路详情</h3>
@@ -92,7 +92,7 @@ export function FeedbackTracePanel({ view, raw, onClose }: Props) {
               ) : (
                 <ol className="space-y-3 list-none m-0 p-0">
                   {view.spans.map((sp) => (
-                    <li key={sp.order} className="rounded-lg border border-border bg-white px-3 py-2.5">
+                    <li key={sp.order} className="rounded-lg border border-border bg-surface px-3 py-2.5">
                       <div className="flex flex-wrap items-center gap-2 mb-1.5">
                         <span className="font-medium text-text">{sp.label}</span>
                         <Badge variant={sp.status === "error" ? "warning" : "success"}>{sp.statusLabel}</Badge>

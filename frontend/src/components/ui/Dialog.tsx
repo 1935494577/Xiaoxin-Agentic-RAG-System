@@ -41,7 +41,7 @@ export function Dialog({
       <div className="fixed inset-0 bg-black/40" onClick={onClose} />
       <div
         ref={ref}
-        className="relative bg-white rounded-xl shadow-lg max-w-md w-full mx-4 p-6 z-10"
+        className="relative bg-surface rounded-xl shadow-lg max-w-md w-full mx-4 p-6 z-10"
       >
         <h3 className="text-lg font-semibold text-text mb-3">{title}</h3>
         <div className="text-sm text-text-muted mb-6">{children}</div>

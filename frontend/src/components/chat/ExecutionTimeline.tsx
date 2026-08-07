@@ -66,7 +66,7 @@ export function ExecutionTimeline({ steps, live = false, className = "" }: Props
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-text hover:bg-white/60 rounded-lg cursor-pointer border-none bg-transparent"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-text hover:bg-surface/60 rounded-lg cursor-pointer border-none bg-transparent"
       >
         {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         执行步骤

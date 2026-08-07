@@ -5,7 +5,7 @@ type Variant = "default" | "primary" | "secondary" | "destructive" | "ghost";
 type Size = "sm" | "md" | "icon";
 
 const variantClasses: Record<Variant, string> = {
-  default: "bg-white border border-border text-text hover:bg-surface-muted",
+  default: "bg-surface border border-border text-text hover:bg-surface-muted",
   primary: "bg-brand text-white hover:bg-brand-dark",
   secondary: "bg-surface-muted border border-border text-text hover:bg-surface-muted/80",
   destructive: "bg-error text-white hover:opacity-90",

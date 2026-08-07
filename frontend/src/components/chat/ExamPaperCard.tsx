@@ -128,7 +128,7 @@ function QuestionBlock({
         </div>
       ) : answering || reviewed ? (
         <textarea
-          className="mt-1 w-full max-w-xl border border-border rounded-md px-2.5 py-1.5 text-sm bg-white min-h-[72px]"
+          className="mt-1 w-full max-w-xl border border-border rounded-md px-2.5 py-1.5 text-sm bg-surface min-h-[72px]"
           placeholder="填写答案"
           value={value}
           disabled={!answering}
@@ -300,7 +300,7 @@ export function ExamPaperCard({ sourcePaperId, titleHint }: Props) {
 
   if (phase === "loading") {
     return (
-      <div className="mt-3 rounded-xl border border-border bg-white p-4 text-sm text-text-muted animate-pulse">
+      <div className="mt-3 rounded-xl border border-border bg-surface p-4 text-sm text-text-muted animate-pulse">
         正在加载标准卷面…
       </div>
     );
@@ -318,7 +318,7 @@ export function ExamPaperCard({ sourcePaperId, titleHint }: Props) {
 
   return (
     <div className="mt-3 rounded-xl border border-border bg-[#fbfaf7] shadow-sm overflow-hidden">
-      <div className="px-4 py-3 border-b border-border bg-white">
+      <div className="px-4 py-3 border-b border-border bg-surface">
         <h3 className="text-base font-semibold text-text tracking-tight text-center">
           {paper.title || titleHint || "试卷"}
         </h3>
@@ -359,7 +359,7 @@ export function ExamPaperCard({ sourcePaperId, titleHint }: Props) {
         ))}
       </div>
 
-      <div className="px-4 py-3 border-t border-border bg-white flex flex-wrap items-center gap-2">
+      <div className="px-4 py-3 border-t border-border bg-surface flex flex-wrap items-center gap-2">
         {phase === "preview" ? (
           <>
             <button

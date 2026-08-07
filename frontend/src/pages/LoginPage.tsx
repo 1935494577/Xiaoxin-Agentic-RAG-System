@@ -261,7 +261,7 @@ export default function LoginPage() {
 
 
 
-      <section className="auth-login-form flex items-center justify-center bg-[#faf8f5] px-6 py-10">
+      <section className="auth-login-form flex items-center justify-center bg-surface-warm px-6 py-10">
 
         <div className="w-full max-w-[420px]">
 
@@ -291,7 +291,7 @@ export default function LoginPage() {
 
 
 
-          <div className="rounded-2xl border border-[#ebe6df] bg-white p-8 shadow-[0_8px_32px_-12px_rgba(21,101,192,0.12)]">
+          <div className="rounded-2xl border border-border-warm bg-surface p-8 shadow-overlay">
 
             <div className="mb-8">
 
@@ -339,7 +339,7 @@ export default function LoginPage() {
 
                     onBlur={() => setIsTyping(false)}
 
-                    className="h-11 border-[#e8e2d9] bg-[#fdfcfa] pl-9 focus:border-brand/40"
+                    className="h-11 border-border-warm bg-surface-warm pl-9 focus:border-brand/40"
 
                   />
 
@@ -371,7 +371,7 @@ export default function LoginPage() {
 
                     onChange={(e) => setPassword(e.target.value)}
 
-                    className="h-11 border-[#e8e2d9] bg-[#fdfcfa] pl-9 pr-10 focus:border-brand/40"
+                    className="h-11 border-border-warm bg-surface-warm pl-9 pr-10 focus:border-brand/40"
 
                   />
 

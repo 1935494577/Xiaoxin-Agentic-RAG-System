@@ -15,7 +15,7 @@ export function AssistantModeSwitcher({ value, onChange, disabled, className }: 
   return (
     <div
       className={cn(
-        "inline-flex items-center rounded-full border border-border bg-white p-0.5",
+        "inline-flex items-center rounded-full border border-border bg-surface p-0.5",
         disabled && "opacity-60 pointer-events-none",
         className
       )}

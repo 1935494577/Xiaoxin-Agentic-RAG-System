@@ -227,7 +227,7 @@ export default function ModelPage() {
                 value={form.name}
                 onChange={(e) => set("name", e.target.value)}
                 placeholder="例如：公司用的通义千问"
-                className="mt-1 flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
+                className="mt-1 flex h-10 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
               />
             </label>
             <label className="block">
@@ -235,7 +235,7 @@ export default function ModelPage() {
               <select
                 value={form.vendor}
                 onChange={(e) => set("vendor", e.target.value)}
-                className="mt-1 flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
+                className="mt-1 flex h-10 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
               >
                 {VENDOR_OPTIONS.map((v) => (
                   <option key={v.id} value={v.id}>
@@ -253,7 +253,7 @@ export default function ModelPage() {
                 value={form.api_base}
                 onChange={(e) => set("api_base", e.target.value)}
                 placeholder="https://api.deepseek.com"
-                className="mt-1 flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
+                className="mt-1 flex h-10 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
               />
             </label>
             <label className="block">
@@ -265,7 +265,7 @@ export default function ModelPage() {
                 value={form.api_path}
                 onChange={(e) => set("api_path", e.target.value)}
                 placeholder="通义千问兼容模式填 /compatible-mode/v1"
-                className="mt-1 flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
+                className="mt-1 flex h-10 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
               />
             </label>
             <label className="block">
@@ -277,7 +277,7 @@ export default function ModelPage() {
                 value={form.default_model}
                 onChange={(e) => set("default_model", e.target.value)}
                 placeholder="如 deepseek-chat、qwen-plus"
-                className="mt-1 flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
+                className="mt-1 flex h-10 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
               />
             </label>
             <label className="block">
@@ -291,7 +291,7 @@ export default function ModelPage() {
                 value={form.routing_model}
                 onChange={(e) => set("routing_model", e.target.value)}
                 placeholder="建议填更小模型，如 gpt-4o-mini；留空同回答模型"
-                className="mt-1 flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
+                className="mt-1 flex h-10 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
               />
               <p className="text-xs text-text-muted mt-1">
                 延迟档位请在「对话设置 → 性能路由」配置。
@@ -308,7 +308,7 @@ export default function ModelPage() {
                 value={form.api_key}
                 onChange={(e) => set("api_key", e.target.value)}
                 placeholder={editingId ? "留空则保留原密钥" : "必填"}
-                className="mt-1 flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
+                className="mt-1 flex h-10 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
               />
             </label>
           </div>
@@ -358,7 +358,7 @@ export default function ModelPage() {
                 return (
                   <div
                     key={p.id}
-                    className={`p-4 rounded-xl border bg-white ${
+                    className={`p-4 rounded-xl border bg-surface ${
                       isEditing ? "border-brand" : "border-border"
                     }`}
                   >

@@ -11,6 +11,16 @@
       rel="stylesheet"
     />
     <link rel="icon" type="image/png" href="/company_logo.png" />
+    <script>
+      // 首屏防闪烁：React 挂载前根据偏好预置 dark class（与 useTheme 同键）
+      (function () {
+        try {
+          var t = localStorage.getItem("jnao-theme");
+          var dark = t === "dark" || (!t && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark) document.documentElement.classList.add("dark");
+        } catch (e) { /* 忽略 */ }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -204,7 +204,7 @@ export default function FeedbackInboxPage() {
           <label className="text-sm text-text-muted">
             时间
             <select
-              className="ml-2 border border-border rounded-md px-2 py-1 text-sm bg-white"
+              className="ml-2 border border-border rounded-md px-2 py-1 text-sm bg-surface"
               value={sinceDays}
               onChange={(e) => {
                 setSinceDays(Number(e.target.value));
@@ -219,7 +219,7 @@ export default function FeedbackInboxPage() {
           <label className="text-sm text-text-muted">
             评分
             <select
-              className="ml-2 border border-border rounded-md px-2 py-1 text-sm bg-white"
+              className="ml-2 border border-border rounded-md px-2 py-1 text-sm bg-surface"
               value={ratingFilter}
               onChange={(e) => {
                 setRatingFilter(e.target.value as "" | "0" | "1");
@@ -234,7 +234,7 @@ export default function FeedbackInboxPage() {
           <label className="text-sm text-text-muted">
             状态
             <select
-              className="ml-2 border border-border rounded-md px-2 py-1 text-sm bg-white"
+              className="ml-2 border border-border rounded-md px-2 py-1 text-sm bg-surface"
               value={statusFilter}
               onChange={(e) => {
                 setStatusFilter(e.target.value);
@@ -253,7 +253,7 @@ export default function FeedbackInboxPage() {
           <label className="text-sm text-text-muted">
             排序
             <select
-              className="ml-2 border border-border rounded-md px-2 py-1 text-sm bg-white"
+              className="ml-2 border border-border rounded-md px-2 py-1 text-sm bg-surface"
               value={sort}
               onChange={(e) => setSort(e.target.value as "created_desc" | "severity_desc")}
             >
@@ -313,7 +313,7 @@ export default function FeedbackInboxPage() {
           return (
             <div
               key={item.id}
-              className="border border-border rounded-lg p-4 bg-white shadow-sm"
+              className="border border-border rounded-lg p-4 bg-surface shadow-sm"
             >
               <div className="flex flex-wrap items-center gap-2 mb-2">
                 <Badge variant={badge.variant}>{badge.text}</Badge>

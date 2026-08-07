@@ -1,6 +1,7 @@
 import { MessageSquarePlus, Info, Download } from "lucide-react";
 import { AssistantModeSwitcher } from "./AssistantModeSwitcher";
 import { ThreadTokenBadge } from "./ThreadTokenBadge";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import type { AssistantMode } from "@/lib/assistantMode";
 
 type Props = {
@@ -38,7 +39,7 @@ export function ChatToolbar({
           <>
             <span className="hidden sm:inline h-4 w-px bg-border" aria-hidden />
             <span
-              className="text-[11px] text-text-muted px-2 py-0.5 rounded-full bg-white border border-border"
+              className="text-[11px] text-text-muted px-2 py-0.5 rounded-full bg-surface border border-border"
               title="检索权限按登录部门过滤；与同事不一致时回答可能不同"
             >
               部门：{department}
@@ -56,7 +57,7 @@ export function ChatToolbar({
             "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed " +
             (newTopicPending
               ? "border-brand bg-brand-light text-brand"
-              : "border-border bg-white text-text-muted hover:border-brand hover:text-brand")
+              : "border-border bg-surface text-text-muted hover:border-brand hover:text-brand")
           }
         >
           <MessageSquarePlus size={14} />
@@ -70,13 +71,16 @@ export function ChatToolbar({
               disabled={streaming || exportDisabled}
               onClick={onExport}
               title="导出当前对话为 Markdown"
-              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-white px-3 py-1.5 text-xs font-medium text-text-muted hover:border-brand hover:text-brand transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-medium text-text-muted hover:border-brand hover:text-brand transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Download size={14} />
               导出
             </button>
           </>
         ) : null}
+        <span className="ml-auto">
+          <ThemeToggle />
+        </span>
       </div>
       {newTopicPending && (
         <p className="flex items-start gap-1.5 text-xs text-brand px-1">

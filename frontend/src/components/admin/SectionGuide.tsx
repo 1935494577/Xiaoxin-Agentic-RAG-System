@@ -49,7 +49,7 @@ export function SectionGuide({
               {steps.map((step, i) => (
                 <li
                   key={step.title}
-                  className="rounded-lg bg-white/80 border border-border px-3 py-2.5 text-sm"
+                  className="rounded-lg bg-surface/80 border border-border px-3 py-2.5 text-sm"
                 >
                   <span className="font-medium text-text">
                     {i + 1}. {step.title}

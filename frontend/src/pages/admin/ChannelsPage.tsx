@@ -180,7 +180,7 @@ export default function ChannelsPage() {
         </div>
       ) : null}
 
-      <div className="rounded-xl border border-border bg-white p-4 text-sm">
+      <div className="rounded-xl border border-border bg-surface p-4 text-sm">
         <p>
           渠道 Worker：
           <span className={statusQuery.data?.service_running ? "text-green-700" : "text-text-muted"}>
@@ -201,7 +201,7 @@ export default function ChannelsPage() {
           {providers.map((provider) => (
             <li
               key={provider.provider}
-              className="rounded-xl border border-border bg-white p-4 shadow-sm"
+              className="rounded-xl border border-border bg-surface p-4 shadow-sm"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -252,7 +252,7 @@ export default function ChannelsPage() {
             className="fixed inset-0 bg-black/40"
             onClick={() => !saveMut.isPending && setConfigureTarget(null)}
           />
-          <div className="relative z-10 mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-lg">
+          <div className="relative z-10 mx-4 w-full max-w-md rounded-xl bg-surface p-6 shadow-lg">
             <h3 className="text-lg font-semibold text-text">
               配置 {configureTarget.display_name}
             </h3>
@@ -316,10 +316,10 @@ export default function ChannelsPage() {
             className="fixed inset-0 bg-black/40"
             onClick={() => setBindInfo(null)}
           />
-          <div className="relative z-10 mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-lg">
+          <div className="relative z-10 mx-4 w-full max-w-md rounded-xl bg-surface p-6 shadow-lg">
             <h3 className="text-lg font-semibold text-text">绑定账号</h3>
             <p className="mt-2 text-sm text-text-muted">{bindInfo.instruction}</p>
-            <div className="mt-4 rounded-lg border border-border bg-gray-50 px-3 py-2 font-mono text-sm">
+            <div className="mt-4 rounded-lg border border-border bg-surface-muted px-3 py-2 font-mono text-sm">
               /connect {bindInfo.code}
             </div>
             <p className="mt-2 text-xs text-text-muted">

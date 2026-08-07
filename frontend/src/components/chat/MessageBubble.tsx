@@ -289,7 +289,7 @@ function MessageBubble({
           <div className="mt-3 p-3 rounded-lg border border-border bg-surface-muted space-y-2">
             <p className="text-xs text-text-muted">哪里不对？可选填一句话，便于我们改进（可跳过）</p>
             <textarea
-              className="w-full text-sm border border-border rounded-md px-2.5 py-2 bg-white resize-none"
+              className="w-full text-sm border border-border rounded-md px-2.5 py-2 bg-surface resize-none"
               rows={2}
               maxLength={500}
               placeholder="例如：引用的制度已过期 / 答案与资料不符"

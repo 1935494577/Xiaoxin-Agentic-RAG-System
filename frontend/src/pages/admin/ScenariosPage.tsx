@@ -47,7 +47,7 @@ export default function ScenariosPage() {
               "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors " +
               (showTech
                 ? "border-brand bg-brand-light text-brand"
-                : "border-border bg-white text-text-muted hover:border-brand/40")
+                : "border-border bg-surface text-text-muted hover:border-brand/40")
             }
           >
             <Code2 size={16} />
@@ -87,7 +87,7 @@ export default function ScenariosPage() {
               return (
                 <article
                   key={scenario.id}
-                  className="rounded-xl border border-border bg-white shadow-sm overflow-hidden"
+                  className="rounded-xl border border-border bg-surface shadow-sm overflow-hidden"
                 >
                   <button
                     type="button"

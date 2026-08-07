@@ -95,7 +95,7 @@ export function SidebarUserProfile() {
         <button
           type="button"
           onClick={openDialog}
-          className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white/80 transition-colors cursor-pointer group text-left"
+          className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-surface/80 transition-colors cursor-pointer group text-left"
           title="用户设置"
         >
           <ChatAvatar
@@ -116,7 +116,7 @@ export function SidebarUserProfile() {
         <button
           type="button"
           onClick={handleLogout}
-          className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-text-muted hover:text-brand hover:bg-white/80 transition-colors cursor-pointer"
+          className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-text-muted hover:text-brand hover:bg-surface/80 transition-colors cursor-pointer"
         >
           <LogOut size={14} />
           退出登录
@@ -171,7 +171,7 @@ export function SidebarUserProfile() {
               autoComplete="nickname"
               value={draftName}
               onChange={(e) => setDraftName(e.target.value)}
-              className="mt-1 flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
+              className="mt-1 flex h-10 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
             />
           </section>
 
@@ -186,7 +186,7 @@ export function SidebarUserProfile() {
               placeholder="留空则对话中显示 AI"
               value={draftAiName}
               onChange={(e) => setDraftAiName(e.target.value)}
-              className="mt-1 flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
+              className="mt-1 flex h-10 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
             />
           </section>
 
@@ -205,7 +205,7 @@ export function SidebarUserProfile() {
               autoComplete="current-password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
-              className="mt-1 mb-3 flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm"
+              className="mt-1 mb-3 flex h-10 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
             />
             <Label htmlFor="new-pw">新密码（至少 6 位，留空则不修改）</Label>
             <input
@@ -214,7 +214,7 @@ export function SidebarUserProfile() {
               autoComplete="new-password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className="mt-1 flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm"
+              className="mt-1 flex h-10 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
             />
           </section>
         </div>

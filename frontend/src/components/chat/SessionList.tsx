@@ -35,7 +35,7 @@ export function SessionList({
             type="button"
             onClick={onDelete}
             disabled={!activeId}
-            className="flex-1 cursor-pointer rounded-lg border border-border bg-white px-3 py-2 text-sm transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex-1 cursor-pointer rounded-lg border border-border bg-surface px-3 py-2 text-sm transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
           >
             删除
           </button>
@@ -67,7 +67,7 @@ export function SessionList({
                       "relative mb-0.5 w-full cursor-pointer truncate rounded-lg px-3 py-2.5 text-left text-sm transition-colors " +
                       (active
                         ? "bg-brand-light font-medium text-brand"
-                        : "text-text hover:bg-white/70")
+                        : "text-text hover:bg-surface/70")
                     }
                     title={s.title}
                   >

@@ -6,6 +6,7 @@ import {
 import { useAuth } from "../../hooks/useAuth";
 import { useUserProfile } from "../../context/UserProfileContext";
 import AccessDeniedPage from "../../pages/admin/AccessDeniedPage";
+import { ThemeToggle } from "../ui/ThemeToggle";
 import { resolveAdminPageLabel } from "./Sidebar";
 
 export default function AdminLayout() {
@@ -29,7 +30,7 @@ export default function AdminLayout() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface-muted/35">
-      <header className="flex shrink-0 items-center justify-between gap-4 border-b border-border bg-white px-6 py-3">
+      <header className="flex shrink-0 items-center justify-between gap-4 border-b border-border bg-surface px-6 py-3">
         <div className="min-w-0">
           <p className="text-[11px] font-medium uppercase tracking-wide text-text-muted">
             管理后台
@@ -42,6 +43,7 @@ export default function AdminLayout() {
               {displayName?.trim() || username}
             </span>
           ) : null}
+          <ThemeToggle />
           <button
             type="button"
             onClick={handleLogout}

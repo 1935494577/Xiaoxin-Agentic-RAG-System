@@ -13,7 +13,7 @@ export function ExamCandidateList({ items }: Props) {
   if (!items.length) return null;
 
   return (
-    <div className="mt-3 rounded-xl border border-border bg-white overflow-hidden" data-testid="exam-candidates">
+    <div className="mt-3 rounded-xl border border-border bg-surface overflow-hidden" data-testid="exam-candidates">
       <div className="px-3 py-2 border-b border-border bg-surface-muted/40">
         <p className="text-xs font-medium text-text">题库检索到多份试卷，请选择一份开始作答</p>
       </div>
