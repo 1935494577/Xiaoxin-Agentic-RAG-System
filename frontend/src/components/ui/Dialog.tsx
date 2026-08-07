@@ -38,10 +38,10 @@ export function Dialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/40" onClick={onClose} />
+      <div className="animate-dialog-overlay fixed inset-0 bg-black/40" onClick={onClose} />
       <div
         ref={ref}
-        className="relative bg-surface rounded-xl shadow-lg max-w-md w-full mx-4 p-6 z-10"
+        className="animate-dialog-panel relative bg-surface rounded-xl shadow-overlay max-w-md w-full mx-4 p-6 z-10"
       >
         <h3 className="text-lg font-semibold text-text mb-3">{title}</h3>
         <div className="text-sm text-text-muted mb-6">{children}</div>

@@ -54,7 +54,9 @@ export default function AdminLayout() {
         </div>
       </header>
       <div className="flex-1 overflow-y-auto">
-        <Outlet />
+        <div key={location.pathname} className="animate-view-in">
+          <Outlet />
+        </div>
       </div>
     </div>
   );

@@ -9,13 +9,14 @@ import { cn } from "@/lib/utils";
 import { useUserProfile } from "../../context/UserProfileContext";
 import { SidebarUserProfile } from "./SidebarUserProfile";
 
-function NavItemLink({ item }: { item: NavItem }) {
+function NavItemLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }) {
   const Icon = item.icon;
 
   return (
     <NavLink
       to={item.href}
       end={item.href === "/chat"}
+      onClick={onNavigate}
       className={({ isActive }) =>
         cn(
           "app-nav-link group",
@@ -30,7 +31,7 @@ function NavItemLink({ item }: { item: NavItem }) {
   );
 }
 
-export function Sidebar() {
+export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { department } = useUserProfile();
   const location = useLocation();
   const visible = getVisibleNavItems(department);
@@ -51,7 +52,7 @@ export function Sidebar() {
           <div>
             <p className="app-nav-section-label">工作区</p>
             <div className="mt-1 flex flex-col gap-0.5">
-              <NavItemLink item={chatItem} />
+              <NavItemLink item={chatItem} onNavigate={onNavigate} />
             </div>
           </div>
         ) : null}
@@ -61,7 +62,7 @@ export function Sidebar() {
             <p className="app-nav-section-label">{group.label}</p>
             <div className="mt-1 flex flex-col gap-0.5">
               {group.items.map((item) => (
-                <NavItemLink key={item.id} item={item} />
+                <NavItemLink key={item.id} item={item} onNavigate={onNavigate} />
               ))}
             </div>
           </div>

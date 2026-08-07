@@ -173,7 +173,7 @@ function MessageBubble({
   return (
     <div
       className={
-        "group flex gap-4 py-4 w-full max-w-[768px] mx-auto " +
+        "group flex gap-4 py-4 w-full max-w-[768px] mx-auto animate-msg-in " +
         (isUser ? "justify-end" : "justify-start")
       }
     >

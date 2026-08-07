@@ -24,7 +24,7 @@ export default function AuthEntryLayout() {
 
         "auth-entry-root relative min-h-dvh overflow-hidden",
 
-        isLogin ? "bg-[#faf8f5]" : "bg-[#0c1628]"
+        isLogin ? "bg-surface-warm" : "bg-[#0c1628]"
 
       )}
 
