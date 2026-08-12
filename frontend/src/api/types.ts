@@ -323,6 +323,29 @@ export type AgentToolsSave = {
   tools: Record<string, { enabled: boolean }>;
 };
 
+// ===== MCP Servers =====
+export type McpTransportType = "stdio" | "sse" | "http";
+
+export type McpServerConfig = {
+  enabled: boolean;
+  type: McpTransportType;
+  command?: string | null;
+  args: string[];
+  env: Record<string, string>;
+  url?: string | null;
+  headers: Record<string, string>;
+  description: string;
+};
+
+export type McpConfigData = {
+  mcp_servers: Record<string, McpServerConfig>;
+};
+
+export type McpCacheResetResponse = {
+  success: boolean;
+  message: string;
+};
+
 // ===== Vector Stores =====
 export type VectorStore = {
   id: string;

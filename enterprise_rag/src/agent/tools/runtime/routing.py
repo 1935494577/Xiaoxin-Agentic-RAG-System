@@ -29,6 +29,17 @@ _WEATHER_RE = re.compile(
     r"天气|气温|温度|下雨|降雨|下雪|风力|空气质量|几度|冷不冷|热不热|带伞",
     re.IGNORECASE,
 )
+_TYPHOON_RE = re.compile(
+    r"台风|热带风暴|热带低压|气象台|台风路径|登陆点|"
+    r"(?:蓝色|黄色|橙色|红色)预警",
+    re.IGNORECASE,
+)
+_CORRECTION_RE = re.compile(
+    r"不是已经|搞错了|你错了|说错了|纠正一下|纠正下|"
+    r"现在要来的|应该是|才对吧|"
+    r"不是.+?[么吗]",
+    re.IGNORECASE,
+)
 _RELATION_GRAPH_RE = re.compile(
     r"关系图|组织图|架构图|汇报关系|上下级|人物关系|谁向谁|组织关系|"
     r"公司关系|人员关系|团队关系|员工关系|组织架构|组织架|管理架构|"
@@ -203,10 +214,82 @@ def normalize_tool_routing_question(question: str) -> str:
     return clean_oral_user_message(question)
 
 
+def is_typhoon_or_warning_question(question: str) -> bool:
+    q = normalize_tool_routing_question(question)
+    return bool(q and _TYPHOON_RE.search(q))
+
+
+def is_user_fact_correction(question: str) -> bool:
+    q = (question or "").strip()
+    return bool(q and _CORRECTION_RE.search(q))
+
+
+def _extract_corrected_typhoon_name(question: str) -> str | None:
+    """从纠错话术中提取纠正后的台风名（修辞：不是X么 → X）。"""
+    q = (question or "").strip()
+    if not q:
+        return None
+    # 「不是白海豚么」类修辞肯定
+    for m in re.finditer(r"不是\s*([\u4e00-\u9fffA-Za-z]{2,8})\s*[么吗]", q):
+        name = m.group(1).strip()
+        if any(bad in name for bad in ("已经", "过去", "现在", "这样", "那样")):
+            continue
+        return name
+    # 「应该是白海豚」
+    m = re.search(r"(?:应该是|才是|是)\s*[「\"'《]?([\u4e00-\u9fffA-Za-z]{2,8})[」\"'》]?", q)
+    if m:
+        name = m.group(1).strip()
+        if name not in ("已经", "这样") and "过去" not in name:
+            # 避免吃到「是萧山」等无关；优先带台风上下文
+            if "台风" in q or is_typhoon_or_warning_question(q):
+                return name
+    names = re.findall(r"台风\s*([\u4e00-\u9fffA-Za-z]{2,8})", q)
+    cleaned = [n for n in names if not n.startswith("不是") and "已经" not in n]
+    if cleaned:
+        return cleaned[-1]
+    return None
+
+
+def resolve_web_search_query_for_correction(
+    question: str,
+    history: list[dict[str, Any]] | None = None,
+) -> str:
+    """纠错轮：构造带年份的时效搜索词，优先纠正后的台风名。"""
+    from agent.tools.builtins.datetime_cn import beijing_now
+
+    year = beijing_now().year
+    name = _extract_corrected_typhoon_name(question)
+    if name:
+        return f"{year}年台风{name} 最新路径 中央气象台"
+    base = resolve_web_search_query(question, history)
+    return f"{year}年 {base} 最新核实".strip()
+
+
+def enrich_question_for_fact_correction(
+    question: str,
+    history: list[dict[str, Any]] | None = None,
+) -> str | None:
+    """若为事实纠错轮，返回注入核实提示后的 question；否则 None。"""
+    q = (question or "").strip()
+    if not q or not is_user_fact_correction(q):
+        return None
+    resolved = resolve_web_search_query_for_correction(q, history)
+    return (
+        f"{q}\n"
+        f"【系统提示】用户在纠正事实：请先直接回应对方纠正点，"
+        f"并立即调用 web_search 核实「{resolved}」；"
+        f"禁止复述上轮错误事实，禁止解释无关工具故障。"
+    )
+
+
 def question_needs_realtime_tools(question: str) -> bool:
     q = normalize_tool_routing_question(question)
     if not q or is_relationship_graph_question(q):
         return False
+    if is_typhoon_or_warning_question(q):
+        return True
+    if is_user_fact_correction(q):
+        return True
     if _WEATHER_RE.search(q):
         return True
     if _WEB_SEARCH_RE.search(q):

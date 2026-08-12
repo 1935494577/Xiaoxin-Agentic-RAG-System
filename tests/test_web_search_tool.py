@@ -74,7 +74,12 @@ def test_registry_includes_web_search():
 def test_execute_tool_web_search(monkeypatch):
     import agent.tools.builtins as builtins_mod
 
-    def fake_search(query: str, max_results: int | None = None) -> str:
+    def fake_search(
+        query: str,
+        max_results: int | None = None,
+        days: int | None = None,
+        include_domains=None,
+    ) -> str:
         return f"mock:{query}"
 
     monkeypatch.setattr(builtins_mod, "web_search", fake_search)

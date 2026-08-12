@@ -122,7 +122,9 @@ def truncate_tool_output_for_llm(output: str, *, max_chars: int | None = None) -
     return text[:limit].rstrip() + f"\n…（上下文长度上限，原长 {len(text)} 字）"
 
 
-_REALTIME_TOOL_NAMES = frozenset({"get_beijing_time", "get_weather", "web_search"})
+_REALTIME_TOOL_NAMES = frozenset(
+    {"get_beijing_time", "get_weather", "web_search", "reefapi_search", "reefapi_call"}
+)
 
 
 def attach_time_anchor(text: str, *, tool_name: str) -> str:

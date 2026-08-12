@@ -90,6 +90,10 @@ class Settings(BaseSettings):
     tavily_api_key: str = ""
     web_search_max_results: int = 5
     web_search_timeout_seconds: int = 12
+    # ReefAPI 结构化网页数据（对话工具 reefapi_search / reefapi_call）
+    reefapi_key: str = Field(default="", validation_alias="REEFAPI_KEY")
+    reefapi_base: str = Field(default="https://api.reefapi.com", validation_alias="REEFAPI_BASE")
+    reefapi_timeout_seconds: int = Field(default=60, validation_alias="REEFAPI_TIMEOUT_SECONDS")
     # 工具完整结果 → trace/SSE；注入回答模型前：结构化压缩 + routing 提炼（非粗暴截断）
     tool_output_condense_enabled: bool = True
     tool_llm_condense_min_chars: int = 800

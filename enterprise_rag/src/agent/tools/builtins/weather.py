@@ -10,10 +10,136 @@ import urllib.request
 from datetime import datetime, timedelta
 from typing import Any
 
-from agent.tools.builtins.datetime_cn import beijing_now, day_period, format_beijing_time_anchor
+from agent.tools.builtins.datetime_cn import beijing_now, format_beijing_time_anchor
 
 DEFAULT_FORECAST_HOURS = 12
 MAX_FORECAST_HOURS = 24
+
+# 常用地名 → wttr 查询串（降低模糊匹配到国外同名/近音地点的概率）
+_CITY_QUERY_ALIASES: dict[str, str] = {
+    "萧山": "Xiaoshan,Hangzhou",
+    "杭州萧山": "Xiaoshan,Hangzhou",
+    "萧山区": "Xiaoshan,Hangzhou",
+    "杭州": "Hangzhou",
+    "北京": "Beijing",
+    "上海": "Shanghai",
+    "深圳": "Shenzhen",
+    "广州": "Guangzhou",
+    "成都": "Chengdu",
+    "南京": "Nanjing",
+    "武汉": "Wuhan",
+    "西安": "Xian",
+    "苏州": "Suzhou,China",
+    "宁波": "Ningbo",
+    "温州": "Wenzhou",
+    "台州": "Taizhou,Zhejiang",
+}
+
+# 请求地名可用的匹配词（含中英别名）
+_CITY_MATCH_ALIASES: dict[str, tuple[str, ...]] = {
+    "萧山": ("萧山", "xiaoshan", "hangzhou"),
+    "杭州萧山": ("萧山", "xiaoshan", "hangzhou"),
+    "萧山区": ("萧山", "xiaoshan", "hangzhou"),
+    "杭州": ("杭州", "hangzhou"),
+    "北京": ("北京", "beijing"),
+    "上海": ("上海", "shanghai"),
+    "深圳": ("深圳", "shenzhen"),
+    "广州": ("广州", "guangzhou"),
+    "成都": ("成都", "chengdu"),
+    "南京": ("南京", "nanjing"),
+    "武汉": ("武汉", "wuhan"),
+    "西安": ("西安", "xian", "xi'an"),
+    "苏州": ("苏州", "suzhou"),
+    "宁波": ("宁波", "ningbo"),
+    "温州": ("温州", "wenzhou"),
+    "台州": ("台州", "taizhou"),
+}
+
+_CHINA_MARKERS = ("china", "中国", "cn", "prc")
+_FOREIGN_BLOCK = (
+    "japan",
+    "日本",
+    "usa",
+    "united states",
+    "america",
+    "韩国",
+    "korea",
+    "vietnam",
+    "越南",
+    "thailand",
+    "泰国",
+    "india",
+    "印度",
+)
+
+
+def normalize_city_query(city: str) -> tuple[str, str]:
+    """返回 (展示名, wttr 查询串)。"""
+    name = (city or "").strip()
+    if not name:
+        return "", ""
+    query = _CITY_QUERY_ALIASES.get(name) or name
+    return name, query
+
+
+def place_matches_request(
+    requested: str,
+    place: str,
+    country: str = "",
+    region: str = "",
+) -> bool:
+    """校验 wttr nearest_area 是否与用户请求城市一致。"""
+    req = (requested or "").strip()
+    if not req:
+        return False
+    place_l = (place or "").strip().lower()
+    country_l = (country or "").strip().lower()
+    region_l = (region or "").strip().lower()
+    hay = " ".join(x for x in (place_l, region_l, country_l) if x)
+
+    if country_l and any(m in country_l for m in _FOREIGN_BLOCK):
+        # 中文城市名落到外国 → 一律拒绝
+        if re.search(r"[\u4e00-\u9fff]", req):
+            return False
+
+    aliases = list(_CITY_MATCH_ALIASES.get(req, ()))
+    aliases.append(req.lower())
+    # 去掉「区/市/县」再匹配
+    stripped = re.sub(r"[市区县]$", "", req)
+    if stripped and stripped != req:
+        aliases.append(stripped.lower())
+        aliases.extend(_CITY_MATCH_ALIASES.get(stripped, ()))
+
+    for alias in aliases:
+        a = (alias or "").strip().lower()
+        if not a:
+            continue
+        if a in hay or a in place_l:
+            # 中国城市优先：若国家字段存在且明显非中国，仍拒绝
+            if country_l and any(m in country_l for m in _FOREIGN_BLOCK):
+                return False
+            if country_l and not any(m in country_l for m in _CHINA_MARKERS):
+                if re.search(r"[\u4e00-\u9fff]", req):
+                    return False
+            return True
+
+    # 无别名时：双向包含（杭州萧山区 ⊇ 萧山）
+    req_l = req.lower()
+    if req_l in place_l or place_l in req_l:
+        if country_l and any(m in country_l for m in _FOREIGN_BLOCK):
+            return False
+        return True
+    return False
+
+
+def _area_field(nearest: dict[str, Any], key: str) -> str:
+    rows = nearest.get(key) or [{}]
+    if isinstance(rows, list) and rows:
+        first = rows[0]
+        if isinstance(first, dict):
+            return str(first.get("value") or "").strip()
+        return str(first).strip()
+    return ""
 
 
 def get_weather(city: str, forecast_hours: int | None = None) -> str:
@@ -24,8 +150,9 @@ def get_weather(city: str, forecast_hours: int | None = None) -> str:
         return "城市名称过长。"
 
     hours = _clamp_hours(forecast_hours)
+    display, query = normalize_city_query(name)
 
-    url = f"https://wttr.in/{urllib.parse.quote(name)}?format=j1&lang=zh"
+    url = f"https://wttr.in/{urllib.parse.quote(query)}?format=j1&lang=zh"
     req = urllib.request.Request(
         url,
         headers={"User-Agent": "enterprise-rag/1.0"},
@@ -42,9 +169,9 @@ def get_weather(city: str, forecast_hours: int | None = None) -> str:
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
-        return _fallback_plain(name)
+        return _fallback_plain(query)
 
-    return _format_weather(data, name, hours)
+    return _format_weather(data, display, hours)
 
 
 def _clamp_hours(forecast_hours: int | None) -> int:
@@ -72,8 +199,25 @@ def _fallback_plain(name: str) -> str:
 
 def _format_weather(data: dict[str, Any], fallback_city: str, forecast_hours: int) -> str:
     cur = (data.get("current_condition") or [{}])[0]
-    area = ((data.get("nearest_area") or [{}])[0].get("areaName") or [{}])[0]
-    place = str(area.get("value") or fallback_city)
+    nearest = (data.get("nearest_area") or [{}])[0]
+    if not isinstance(nearest, dict):
+        nearest = {}
+    place = _area_field(nearest, "areaName") or fallback_city
+    country = _area_field(nearest, "country")
+    region = _area_field(nearest, "region")
+
+    if not place_matches_request(fallback_city, place, country, region):
+        where = place
+        if region:
+            where = f"{where}/{region}"
+        if country:
+            where = f"{where}/{country}"
+        return (
+            f"【定位校验失败】天气服务将「{fallback_city}」解析为「{where}」，"
+            f"与请求地点不符。请改用更完整地名（例如「杭州萧山」）后重试；"
+            f"禁止使用该结果回答用户询问的城市天气。"
+        )
+
     temp = cur.get("temp_C", "?")
     feel = cur.get("FeelsLikeC", "?")
     desc = _desc(cur)
@@ -81,7 +225,6 @@ def _format_weather(data: dict[str, Any], fallback_city: str, forecast_hours: in
     wind = cur.get("windspeedKmph", "?")
     obs = str(cur.get("observation_time") or "").strip()
     now = beijing_now()
-    period = day_period(now.hour)
 
     lines = [
         format_beijing_time_anchor(),

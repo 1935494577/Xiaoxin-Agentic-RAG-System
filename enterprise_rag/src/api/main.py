@@ -285,6 +285,13 @@ try:
 except ImportError:
     pass
 
+try:
+    from jnao_harness.gateway.routers.mcp import router as mcp_router
+
+    app.include_router(mcp_router)
+except ImportError:
+    pass
+
 
 @app.get("/", include_in_schema=False)
 def root():

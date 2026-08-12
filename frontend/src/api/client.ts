@@ -14,6 +14,8 @@ import type {
   ProcessingToolsSave,
   AgentToolsData,
   AgentToolsSave,
+  McpCacheResetResponse,
+  McpConfigData,
   PromptData,
   StreamEvent,
   StreamPayload,
@@ -660,6 +662,23 @@ export function saveAgentTools(body: AgentToolsSave): Promise<AgentToolsData> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+// ===== MCP Servers =====
+export function fetchMcpConfig(): Promise<McpConfigData> {
+  return request<McpConfigData>("/api/mcp/config");
+}
+
+export function saveMcpConfig(body: McpConfigData): Promise<McpConfigData> {
+  return request<McpConfigData>("/api/mcp/config", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function resetMcpCache(): Promise<McpCacheResetResponse> {
+  return request<McpCacheResetResponse>("/api/mcp/cache/reset", { method: "POST" });
 }
 
 // ===== Vector Stores =====

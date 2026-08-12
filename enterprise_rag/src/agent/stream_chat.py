@@ -29,6 +29,7 @@ from agent.tools.runtime.routing import (
     question_needs_agent_tools,
     question_needs_realtime_tools,
     resolve_relationship_graph_query,
+    enrich_question_for_fact_correction,
     resolve_web_search_query,
     should_use_relationship_graph_fast_path,
     should_use_web_search_followup,
@@ -229,6 +230,12 @@ def stream_rag_chat(state: dict[str, Any]) -> Iterator[str]:
             state["question"] = resolved
             init_state["question"] = resolved
             state["_web_search_followup"] = True
+        else:
+            corrected = enrich_question_for_fact_correction(raw_question, history)
+            if corrected:
+                state["question"] = corrected
+                init_state["question"] = corrected
+                state["_fact_correction_turn"] = True
 
     input_mode, doc_task_type = resolve_input_mode(
         input_mode=state.get("input_mode"),

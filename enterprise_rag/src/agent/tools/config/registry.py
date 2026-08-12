@@ -19,15 +19,17 @@ TOOL_DEFINITIONS: dict[str, dict[str, Any]] = {
     "get_weather": {
         "label": "天气查询",
         "description": (
-            "查询指定城市或地区的实时天气，并给出未来数小时（默认约 12 小时）"
-            "的逐时段预报与出行/穿衣建议。用户问天气、要不要带伞、穿什么时必须调用。"
+            "查询指定城市或地区的实时气温/降水/风力，并给出未来数小时（默认约 12 小时）"
+            "的逐时段预报与出行/穿衣建议。仅用于当地天气实况与短时预报；"
+            "不得用此工具回答台风名称、路径或预警（请改用 web_search）。"
+            "若返回【定位校验失败】须如实告知用户，禁止编造该城市天气。"
         ),
         "parameters": {
             "type": "object",
             "properties": {
                 "city": {
                     "type": "string",
-                    "description": "城市或地区名，例如：杭州、北京、上海",
+                    "description": "城市或地区名，例如：杭州、杭州萧山、北京（区县建议带上级市名）",
                 },
                 "forecast_hours": {
                     "type": "integer",
@@ -40,22 +42,79 @@ TOOL_DEFINITIONS: dict[str, dict[str, Any]] = {
     "web_search": {
         "label": "联网搜索",
         "description": (
-            "搜索互联网上的实时信息，适用于新闻、政策、节假日安排、股价、"
-            "公开资料等知识库中没有的内容。不要用于已有内部文档可回答的问题。"
+            "搜索互联网上的实时信息，适用于台风路径/气象预警、新闻、政策、节假日安排、股价、"
+            "公开资料等知识库中没有的内容。台风、预警类问题必须调用本工具（查询应含当年年份与台风名），"
+            "不要用于已有内部文档可回答的问题。"
+            "若需要某站点结构化数据（电商报价/Reddit评论/域名可否注册/房源列表等），改用 "
+            "reefapi_search + reefapi_call。"
         ),
         "parameters": {
             "type": "object",
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "搜索关键词或完整问句，例如：2026年春节放假安排、今日科技新闻",
+                    "description": "搜索关键词或完整问句，例如：2026年台风白海豚路径、今日科技新闻",
                 },
                 "max_results": {
                     "type": "integer",
                     "description": "返回条数，1-10，默认 5",
                 },
+                "days": {
+                    "type": "integer",
+                    "description": "仅保留近 N 天结果，1-30；台风/新闻类默认 3",
+                },
             },
             "required": ["query"],
+        },
+    },
+    "reefapi_search": {
+        "label": "ReefAPI 引擎发现",
+        "description": (
+            "发现 ReefAPI 实时网页数据引擎（电商/社交/新闻/域名/房产/公司情报等 160+）。"
+            "需要某网站结构化数据、反爬页面、比价、评论、域名是否可注册时：先本工具，再 reefapi_call。"
+            "query 用英文意图关键词更准（如 amazon reviews、reddit comments、domain availability）；"
+            "指定 engine 可查看该引擎全部 action 与参数。"
+            "内部制度/已入库文档仍用 kb_search；通用网页摘要用 web_search。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "英文或中文意图关键词，空则返回匹配摘要列表",
+                },
+                "engine": {
+                    "type": "string",
+                    "description": "已知引擎名（如 amazon、reddit）时填写，返回 actions 与参数说明",
+                },
+            },
+            "required": [],
+        },
+    },
+    "reefapi_call": {
+        "label": "ReefAPI 拉数",
+        "description": (
+            "调用 ReefAPI 某引擎 action，返回结构化 JSON（ok/data/meta/error）。"
+            "必须先 reefapi_search 确认 engine/action/参数；失败不计费。"
+            "仅用于外部站点实时数据，不替代知识库检索。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "engine": {
+                    "type": "string",
+                    "description": "引擎名，如 amazon、reddit、zillow",
+                },
+                "action": {
+                    "type": "string",
+                    "description": "动作名，如 offers、search、search_comments",
+                },
+                "params": {
+                    "type": "object",
+                    "description": "动作参数对象，字段以 reefapi_search(engine=...) 为准",
+                },
+            },
+            "required": ["engine", "action"],
         },
     },
     "kb_search": {
