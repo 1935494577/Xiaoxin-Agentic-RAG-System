@@ -60,6 +60,19 @@ describe("MarkdownContent", () => {
     const { container } = render(<MarkdownContent content={"已知 $x^2=4$，求 $x$"} />);
     expect(container.querySelector(".katex")).toBeTruthy();
   });
+
+  it("renders bare domain as clickable link", () => {
+    render(<MarkdownContent content="域名 **littlexin.com** 已注册" />);
+    const link = screen.getByRole("link", { name: "littlexin.com" });
+    expect(link.getAttribute("href")).toBe("https://littlexin.com");
+    expect(link.getAttribute("target")).toBe("_blank");
+  });
+
+  it("renders inline-code domain as clickable link", () => {
+    render(<MarkdownContent content="请查 `littlexin.xyz`" />);
+    const link = screen.getByRole("link", { name: "littlexin.xyz" });
+    expect(link.getAttribute("href")).toBe("https://littlexin.xyz");
+  });
 });
 
 describe("StreamingPlainText", () => {

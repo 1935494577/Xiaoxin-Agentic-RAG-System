@@ -14,8 +14,10 @@ from jnao_harness.gateway.gateway_client import proxy_gateway_json
 from jnao_harness.mcp_config_store import (
     read_mcp_servers_raw,
     reset_local_mcp_cache_if_available,
+    resolve_config_path,
     write_mcp_servers,
 )
+from jnao_harness.mcp_tool_catalog import tools_for_mcp_server
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["mcp"])
@@ -57,8 +59,28 @@ class McpServerConfigResponse(BaseModel):
     description: str = Field(default="")
 
 
+class McpToolParameterOverview(BaseModel):
+    name: str
+    type: str = "string"
+    required: bool = True
+
+
+class McpToolOverview(BaseModel):
+    name: str
+    description: str = ""
+    requires_key: bool = False
+    parameters: list[McpToolParameterOverview] = Field(default_factory=list)
+
+
+class McpServerEntryResponse(BaseModel):
+    config: McpServerConfigResponse
+    tools: list[McpToolOverview] = Field(default_factory=list)
+    suggested: bool = False
+
+
 class McpConfigResponse(BaseModel):
-    mcp_servers: dict[str, McpServerConfigResponse] = Field(default_factory=dict)
+    mcp_servers: dict[str, McpServerEntryResponse] = Field(default_factory=dict)
+    config_path: str = ""
 
 
 class McpConfigUpdateRequest(BaseModel):
@@ -190,18 +212,62 @@ def _servers_from_raw(raw_servers: dict[str, dict]) -> dict[str, McpServerConfig
     return out
 
 
+def _tool_overviews(name: str, server: McpServerConfigResponse) -> list[McpToolOverview]:
+    raw = tools_for_mcp_server(name, server.model_dump())
+    return [
+        McpToolOverview(
+            name=str(t.get("name") or ""),
+            description=str(t.get("description") or ""),
+            requires_key=bool(t.get("requires_key")),
+            parameters=[
+                McpToolParameterOverview(
+                    name=str(p.get("name") or ""),
+                    type=str(p.get("type") or "string"),
+                    required=bool(p.get("required", True)),
+                )
+                for p in (t.get("parameters") or [])
+                if isinstance(p, dict)
+            ],
+        )
+        for t in raw
+        if isinstance(t, dict) and t.get("name")
+    ]
+
+
+def _build_server_entries(
+    servers: dict[str, McpServerConfigResponse],
+) -> dict[str, McpServerEntryResponse]:
+    entries: dict[str, McpServerEntryResponse] = {}
+    for name, server in servers.items():
+        masked = _mask_server_config(server)
+        entries[name] = McpServerEntryResponse(
+            config=masked,
+            tools=_tool_overviews(name, server),
+            suggested=False,
+        )
+    return entries
+
+
 async def _reset_gateway_mcp_cache() -> None:
     await proxy_gateway_json("POST", "/api/mcp/cache/reset", timeout=15.0)
+
+
+def _overview_payload() -> dict[str, object]:
+    return {
+        "config_path": str(resolve_config_path()),
+    }
 
 
 @router.get("/mcp/config", response_model=McpConfigResponse)
 async def get_mcp_configuration(request: Request) -> McpConfigResponse:
     await require_admin_user(request, detail=_ADMIN_REQUIRED_DETAIL)
-    servers = {
-        name: _mask_server_config(server)
-        for name, server in _servers_from_raw(read_mcp_servers_raw()).items()
-    }
-    return McpConfigResponse(mcp_servers=servers)
+    raw = _servers_from_raw(read_mcp_servers_raw())
+    entries = _build_server_entries(raw)
+    overview = _overview_payload()
+    return McpConfigResponse(
+        mcp_servers=entries,
+        config_path=str(overview["config_path"]),
+    )
 
 
 @router.post("/mcp/cache/reset", response_model=McpCacheResetResponse)
@@ -240,8 +306,12 @@ async def update_mcp_configuration(request: Request, body: McpConfigUpdateReques
         reset_local_mcp_cache_if_available()
         await _reset_gateway_mcp_cache()
 
-        servers = {name: _mask_server_config(server) for name, server in merged_servers.items()}
-        return McpConfigResponse(mcp_servers=servers)
+        entries = _build_server_entries(merged_servers)
+        overview = _overview_payload()
+        return McpConfigResponse(
+            mcp_servers=entries,
+            config_path=str(overview["config_path"]),
+        )
     except HTTPException:
         raise
     except Exception as e:

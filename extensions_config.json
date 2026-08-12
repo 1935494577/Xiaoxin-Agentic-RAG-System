@@ -1,4 +1,18 @@
 {
-  "mcpServers": {},
+  "mcpServers": {
+    "reefapi": {
+      "enabled": true,
+      "type": "http",
+      "command": null,
+      "args": [],
+      "env": {},
+      "url": "https://api.reefapi.com/mcp",
+      "headers": {
+        "Authorization": "***"
+      },
+      "oauth": null,
+      "description": "ReefAPI 175+ 站点结构化实时数据（电商/社交/域名/房产等）"
+    }
+  },
   "skills": {}
 }

@@ -16,6 +16,7 @@ import type {
   AgentToolsSave,
   McpCacheResetResponse,
   McpConfigData,
+  McpConfigSave,
   PromptData,
   StreamEvent,
   StreamPayload,
@@ -669,7 +670,7 @@ export function fetchMcpConfig(): Promise<McpConfigData> {
   return request<McpConfigData>("/api/mcp/config");
 }
 
-export function saveMcpConfig(body: McpConfigData): Promise<McpConfigData> {
+export function saveMcpConfig(body: McpConfigSave): Promise<McpConfigData> {
   return request<McpConfigData>("/api/mcp/config", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },

@@ -45,11 +45,59 @@ def test_mcp_router_imports_without_deerflow(monkeypatch):
     assert mcp_module.router is not None
 
 
-def test_mcp_config_get_empty(client):
+def test_mcp_config_get_empty(client, monkeypatch):
     c, _ = client
+    monkeypatch.delenv("REEFAPI_KEY", raising=False)
+    monkeypatch.setattr("config.settings.reefapi_key", "", raising=False)
     r = c.get("/api/mcp/config")
     assert r.status_code == 200
-    assert r.json()["mcp_servers"] == {}
+    body = r.json()
+    assert body["mcp_servers"] == {}
+    assert "config_path" in body
+
+
+def test_mcp_config_get_reefapi_tools(client, monkeypatch):
+    c, ext_cfg = client
+    body = {
+        "mcp_servers": {
+            "reefapi": {
+                "enabled": True,
+                "type": "http",
+                "command": None,
+                "args": [],
+                "env": {},
+                "url": "https://api.reefapi.com/mcp",
+                "headers": {"Authorization": "Bearer test-key"},
+                "description": "ReefAPI",
+            }
+        }
+    }
+    with patch(
+        "jnao_harness.gateway.routers.mcp.reset_local_mcp_cache_if_available",
+    ), patch(
+        "jnao_harness.gateway.routers.mcp._reset_gateway_mcp_cache",
+        new=AsyncMock(),
+    ):
+        c.put("/api/mcp/config", json=body)
+    r = c.get("/api/mcp/config")
+    assert r.status_code == 200
+    body = r.json()
+    assert "reefapi" in body["mcp_servers"]
+    entry = body["mcp_servers"]["reefapi"]
+    assert entry["suggested"] is False
+    assert entry["config"]["type"] == "http"
+    tools = entry["tools"]
+    assert len(tools) == 5
+    names = {t["name"] for t in tools}
+    assert names == {
+        "search_engines",
+        "get_catalog",
+        "get_engine_schema",
+        "get_action_schema",
+        "call_engine",
+    }
+    call_engine = next(t for t in tools if t["name"] == "call_engine")
+    assert call_engine["requires_key"] is True
 
 
 def test_mcp_config_put_http_server(client):
@@ -78,7 +126,10 @@ def test_mcp_config_put_http_server(client):
     assert r.status_code == 200
     resp = r.json()
     assert "reefapi" in resp["mcp_servers"]
-    assert resp["mcp_servers"]["reefapi"]["headers"]["Authorization"] == "***"
+    entry = resp["mcp_servers"]["reefapi"]
+    assert entry["config"]["headers"]["Authorization"] == "***"
+    assert entry["suggested"] is False
+    assert len(entry["tools"]) == 5
 
     saved = json.loads(ext_cfg.read_text(encoding="utf-8"))
     assert saved["mcpServers"]["reefapi"]["url"] == "https://api.reefapi.com/mcp"
@@ -130,7 +181,7 @@ def test_mcp_config_mask_roundtrip(client):
         toggle = {
             "mcp_servers": {
                 "demo": {
-                    **masked["mcp_servers"]["demo"],
+                    **masked["mcp_servers"]["demo"]["config"],
                     "enabled": False,
                 }
             }

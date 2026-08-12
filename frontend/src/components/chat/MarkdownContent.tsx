@@ -4,6 +4,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import type { Components } from "react-markdown";
 import { needsMathRender, prepareMathMarkdown } from "../../lib/mathDelimiters";
+import { hrefForDomainOrUrl, isLinkableDomain, isLinkableUrl, linkifyMarkdown } from "../../lib/linkifyMarkdown";
 import "katex/dist/katex.min.css";
 
 const mdComponents: Components = {
@@ -53,6 +54,20 @@ const mdComponents: Components = {
   ),
   code: ({ className, children, ...props }) => {
     const isBlock = Boolean(className?.includes("language-"));
+    const raw = String(children ?? "").trim();
+    if (!isBlock && (isLinkableDomain(raw) || isLinkableUrl(raw))) {
+      const href = hrefForDomainOrUrl(raw);
+      return (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded-md px-1.5 py-0.5 bg-surface-muted text-[13px] font-mono text-brand underline underline-offset-2 hover:text-brand-dark"
+        >
+          {children}
+        </a>
+      );
+    }
     if (isBlock) {
       return (
         <pre className="my-3 rounded-lg bg-surface-muted border border-border px-4 py-3 overflow-x-auto text-[13px] leading-relaxed">
@@ -79,7 +94,7 @@ type Props = {
 };
 
 export function MarkdownContent({ content }: Props) {
-  const prepared = prepareMathMarkdown(content);
+  const prepared = linkifyMarkdown(prepareMathMarkdown(content));
   const enableMath = needsMathRender(prepared);
   const remarkPlugins = enableMath
     ? [[remarkGfm, { singleTilde: false }] as const, remarkMath]

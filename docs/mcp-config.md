@@ -19,6 +19,8 @@ MCP 配置主要供 **task / auto 模式**下的 DeerFlow Agent 加载外部 MCP
 4. 填写传输类型与参数，保存（自动重置 MCP 工具缓存）。
 5. 在 Chat 切换到 **任务** 或 **自动** 模式测试。
 
+页面顶部会只读展示 **已接入的内置对话工具**（含 `.env` 密钥是否配置、对话工具开关）与 **config.yaml 已注册 Harness 工具**；下方 **MCP 外部服务器** 区块可编辑 `extensions_config.json`。
+
 ### 传输类型
 
 | type | 说明 | 必填字段 |

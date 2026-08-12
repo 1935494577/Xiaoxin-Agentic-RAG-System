@@ -337,7 +337,31 @@ export type McpServerConfig = {
   description: string;
 };
 
+export type McpToolParameter = {
+  name: string;
+  type: string;
+  required: boolean;
+};
+
+export type McpToolOverview = {
+  name: string;
+  description: string;
+  requires_key: boolean;
+  parameters: McpToolParameter[];
+};
+
+export type McpServerEntry = {
+  config: McpServerConfig;
+  tools: McpToolOverview[];
+  suggested?: boolean;
+};
+
 export type McpConfigData = {
+  mcp_servers: Record<string, McpServerEntry>;
+  config_path?: string;
+};
+
+export type McpConfigSave = {
   mcp_servers: Record<string, McpServerConfig>;
 };
 
