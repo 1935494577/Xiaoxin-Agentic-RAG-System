@@ -83,7 +83,7 @@ export default function VectorStorePage() {
 
   if (isLoading) {
     return (
-      <div className="p-6 max-w-[860px]">
+      <div className="space-y-6">
         <SkeletonCard rows={4} />
       </div>
     );
@@ -91,7 +91,7 @@ export default function VectorStorePage() {
 
   if (error) {
     return (
-      <div className="p-6">
+      <div className="space-y-6">
         <PageHeader title="向量库设置" />
         <p className="text-error text-sm">无法加载向量库配置，请确认 API 已启动。</p>
       </div>
@@ -99,7 +99,7 @@ export default function VectorStorePage() {
   }
 
   return (
-    <div className="p-6 max-w-[860px]">
+    <div className="space-y-6">
       <PageHeader
         title="向量库设置"
         description="切换或新建向量库，使索引维度与当前嵌入模型一致。更换嵌入模型后建议新建向量库并重新入库。"

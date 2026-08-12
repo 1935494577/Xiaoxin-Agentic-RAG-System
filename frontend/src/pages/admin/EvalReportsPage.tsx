@@ -81,7 +81,7 @@ export default function EvalReportsPage() {
   };
 
   return (
-    <div className="p-6 max-w-[1100px]">
+    <div className="space-y-6">
       <PageHeader
         title="评测报告"
         description="用标准问答集（golden.jsonl）离线测量 RAG 质量。与「用户反馈」闭环配合，验证改进是否有效。"

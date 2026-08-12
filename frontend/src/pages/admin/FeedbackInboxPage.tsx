@@ -185,7 +185,7 @@ export default function FeedbackInboxPage() {
   };
 
   return (
-    <div className="p-6 max-w-[1100px]">
+    <div className="space-y-6">
       <PageHeader
         title="用户反馈"
         description="Chat 点赞/点踩与纠错入口。按下方流程处理 bad case，驱动检索与提示词持续改进。"

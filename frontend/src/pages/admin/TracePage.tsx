@@ -17,7 +17,7 @@ export default function TracePage() {
 
   if (isLoading) {
     return (
-      <div className="p-6 max-w-[900px] space-y-4">
+      <div className="space-y-6">
         <SkeletonCard rows={2} />
         <SkeletonCard rows={4} />
       </div>
@@ -26,7 +26,7 @@ export default function TracePage() {
 
   if (error || !trace) {
     return (
-      <div className="p-6">
+      <div className="space-y-6">
         <PageHeader title="链路 Trace" description="JSONL + Langfuse 追踪状态" />
         <p className="text-warning text-sm">无法读取 /debug/trace-status，请确认 API 已启动。</p>
       </div>
@@ -37,7 +37,7 @@ export default function TracePage() {
   const lfHost = (tr.langfuse_host || "").replace(/\/$/, "");
 
   return (
-    <div className="p-6 max-w-[900px]">
+    <div className="space-y-6">
       <PageHeader
         title="链路 Trace"
         description="8010 知识快路径写 JSONL + Langfuse；8011 DeerFlow task/auto 共用 LANGFUSE_*。详见 docs/langfuse-tracing.md"

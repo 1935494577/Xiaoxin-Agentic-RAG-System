@@ -150,7 +150,7 @@ export default function ChannelsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-6">
+    <div className="space-y-6">
       <PageHeader
         title="IM 渠道"
         description="配置 Telegram / 飞书 / 企微等 IM 机器人凭证（对齐 DeerFlow channel_connections 运行时配置）。"

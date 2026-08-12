@@ -31,7 +31,7 @@ export default function ScenariosPage() {
   );
 
   return (
-    <div className="p-6 max-w-[960px]">
+    <div className="space-y-6">
       <PageHeader
         title="业务场景与功能"
         description={

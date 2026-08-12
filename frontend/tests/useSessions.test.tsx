@@ -84,7 +84,7 @@ describe("useSessions", () => {
     });
 
     expect(created!).toEqual(newSession);
-    expect(client.createSession).toHaveBeenCalledWith("user1");
+    expect(client.createSession).toHaveBeenCalledWith();
     expect(client.listSessions).toHaveBeenCalledTimes(2); // initial + refetch
   });
 
@@ -102,7 +102,7 @@ describe("useSessions", () => {
       await result.current.remove("s1");
     });
 
-    expect(client.deleteSession).toHaveBeenCalledWith("user1", "s1");
+    expect(client.deleteSession).toHaveBeenCalledWith("s1");
     expect(client.listSessions).toHaveBeenCalledTimes(2); // initial + refetch after delete
   });
 
@@ -116,6 +116,6 @@ describe("useSessions", () => {
     });
 
     expect(result.current.sessions).toEqual([]);
-    expect(client.listSessions).toHaveBeenCalledWith("");
+    expect(client.listSessions).toHaveBeenCalledWith();
   });
 });

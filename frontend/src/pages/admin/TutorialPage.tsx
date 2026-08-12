@@ -11,7 +11,7 @@ export default function TutorialPage() {
   const fmt = ui?.supported_upload_label || "TXT · MD · PDF · DOCX · HTML";
 
   return (
-    <div className="p-6 max-w-[820px]">
+    <div className="space-y-6">
       <PageHeader title="使用操作教程" />
 
       <div className="prose prose-sm max-w-none text-text space-y-6">

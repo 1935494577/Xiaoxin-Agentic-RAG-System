@@ -139,7 +139,7 @@ export default function PromptPage() {
 
   if (isLoading) {
     return (
-      <div className="p-6 max-w-[1100px] space-y-4">
+      <div className="space-y-6">
         <SkeletonCard rows={4} />
       </div>
     );
@@ -147,7 +147,7 @@ export default function PromptPage() {
 
   if (error) {
     return (
-      <div className="p-6">
+      <div className="space-y-6">
         <PageHeader title="提示词" />
         <p className="text-error text-sm">无法加载提示词配置，请确认 API 已启动。</p>
       </div>
@@ -155,7 +155,7 @@ export default function PromptPage() {
   }
 
   return (
-    <div className="p-6 max-w-[900px]">
+    <div className="space-y-6">
       <PageHeader
         title="提示词"
         description="分层配置 AI 的回答风格与人设。与「对话设置」配合：那边管检索策略，这里管怎么说。"

@@ -24,17 +24,17 @@ export function Tabs({ tabs, defaultTab, activeTab, onTabChange, className }: Pr
 
   return (
     <div className={className}>
-      <div className="flex border-b border-border mb-4">
+      <div className="flex gap-1 border-b border-border mb-5 px-1">
         {tabs.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => select(t.id)}
             className={cn(
-              "px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer",
+              "px-4 py-2.5 text-sm font-medium border-b-2 transition-colors cursor-pointer rounded-t-lg",
               active === t.id
-                ? "border-brand text-brand"
-                : "border-transparent text-text-muted hover:text-text"
+                ? "border-brand text-brand bg-surface-muted/50"
+                : "border-transparent text-text-muted hover:text-text hover:bg-surface-muted/40"
             )}
           >
             {t.label}

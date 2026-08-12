@@ -139,7 +139,7 @@ export default function MemoryPage() {
 
   if (isLoading) {
     return (
-      <div className="p-6 max-w-[900px] space-y-4">
+      <div className="space-y-6">
         <SkeletonCard rows={4} />
       </div>
     );
@@ -147,7 +147,7 @@ export default function MemoryPage() {
 
   if (error) {
     return (
-      <div className="p-6">
+      <div className="space-y-6">
         <PageHeader title="对话设置" />
         <p className="text-error text-sm">无法加载配置，请确认 API 已启动。</p>
       </div>
@@ -445,7 +445,7 @@ export default function MemoryPage() {
   );
 
   return (
-    <div className="p-6 max-w-[860px]">
+    <div className="space-y-6">
       <PageHeader
         title="对话设置"
         description="服务端默认与阈值。Chat 页仅暴露「助手模式」与「新话题」；其余在此分 Tab 管理。"

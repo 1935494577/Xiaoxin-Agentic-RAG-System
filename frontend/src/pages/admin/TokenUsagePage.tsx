@@ -68,7 +68,7 @@ export default function TokenUsagePage() {
   const callCount = data?.total_calls ?? data?.total_llm_calls ?? 0;
 
   return (
-    <div className="p-6 max-w-[1100px]">
+    <div className="space-y-6">
       <PageHeader
         title="Token 用量"
         description="全局总量按 LLM 调用累计；下方列表按「用户提问」聚合（一次提问可能含多轮工具/回答调用）。"

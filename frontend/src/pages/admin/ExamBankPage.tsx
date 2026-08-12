@@ -21,7 +21,7 @@ const CARDS = [
 
 export default function ExamBankPage() {
   return (
-    <div className="p-6 max-w-[960px] space-y-8">
+    <div className="space-y-8">
       <PageHeader
         title="题库与组卷"
         description="先选任务，再进入分步流程。科目题型包在入库第一步锁定，英语与数学互不混用。"

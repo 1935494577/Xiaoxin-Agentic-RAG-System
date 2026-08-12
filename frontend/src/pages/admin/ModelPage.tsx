@@ -169,7 +169,7 @@ export default function ModelPage() {
 
   if (isLoading) {
     return (
-      <div className="p-6 max-w-[900px] space-y-4">
+      <div className="space-y-6">
         <SkeletonCard rows={4} />
       </div>
     );
@@ -177,7 +177,7 @@ export default function ModelPage() {
 
   if (error) {
     return (
-      <div className="p-6">
+      <div className="space-y-6">
         <PageHeader title="模型设置" />
         <p className="text-error text-sm">无法加载模型配置，请确认 API 已启动。</p>
       </div>
@@ -185,7 +185,7 @@ export default function ModelPage() {
   }
 
   return (
-    <div className="p-6 max-w-[860px]">
+    <div className="space-y-6">
       <PageHeader
         title="模型设置"
         description="配置大模型接入；保存前可用「测试连接」验证。"

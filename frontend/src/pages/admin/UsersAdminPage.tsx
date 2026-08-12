@@ -60,7 +60,7 @@ export default function UsersAdminPage() {
   });
 
   return (
-    <div className="p-6 max-w-[960px]">
+    <div className="space-y-6">
       <PageHeader
         title="账号管理"
         description="仅技术部可用。可创建账号、停用账号或重置密码；部门由账号绑定。"

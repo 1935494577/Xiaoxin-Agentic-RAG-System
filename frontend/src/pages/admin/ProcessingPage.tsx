@@ -6,7 +6,7 @@ import { McpServersTab } from "../../components/admin/tools/McpServersTab";
 
 export default function ProcessingPage() {
   return (
-    <div className="p-6 max-w-[960px]">
+    <div className="space-y-6">
       <PageHeader
         title="工具"
         description="入库 processing 工具、Chat 对话内置工具与 MCP 外部服务分开配置，互不影响。"

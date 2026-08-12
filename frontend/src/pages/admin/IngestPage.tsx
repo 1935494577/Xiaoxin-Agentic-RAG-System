@@ -319,7 +319,7 @@ export default function IngestPage() {
   );
 
   return (
-    <div className="p-6 max-w-[780px]">
+    <div className="space-y-6">
       <PageHeader
         title="数据入库"
         description={

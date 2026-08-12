@@ -6,7 +6,7 @@ type Size = "sm" | "md" | "icon";
 
 const variantClasses: Record<Variant, string> = {
   default: "bg-surface border border-border text-text hover:bg-surface-muted",
-  primary: "bg-brand text-white hover:bg-brand-dark",
+  primary: "bg-brand text-white hover:bg-brand-dark shadow-sm hover:shadow-md",
   secondary: "bg-surface-muted border border-border text-text hover:bg-surface-muted/80",
   destructive: "bg-error text-white hover:opacity-90",
   ghost: "bg-transparent text-text-muted hover:bg-surface-muted hover:text-text",
