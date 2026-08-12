@@ -31,13 +31,19 @@ export function Tabs({ tabs, defaultTab, activeTab, onTabChange, className }: Pr
             type="button"
             onClick={() => select(t.id)}
             className={cn(
-              "px-4 py-2.5 text-sm font-medium border-b-2 transition-colors cursor-pointer rounded-t-lg",
+              "relative px-4 py-2.5 text-sm font-medium transition-colors duration-200 cursor-pointer rounded-t-lg",
               active === t.id
-                ? "border-brand text-brand bg-surface-muted/50"
-                : "border-transparent text-text-muted hover:text-text hover:bg-surface-muted/40"
+                ? "text-brand bg-surface-muted/50"
+                : "text-text-muted hover:text-text hover:bg-surface-muted/40"
             )}
           >
             {t.label}
+            <span
+              className={cn(
+                "absolute bottom-0 left-1/2 h-0.5 bg-brand rounded-full transition-all duration-200",
+                active === t.id ? "w-full -translate-x-1/2" : "w-0 -translate-x-1/2"
+              )}
+            />
           </button>
         ))}
       </div>

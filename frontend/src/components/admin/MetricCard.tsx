@@ -22,12 +22,12 @@ const valueVariants = {
 
 export function MetricCard({ label, value, variant = "default", icon: Icon }: Props) {
   return (
-    <div className={cn("rounded-xl border p-4 shadow-card", variants[variant])}>
+    <div className={cn("rounded-xl border p-4 shadow-card transition-shadow duration-200 hover:shadow-raised", variants[variant])}>
       <p className="mb-1 flex items-center gap-1.5 text-sm text-text-muted">
         {Icon ? <Icon className="h-4 w-4 shrink-0" aria-hidden /> : null}
         {label}
       </p>
-      <p className={cn("text-2xl font-bold", valueVariants[variant])}>{value}</p>
+      <p className={cn("text-2xl font-bold tracking-tight", valueVariants[variant])}>{value}</p>
     </div>
   );
 }

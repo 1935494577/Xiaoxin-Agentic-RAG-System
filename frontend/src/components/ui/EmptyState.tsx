@@ -25,8 +25,8 @@ export function EmptyState({
         (className ?? "")
       }
     >
-      <div className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-light text-brand">
-        <Icon className="h-5 w-5" aria-hidden />
+      <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-light text-brand shadow-sm">
+        <Icon className="h-6 w-6" aria-hidden />
       </div>
       <p className="text-sm font-semibold text-text">{title}</p>
       {description ? (

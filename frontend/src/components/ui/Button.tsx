@@ -5,10 +5,10 @@ type Variant = "default" | "primary" | "secondary" | "destructive" | "ghost";
 type Size = "sm" | "md" | "icon";
 
 const variantClasses: Record<Variant, string> = {
-  default: "bg-surface border border-border text-text hover:bg-surface-muted",
-  primary: "bg-brand text-white hover:bg-brand-dark shadow-sm hover:shadow-md",
-  secondary: "bg-surface-muted border border-border text-text hover:bg-surface-muted/80",
-  destructive: "bg-error text-white hover:opacity-90",
+  default: "bg-surface border border-border text-text hover:bg-surface-muted hover:border-border/80",
+  primary: "bg-brand text-white hover:bg-brand-dark shadow-sm hover:shadow-md active:scale-[0.98]",
+  secondary: "bg-surface-muted border border-border text-text hover:bg-surface-muted/80 hover:border-border/80",
+  destructive: "bg-error text-white hover:opacity-90 active:scale-[0.98]",
   ghost: "bg-transparent text-text-muted hover:bg-surface-muted hover:text-text",
 };
 
@@ -28,8 +28,8 @@ const Button = forwardRef<HTMLButtonElement, Props>(
     <button
       ref={ref}
       className={cn(
-        "inline-flex items-center justify-center gap-2 font-medium transition-colors",
-        "disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer",
+        "inline-flex items-center justify-center gap-2 font-medium transition-all duration-150",
+        "disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none cursor-pointer",
         variantClasses[variant],
         sizeClasses[size],
         className
