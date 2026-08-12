@@ -2,20 +2,20 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
-from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-from deerflow.config.extensions_config import ExtensionsConfig, get_extensions_config, reload_extensions_config
-from deerflow.mcp.cache import reset_mcp_tools_cache
 from jnao_harness.gateway.auth import require_admin_user
 from jnao_harness.gateway.gateway_client import proxy_gateway_json
-from jnao_harness.paths import repo_root
+from jnao_harness.mcp_config_store import (
+    read_mcp_servers_raw,
+    reset_local_mcp_cache_if_available,
+    write_mcp_servers,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["mcp"])
@@ -180,11 +180,14 @@ def _merge_preserving_secrets(
     return incoming.model_copy(update={"env": merged_env, "headers": merged_headers, "oauth": merged_oauth})
 
 
-def _resolve_config_path() -> Path:
-    config_path = ExtensionsConfig.resolve_config_path()
-    if config_path is None:
-        config_path = repo_root() / "extensions_config.json"
-    return config_path
+def _servers_from_raw(raw_servers: dict[str, dict]) -> dict[str, McpServerConfigResponse]:
+    out: dict[str, McpServerConfigResponse] = {}
+    for name, raw in raw_servers.items():
+        try:
+            out[name] = McpServerConfigResponse(**raw)
+        except Exception:
+            logger.warning("Skipping invalid MCP server config for %r", name, exc_info=True)
+    return out
 
 
 async def _reset_gateway_mcp_cache() -> None:
@@ -194,10 +197,9 @@ async def _reset_gateway_mcp_cache() -> None:
 @router.get("/mcp/config", response_model=McpConfigResponse)
 async def get_mcp_configuration(request: Request) -> McpConfigResponse:
     await require_admin_user(request, detail=_ADMIN_REQUIRED_DETAIL)
-    config = get_extensions_config()
     servers = {
-        name: _mask_server_config(McpServerConfigResponse(**server.model_dump()))
-        for name, server in config.mcp_servers.items()
+        name: _mask_server_config(server)
+        for name, server in _servers_from_raw(read_mcp_servers_raw()).items()
     }
     return McpConfigResponse(mcp_servers=servers)
 
@@ -205,7 +207,7 @@ async def get_mcp_configuration(request: Request) -> McpConfigResponse:
 @router.post("/mcp/cache/reset", response_model=McpCacheResetResponse)
 async def reset_mcp_tools_cache_endpoint(request: Request) -> McpCacheResetResponse:
     await require_admin_user(request, detail=_ADMIN_REQUIRED_DETAIL)
-    reset_mcp_tools_cache()
+    reset_local_mcp_cache_if_available()
     await _reset_gateway_mcp_cache()
     return McpCacheResetResponse(
         success=True,
@@ -219,19 +221,7 @@ async def update_mcp_configuration(request: Request, body: McpConfigUpdateReques
         await require_admin_user(request, detail=_ADMIN_REQUIRED_DETAIL)
         _validate_mcp_update_request(body)
 
-        config_path = _resolve_config_path()
-        current_config = get_extensions_config()
-
-        raw_servers: dict[str, dict] = {}
-        raw_other_keys: dict = {}
-        if config_path.exists():
-            with open(config_path, encoding="utf-8") as f:
-                raw_data = json.load(f)
-            raw_servers = raw_data.get("mcpServers", {})
-            for key, value in raw_data.items():
-                if key not in ("mcpServers", "skills"):
-                    raw_other_keys[key] = value
-
+        raw_servers = read_mcp_servers_raw()
         merged_servers: dict[str, McpServerConfigResponse] = {}
         for name, incoming in body.mcp_servers.items():
             raw_server = raw_servers.get(name)
@@ -243,25 +233,14 @@ async def update_mcp_configuration(request: Request, body: McpConfigUpdateReques
             else:
                 merged_servers[name] = incoming
 
-        config_data = dict(raw_other_keys)
-        config_data["mcpServers"] = {name: server.model_dump() for name, server in merged_servers.items()}
-        config_data["skills"] = {
-            name: {"enabled": skill.enabled} for name, skill in current_config.skills.items()
-        }
-
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(config_path, "w", encoding="utf-8") as f:
-            json.dump(config_data, f, indent=2)
-
+        config_path = write_mcp_servers(
+            {name: server.model_dump(exclude_none=False) for name, server in merged_servers.items()}
+        )
         logger.info("MCP configuration updated: %s", config_path)
-        reloaded_config = reload_extensions_config()
-        reset_mcp_tools_cache()
+        reset_local_mcp_cache_if_available()
         await _reset_gateway_mcp_cache()
 
-        servers = {
-            name: _mask_server_config(McpServerConfigResponse(**server.model_dump()))
-            for name, server in reloaded_config.mcp_servers.items()
-        }
+        servers = {name: _mask_server_config(server) for name, server in merged_servers.items()}
         return McpConfigResponse(mcp_servers=servers)
     except HTTPException:
         raise

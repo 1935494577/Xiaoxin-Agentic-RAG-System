@@ -28,10 +28,6 @@ def client(tmp_path, monkeypatch):
         _noop_admin,
     )
 
-    from deerflow.config.extensions_config import reload_extensions_config
-
-    reload_extensions_config()
-
     from jnao_harness.gateway.routers.mcp import router as mcp_router
 
     app = FastAPI()
@@ -39,6 +35,14 @@ def client(tmp_path, monkeypatch):
 
     with TestClient(app) as c:
         yield c, ext_cfg
+
+
+def test_mcp_router_imports_without_deerflow(monkeypatch):
+    """Main API .venv may lack deerflow; router must still import."""
+    monkeypatch.delenv("DEER_FLOW_EXTENSIONS_CONFIG_PATH", raising=False)
+    from jnao_harness.gateway.routers import mcp as mcp_module
+
+    assert mcp_module.router is not None
 
 
 def test_mcp_config_get_empty(client):
@@ -65,7 +69,7 @@ def test_mcp_config_put_http_server(client):
         }
     }
     with patch(
-        "jnao_harness.gateway.routers.mcp.reset_mcp_tools_cache",
+        "jnao_harness.gateway.routers.mcp.reset_local_mcp_cache_if_available",
     ), patch(
         "jnao_harness.gateway.routers.mcp._reset_gateway_mcp_cache",
         new=AsyncMock(),
@@ -117,7 +121,7 @@ def test_mcp_config_mask_roundtrip(client):
             }
         }
     }
-    with patch("jnao_harness.gateway.routers.mcp.reset_mcp_tools_cache"), patch(
+    with patch("jnao_harness.gateway.routers.mcp.reset_local_mcp_cache_if_available"), patch(
         "jnao_harness.gateway.routers.mcp._reset_gateway_mcp_cache",
         new=AsyncMock(),
     ):
@@ -140,7 +144,9 @@ def test_mcp_config_mask_roundtrip(client):
 
 def test_mcp_cache_reset(client):
     c, _ = client
-    with patch("jnao_harness.gateway.routers.mcp.reset_mcp_tools_cache") as reset_local, patch(
+    with patch(
+        "jnao_harness.gateway.routers.mcp.reset_local_mcp_cache_if_available"
+    ) as reset_local, patch(
         "jnao_harness.gateway.routers.mcp._reset_gateway_mcp_cache",
         new=AsyncMock(),
     ) as reset_gw:

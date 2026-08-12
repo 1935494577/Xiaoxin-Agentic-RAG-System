@@ -20,5 +20,9 @@ export function formatAdminLoadError(error: unknown, fallback: string): string {
     return "无法连接后端 API，请确认 run-dev 已启动且 http://127.0.0.1:8010/health 返回 ok，然后点重试。";
   }
 
+  if (/not found/i.test(raw)) {
+    return "接口未找到（404）。若刚更新代码，请重启 run-dev-harness.ps1 使 Main API 加载 MCP 路由。";
+  }
+
   return raw.length > 200 ? `${raw.slice(0, 200)}…` : raw;
 }
