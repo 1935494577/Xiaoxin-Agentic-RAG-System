@@ -108,8 +108,12 @@ python -m uvicorn api.main:app \
 
 ### 前端
 
-- **Jnao Chat**（用户）：`frontend/chat` 构建后由 Nginx 托管静态文件，调用 `/chat/stream`
-- **Streamlit 管理后台**：内网或 VPN 访问，设置 `STREAMLIT_RAG_API_SECRET`
+统一 **React SPA**（`frontend/`）：Chat 与 Admin 同域，本地开发端口 **8502**。
+
+- **构建**：`cd frontend && npm ci && npm run build` → 产物在 `frontend/dist/`
+- **Nginx**：托管 `dist/` 静态文件，API 反向代理到 `8010`（参考 [`deploy/nginx-api.conf.example`](../deploy/nginx-api.conf.example)）
+- **路由**：用户 Chat `/chat`；管理后台 `/admin/*`
+- **鉴权**：生产在网关或 Vite 代理层注入 `RAG_API_SECRET` 与 `RAG_ADMIN_API_SECRET`（见 [`deploy_security.md`](deploy_security.md)）
 
 ---
 

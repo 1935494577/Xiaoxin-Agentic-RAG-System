@@ -35,7 +35,7 @@
 - **内部规划稿**：`PROJECT_PLAN.md`、`plan1.md`、`project.txt`
 - **虚拟环境与缓存**：`.venv/`、`__pycache__/`、`.pytest_cache/` 等
 - **运行期索引与数据产物**：`enterprise_rag/data/milvus_lite/`、`bm25_index.json`、`numpy_vectors.json`、`chunks_*.jsonl`、`processed/**`（除 `.gitkeep`）、`feedback.jsonl`、`golden.jsonl`、`knowledge_graph.db` 等
-- **本地调试/审计产物**：`debug-*.log`、`.codegraph/`、`enterprise_rag/data/_audit_tmp/`、`enterprise_rag/data/_bench_tmp/`
+- **本地 scratch / 调试产物**：`11.txt`、`out.json`、`_ingest_*.txt`、`_sample_*.docx`、`_t.docx`、`debug-*.log`、`.codegraph/`、`enterprise_rag/data/_audit_tmp/`、`enterprise_rag/data/_bench_tmp/`
 
 **嵌入与重排模型**默认下载到 `enterprise_rag/data/models/`，**不纳入 Git**（由 `.gitignore` 排除）；克隆仓库后请在本地按上文「模型获取」方式自行下载权重。
 
@@ -129,7 +129,7 @@ xiaoxin_RAG/
 cd <仓库根目录>
 ./scripts/bootstrap_venv.sh    # 创建 .venv 并安装依赖
 cp .env.example .env           # 编辑 API Key 等
-./scripts/run-dev.sh           # API 8010 + Chat 8502 + 管理后台 8501
+./scripts/run-dev.sh           # API 8010 + Frontend SPA 8502（Chat + /admin）
 ```
 
 依赖：**Python 3.10+**、**Node.js LTS**（Chat SPA）、可选 **Homebrew** 安装 `python3` / `node`。
@@ -233,7 +233,9 @@ $env:ACL_TEST_DATASET="D:\dataset\各年级要求.txt"
 pytest tests/test_dept_acl_integration.py -q
 ```
 
-### 7. Streamlit 前端（可选）
+### 7. React 前端（Chat + Admin）
+
+统一 **React SPA**（`frontend/`）：Jnao Chat 与 React 管理后台同域，本地开发端口 **8502**。
 
 **Windows：**
 
@@ -248,15 +250,15 @@ cd <仓库根目录>
 ./scripts/run_frontend.sh
 ```
 
-一键启动三端（API + Chat + 管理后台）：Windows 用 `run-dev.ps1`，macOS 用 `./scripts/run-dev.sh`。
+一键启动 API + 前端：Windows 用 `run-dev.ps1` 或 `run-dev-harness.ps1`（含 Harness 8011），macOS 用 `./scripts/run-dev.sh`。
 
 **本地开发端口：**
 
 | 服务 | 端口 | 说明 |
 |------|------|------|
 | API | 8010 | FastAPI / Uvicorn（Enterprise RAG） |
-| 管理后台 | 8501 | Streamlit |
-| Jnao Chat | 8502 | React SPA（`frontend/`） |
+| Harness Gateway | 8011 | DeerFlow 对齐网关（可选，`run-dev-harness.ps1`） |
+| Frontend SPA | 8502 | Chat（`/chat`）+ Admin（`/admin/*`） |
 
 ### 8. Docker（可选）
 

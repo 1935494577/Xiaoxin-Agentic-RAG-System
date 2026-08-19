@@ -1,4 +1,4 @@
-"""Branding / UI settings persisted on disk (shared by API and Streamlit)."""
+"""Branding / UI settings persisted on disk (shared by API and React Admin SPA)."""
 
 from __future__ import annotations
 

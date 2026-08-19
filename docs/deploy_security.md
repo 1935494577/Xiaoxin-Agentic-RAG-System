@@ -20,13 +20,13 @@
 - `GET /admin/*` 需 viewer+；研判/采纳/导出需 operator+；配置回滚需 admin。
 - 前端登录后按部门写入：技术部 → `admin`，其它部门 → `operator`。
 
-**Streamlit**：侧栏填写「API 访问密钥」，或设置环境变量 `STREAMLIT_RAG_API_SECRET`（推荐在部署环境中注入，避免人工输入）。
+**React Admin SPA**：登录后由前端 `RequireAuth` 守卫；经 Vite 代理或生产网关注入 `RAG_API_SECRET` / `RAG_ADMIN_API_SECRET`。勿在浏览器侧硬编码密钥。
 
 ## 2. CORS `CORS_ALLOW_ORIGINS`
 
 - 留空：开发态等价于 `*`，且 `allow_credentials=false`（浏览器规范）。
 - 生产：逗号分隔，例如  
-  `https://your-streamlit-host.example.com,http://localhost:8501`  
+  `https://chat.example.com,http://127.0.0.1:8502`  
   配置后仅允许列出的来源跨域调用 API。
 
 ## 3. 关闭 OpenAPI `DISABLE_OPENAPI_DOCS`

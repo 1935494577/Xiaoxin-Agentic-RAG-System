@@ -79,6 +79,19 @@
 - [x] `.admin-panel` 统一 `shadow-card`；Button primary 加 shadow-sm/hover:shadow-md
 - [x] 前端测试全绿（46 文件 / 226 用例）
 
+### 第二轮视觉打磨（2026-08-12）
+
+| 组件 | 改进 |
+|------|------|
+| Sidebar `.app-nav-link` | hover 右移 2px、图标放大变色；active 项图标品牌色 |
+| Card / MetricCard / `.admin-panel` | hover 提升 `shadow-raised`，统一阴影层级 |
+| Button | `transition-all`、default/secondary 边框 hover、primary/destructive `active:scale-[0.98]` |
+| Tabs | 活动项背景 + 底部品牌色下划线动画（居中展开） |
+| 页面切换 | `view-fade-in` 0.3s cubic-bezier(0.16, 1, 0.3, 1)，位移 8px |
+| EmptyState | 图标 h-12 w-12 + 阴影，更醒目 |
+
+- [x] 第二轮测试：46 文件 / 226 用例全绿
+
 ## 验证方式
 
 ```powershell

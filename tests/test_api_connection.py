@@ -1,4 +1,4 @@
-"""API 连通性与重试逻辑测试（不依赖 Streamlit UI）。"""
+"""API 连通性与重试逻辑测试（不依赖前端 UI）。"""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def test_default_api_uses_documented_port():
 
 
 def test_frontend_port_constant():
-    assert FRONTEND_PORT == 8501
+    assert FRONTEND_PORT == 8502
 
 
 def test_ping_health_success(monkeypatch):
